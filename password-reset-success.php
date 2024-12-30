@@ -31,6 +31,7 @@ if ($_GET['success'] != '1') {
         </div>
         <main class="main">
             <div class="container">
+                <br />
                 <?php echo '<div class="alert alert-primary" role="alert">Your Password was reset successfully.</div>'; ?>
                 <div class="login-page"><a href="login.php">click here to login</a></div>
             </div>

@@ -9,7 +9,7 @@ if (isset($_POST['confirm_password']) && isset($_POST['reset_link_token']) && is
     $id = $_POST['user_id'];
 
     if ($password !== $confirmPassword) {
-        header("Location: ../reset-password.php?error=password_mismatch");
+        header("Location: ../reset-password.php?user_id=$id&token=$token&error=password_mismatch");
         exit();
     }
 
@@ -24,7 +24,7 @@ if (isset($_POST['confirm_password']) && isset($_POST['reset_link_token']) && is
         exit(); // Important to stop further execution after redirect
     } else {
         // Handle the error case appropriately, maybe redirect to an error page.
-        header("Location: ../reset-password.php?error=invalid_token");
+        header("Location: ../reset-password.php?user_id=$id&token=$token&error=invalid_token");
         exit();
     }
 }
