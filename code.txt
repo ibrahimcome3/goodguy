@@ -1,0 +1,51 @@
+<?php
+try {
+    // Database connection using PDO (replace with your credentials)
+    $db = new PDO('mysql:host=localhost;dbname=your_database_name', 'your_username', 'your_password');
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+
+    if (isset($_POST['password'], $_POST['confirm_password'], $_POST['reset_link_token'], $_POST['user_id'])) {
+        $password = $_POST['password'];
+        $confirmPassword = $_POST['confirm_password'];
+        $token = $_POST['reset_link_token'];
+        $id = $_POST['user_id'];
+
+        if ($password !== $confirmPassword) {
+            throw new Exception("Passwords do not match.");
+        }
+
+        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+
+        $stmt = $db->prepare("SELECT * FROM customer WHERE reset_link_token = :token AND customer_id = :id");
+        $stmt->execute(['token' => $token, 'id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($row) {
+            $stmt = $db->prepare("UPDATE customer SET password = :password, reset_link_token = NULL, expiry_date = NULL WHERE customer_id = :id");
+            $stmt->execute(['password' => $hashedPassword, 'id' => $id]);
+            header("Location: ../password-reset-success.php");
+            exit();
+        } else {
+            throw new Exception("Invalid or expired token.");
+        }
+    } else {
+      throw new Exception("Missing form data.");
+    }
+
+} catch (PDOException $e) {
+    // Database error handling
+    $errorMessage = "Database error: " . $e->getMessage();
+    // Store the error message in a session variable (requires session_start())
+    session_start();
+    $_SESSION['db_error'] = $errorMessage;
+    header("Location: ../reset-password.php?database_error=1");
+    exit();
+} catch (Exception $e) {
+    // Other exceptions (e.g., password mismatch)
+    session_start();
+    $_SESSION['other_error'] = $e->getMessage();
+    header("Location: ../reset-password.php?other_error=1");
+    exit();
+}
+?>
