@@ -5,7 +5,7 @@ use PHPMailer\PHPMailer\Exception;
 require 'vendor/autoload.php';
 
 include "includes.php";
-var_dump($_SESSION);
+
 if (isset($_SESSION['cart_final'])) {
     if ($_SESSION['uid']) {
         $customer_id = $_SESSION['uid'];
@@ -19,10 +19,10 @@ if (isset($_SESSION['cart_final'])) {
     }
     $shipaddress = $_POST['ship-address'];
 
- 
+
     $shipcost = $_POST['shipcost'];
     $subtotal = $_POST['subtotal'];
-    
+
     $sql__ = "INSERT INTO `shipment` (`shipmentID`, `shipmentAddress`, `deliverydate`, `status`, `cost`) VALUES (NULL, $shipaddress, ADDDATE(NOW(), 3), 'NOT STARTED', '$shipcost');";
     $result__ = $mysqli->query($sql__);
     $last_id__ = mysqli_insert_id($mysqli);
@@ -65,7 +65,7 @@ if (isset($_SESSION['cart_final'])) {
             //$mail->SMTPDebug = SMTP::DEBUG_SERVER;                      //Enable verbose debug output
             //$mail->isSMTP();                                            //Send using SMTP
             $mail->Host = 'smtp.hostinger.com';                     //Set the SMTP server to send through
-            $mail->SMTPAuth = true;  
+            $mail->SMTPAuth = true;
             $mail->SMTPDebug = 2; //Enable SMTP authentication
             $mail->Username = 'care@goodguyng.com';                     //SMTP username
             $mail->Password = 'PPassword12@';                               //SMTP password
@@ -73,7 +73,7 @@ if (isset($_SESSION['cart_final'])) {
 
             //Recipients
             $mail->setFrom('care@goodguyng.com', 'GoodGuyng #order: ' . $last_id);
-            $mail->addAddress($user_->get_email()); 
+            $mail->addAddress($user_->get_email());
             $mail->addAddress('order@goodguyng.com');    //Add a recipient
             //Name is optional
 
@@ -84,22 +84,22 @@ if (isset($_SESSION['cart_final'])) {
             $mail->Body = $con_msg;
 
             //var_dump($mail);
-           if (!$mail->send()) { 
-             echo 'Mailer Error: ' . $mail->ErrorInfo;  
-           }else{
-               
+            if (!$mail->send()) {
+                echo 'Mailer Error: ' . $mail->ErrorInfo;
+            } else {
+
                 unset($_SESSION['cart']);
                 unset($_SESSION['cart_final']);
-                header("Location: order-confermation-last-page.php");  
-           }
+                header("Location: order-confermation-last-page.php");
+            }
 
-           
+
         } catch (Exception $e) {
             echo "Message could not be sent. Mailer Error: {$mail->ErrorInfo}";
         }
 
 
-       
+
 
     }
 

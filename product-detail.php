@@ -365,7 +365,8 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                                                 class="details-action-wrapper">
                                                                                                                 <a href="add-to-watch-list.php?itemid=<?= $_GET['itemid'] ?>"
                                                                                                                         class="btn-product btn-wishlist"
-                                                                                                                        title="Wishlist"><span>Add
+                                                                                                                        title="Wishlist"
+                                                                                                                        data-product-id="<?= $_GET['itemid'] ?>"><span>Add
                                                                                                                                 to
                                                                                                                                 Wishlist</span></a>
 

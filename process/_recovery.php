@@ -79,7 +79,8 @@ if (isset($_POST['submit']) && isset($_POST['email'])) {  // Check both POST var
                     $mail->AltBody = "$link";
 
                     $mail->send();
-                    echo 'Password reset link has been send to your email.';
+                    header("Location: ../password-reset-email-sent.php"); // Redirect to success page
+                    exit(); // Important to prevent further execution
                 } catch (Exception $e) {
                     echo "Message could not be sent. Mailer Error: {$mail->ErrorInfo}";
                 }

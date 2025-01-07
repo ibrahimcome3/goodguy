@@ -21,7 +21,15 @@ class WishList extends Connn
       $stmt = $pdo->query("SELECT count(*) as c FROM `wishlist` WHERE `customer_id` = $id;");
       $row = $stmt->fetch();
       return $row['c'];
+   }
 
+   public function no_of_wish_list_item()
+   {
+      $pdo = $this->dbc;
+      $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM wishlist WHERE customer_id = ?");
+      $stmt->execute([$_SESSION['uid']]);
+      $result = $stmt->fetch();
+      return $result['count'];
 
    }
 

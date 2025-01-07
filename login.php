@@ -63,7 +63,14 @@ if (!empty($_POST["login"])) {
         } else {
             $util->clearAuthCookie();
         }
-        $util->redirect("dashboard.php");
+        if (isset($_SESSION['last_viewed_product'])) {
+            $lastViewedProductId = $_SESSION['last_viewed_product'];
+            header("Location: product.php?id=$lastViewedProductId");
+        } else {
+            $util->redirect("dashboard.php");
+            //header("Location: index.php");
+        }
+
     } else {
         $message = "Invalid Login";
     }

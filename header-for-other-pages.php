@@ -21,9 +21,11 @@ $wished_list_count = 0;
                             <?php if (isset($_SESSION["uid"])) { ?>
                                 <?php ?>
                                 <li><a href="wishlist.php"><i class="icon-heart-o"></i>Wishlist
-                                        <span>(<?= $wishlist->no_of_wish_list_item ?>)</span></a></li>
+                                        <span class="wishlist-count">(<?= $wishlist->no_of_wish_list_item ?>)</span></a>
+                                </li>
                             <?php } else { ?>
-                                <li><a href="wishlist.php"><i class="icon-heart-o"></i>Wishlist <span>(0)</span></a></li>
+                                <li><a href="wishlist.php"><i class="icon-heart-o"></i>Wishlist
+                                        <span>(0)</span></a></li>
                             <?php } ?>
                             <li><a href="about.php">About Us</a></li>
                             <li><a href="contact.php">Contact Us</a></li>

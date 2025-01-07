@@ -1,3 +1,46 @@
+<?php
+// Start the session (if needed for other parts of your application)
+session_start();
+
+// Check for token and user ID in the GET parameters
+if (!isset($_GET['token']) || !isset($_GET['user_id'])) {
+    // Redirect or display an error message if token or user ID is missing
+    header("Location: error.php?message=Missing+token+or+user+ID"); // Redirect to a custom error page
+    exit();
+}
+
+$token = $_GET['token'];
+$userId = $_GET['user_id'];
+
+// Database connection (using PDO for security)
+try {
+    $db = new PDO('mysql:host=localhost;dbname=your_database_name', 'your_username', 'your_password');
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    // Prepared statement to check the token's validity
+    $stmt = $db->prepare("SELECT * FROM customer WHERE reset_link_token = :token AND customer_id = :user_id");
+    $stmt->execute(['token' => $token, 'user_id' => $userId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    //Check if token exists and hasn't expired
+    if (!$row || $row['expiry_date'] < date("Y-m-d H:i:s")) {
+        header("Location: error.php?message=Invalid+or+expired+token");
+        exit();
+    }
+
+    // Token is valid, proceed with the rest of the page content
+    // ... (Rest of your existing reset-password.php code here) ...
+
+
+} catch (PDOException $e) {
+    //Handle database error
+    header("Location: error.php?message=Database+error");
+    exit();
+}
+
+?>
+
+
 <!DOCTYPE html>
 <html lang="en">
 

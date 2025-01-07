@@ -3,9 +3,9 @@ $md_table = '';
 $msg_body = '';
 
 $msg_body .= "<div style='border: 0px solid blue; text-align: center; padding: 5px 0px 5px 0px; background-color:#fffee0; color: Date;'>";
-$msg_body .= "<span style='text-transform: uppercase;  font-weight: 900;'>Invoice for Item order " . $orders->get_order_id() . "</span> ( goodguyng.com )</div><div style='margin-top: 10px;'><div style='margin-top: 2px'><b>Order No:</b>" . $orders->get_order_id() . "</div>";
+$msg_body .= "<span style='text-transform: uppercase;  font-weight: 900;'>Invoice order no" . $orders->get_order_id() . "</span> ( goodguyng.com )</div><div style='margin-top: 10px;'><div style='margin-top: 2px'><b>Order No:</b>" . $orders->get_order_id() . "</div>";
 $msg_body .= "<div style='margin-top: 2px'><b>Order Date:</b>" . $orders->get_order_date() . "</div><div style='margin-top: 2px'><b>Invoice Date:</b>";
-$msg_body .= $orders->get_order_date(). "</div></div></div>";
+$msg_body .= $orders->get_order_date() . "</div></div></div>";
 $msg_body .= "<div style='margin-top: 10px; border: 0px solid blue; padding: 0px;'><div>";
 
 
@@ -55,15 +55,15 @@ $msg_body .= "<table border='1'
 $stmt = $orders->get_order_item($last_id);
 $total_price = $shipcost;
 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-      $src = 'products/product-'.$row["productItemID"].'/product-'.$row["productItemID"].'-image/inventory-'.$row["productItemID"].'-'.$row["InventoryItemID"].'/'.$row["image_name"];
-  //  $src = isset($row['image_path']) ? $row['image_path'] : 'e.jpg';
+    $src = 'products/product-' . $row["productItemID"] . '/product-' . $row["productItemID"] . '-image/inventory-' . $row["productItemID"] . '-' . $row["InventoryItemID"] . '/' . $row["image_name"];
+    //  $src = isset($row['image_path']) ? $row['image_path'] : 'e.jpg';
     $total_price += $row['item_price'] * $row['quwantitiyofitem'];
     //var_dump($row);
 
     $md_table .= "<tr>
             <td>1</td>
             <td>"
-        . $row['small_description'] .
+        . $row['description'] .
         "</td>
             <td><img src='https://goodguyng.com/" . $src . "'width='50' />
             </td>
@@ -95,7 +95,7 @@ $md_table .= "<tr>
     <tr>
     <td></td>
         <td>Shipping</td>
-        <td>".number_format($shipcost, 2)."</td>
+        <td>" . number_format($shipcost, 2) . "</td>
     </tr>
     <tr>
         <td></td>
