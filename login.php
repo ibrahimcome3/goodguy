@@ -65,9 +65,14 @@ if (!empty($_POST["login"])) {
         }
         if (isset($_SESSION['last_viewed_product'])) {
             $lastViewedProductId = $_SESSION['last_viewed_product'];
-            header("Location: product.php?id=$lastViewedProductId");
+            $expiryTime = time() + (10 * 365 * 24 * 60 * 60); // 10 years in seconds
+            setcookie('isLoggedIn', 'true', $expiryTime, '/');
+            header("Location: product-detail.php?id=$lastViewedProductId");
         } else {
+            $expiryTime = time() + (10 * 365 * 24 * 60 * 60); // 10 years in seconds
+            setcookie('isLoggedIn', 'true', $expiryTime, '/');
             $util->redirect("dashboard.php");
+
             //header("Location: index.php");
         }
 
@@ -101,6 +106,7 @@ if (!empty($_POST["login"])) {
     <div class="page-wrapper">
         <?php
         include "header-for-other-pages.php";
+
         ?>
 
         <main class="main">

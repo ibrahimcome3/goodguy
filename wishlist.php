@@ -1,25 +1,21 @@
 <!DOCTYPE html>
 <?php
 require_once "includes.php";
-$options = [
-    \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-    \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-    \PDO::ATTR_EMULATE_PREPARES => false,
-];
-$host = 'localhost';
-$db = 'lm_test';
-$user = 'root';
-$pass = '';
-$charset = 'utf8mb4';
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
-try {
-    $pdo = new \PDO($dsn, $user, $pass, $options);
-} catch (\PDOException $e) {
-    throw new \PDOException($e->getMessage(), (int) $e->getCode());
-}
+
 if (isset($_SESSION['uid'])) {
+
+    $resultsPerPage = 10; // Number of results per page
+    $currentPage = isset($_GET['page']) && is_numeric($_GET['page']) ? $_GET['page'] : 1;
+
+    // Get total count of wishlist items for the current user
+    $countSql = "SELECT COUNT(*) AS total FROM `wishlist` WHERE customer_id = " . $_SESSION['uid'];
+    $countResult = $mysqli->query($countSql);
+    $totalCount = $countResult->fetch_assoc()['total'];
+    $totalPages = ceil($totalCount / $resultsPerPage);
+
+    $offset = ($currentPage - 1) * $resultsPerPage;
     require_once 'conn.php';
-    $sql = "SELECT * FROM `wishlist` LEFT JOIN inventoryitem ON wishlist.`inventory_item_id` = inventoryitem.`InventoryItemID` WHERE customer_id = " . $_SESSION['uid'];
+    $sql = "SELECT * FROM `wishlist` LEFT JOIN inventoryitem ON wishlist.`inventory_item_id` = inventoryitem.`InventoryItemID` WHERE customer_id = " . $_SESSION['uid'] . " LIMIT $offset, $resultsPerPage";
     $result = $mysqli->query($sql);
 } else {
     header("Location: login.php");
@@ -57,85 +53,148 @@ if (isset($_SESSION['uid'])) {
             <div class="page-content">
                 <div class="container">
                     <table class="table table-wishlist table-mobile">
-                        <thead>
-                            <tr>
-                                <th>Product</th>
-                                <th>Price</th>
-                                <th>Stock Status</th>
-                                <th></th>
-                                <th></th>
-                            </tr>
-                        </thead>
-
+                        <?php if ($result && $result->num_rows > 0) { ?>
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Price</th>
+                                    <th>Stock Status</th>
+                                    <th>qty</th>
+                                    <th></th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                        <?php } ?>
                         <tbody>
 
-                            <?php while ($row = mysqli_fetch_array($result)) {
-                               
-                                $old_cost = null;
-                                if ($promotion->check_if_item_is_in_inventory_promotion($row['inventory_item_id'])) {
-                                    $row['cost'] = $promotion->get_promoPrice_price($row['inventory_item_id']);
-                                    $old_cost = $promotion->get_regular_price($row['inventory_item_id']);
-                                }
-                                ?>
-                                <tr>
-                                    <td class="product-col">
-                                        <div class="product">
-                                            <figure class="product-media">
-                                                <a href="product-detail.php?itemid=<?= $row['inventory_item_id'] ?>">
-                                                    <img src="<?php echo getImage($row['inventory_item_id']); ?>"
-                                                        alt="Product image">
-                                                </a>
-                                            </figure>
+                            <?php
+                            if ($result && $result->num_rows > 0) {
 
-                                            <h3 class="product-title">
-                                                <a href="product-detail.php?itemid=<?= $row['inventory_item_id'] ?>">
-                                                    <?= $row["description"] ?></a>
-                                            </h3><!-- End .product-title -->
-                                        </div><!-- End .product -->
-                                    </td>
-                                    <td class="price-col"><?= $row["cost"] ?>
-                                        <?php if (isset($old_cost) and ($old_cost !== $row["cost"]))
-                                            echo "<small><span style=\"text-decoration: line-through\">" . $old_cost . "</span></small>"; ?>
-                                    </td>
-                                    <td class="stock-col"><span class="in-stock">In stock</span></td>
-                                    <!--	<td class="stock-col"><span class="out-of-stock">In stock</span></td>
+
+                                while ($row = mysqli_fetch_array($result)) {
+
+                                    $old_cost = null;
+                                    if ($promotion->check_if_item_is_in_inventory_promotion($row['inventory_item_id'])) {
+                                        $row['cost'] = $promotion->get_promoPrice_price($row['inventory_item_id']);
+                                        $old_cost = $promotion->get_regular_price($row['inventory_item_id']);
+                                    }
+
+                                    $formattedCost = number_format($row["cost"], 2, '.', ','); // 2 decimal places, . as decimal, , as thousands
+                            
+                                    ?>
+                                    <tr>
+                                        <td class="product-col">
+                                            <div class="product">
+                                                <figure class="product-media">
+                                                    <a href="product-detail.php?itemid=<?= $row['inventory_item_id'] ?>">
+                                                        <img src="<?php echo getImage($row['inventory_item_id']); ?>"
+                                                            alt="Product image">
+                                                    </a>
+                                                </figure>
+
+                                                <h3 class="product-title">
+                                                    <a href="product-detail.php?itemid=<?= $row['inventory_item_id'] ?>">
+                                                        <?= $row["description"] ?></a>
+                                                </h3><!-- End .product-title -->
+                                            </div><!-- End .product -->
+                                        </td>
+                                        <td class="price-col" style="letter-spacing: 2px;">&#8358;<?= $formattedCost ?>
+
+                                            <?php
+                                            if (isset($old_cost) and ($old_cost !== $row["cost"])) {
+                                                $formattedOldCost = number_format($old_cost, 2, '.', ','); // Format old cost too
+                                                echo "<small><span style=\"text-decoration: line-through\">$formattedOldCost</span></small>";
+                                            }
+                                            ?>
+                                        </td>
+                                        <td class="stock-col"><span class="in-stock">In stock</span></td>
+                                        <!--	<td class="stock-col"><span class="out-of-stock">In stock</span></td>
                                <!--	<td class="action-col">
                                     <button class="btn btn-block btn-outline-primary-2 disabled">Out of Stock</button>
                                 </td>
                                 -->
-                                    <td class="action-col">
+                                        <td class="action-col">
 
-                                        <form class="cart_form" action="cart.php" method="post">
+                                            <form class="cart_form" action="cart.php" method="post">
 
-                                            <div>
-                                                <input type="hidden" name="inventory_product_id"
-                                                    value="<?= $row['inventory_item_id'] ?>">
-                                                <div class="product-details-quantity"
-                                                    style="margin-bottom: 5px; width: 100%;">
-                                                    <input name="qty" type="number" id="qty-<?= $row['inventory_item_id'] ?>"
-                                                        class="form-control" value="1" min="1" max="10" step="1"
-                                                        data-decimals="0" required />
+                                                <div>
+                                                    <input type="hidden" name="inventory_product_id"
+                                                        value="<?= $row['inventory_item_id'] ?>">
+                                                    <div class="product-details-quantity"
+                                                        style="margin-bottom: 5px; width: 100%;">
+                                                        <input name="qty" type="number"
+                                                            id="qty-<?= $row['inventory_item_id'] ?>" class="form-control"
+                                                            value="1" min="1" max="10" step="1" data-decimals="0" required />
+                                                    </div>
+
+
+
+
+
                                                 </div>
 
+                                            </form>
+                                        </td>
+                                        <td>
+                                            <button class="submit-cart  btn btn-block btn-outline-primary-2"
+                                                style="border: none;"><i class="icon-cart-plus"></i>Add to Cart</button>
+                                        </td>
+                                        <td class="remove-col align-right" style="margin-right: 5px;">
+                                            <a href="#" class="remove-from-wishlist"
+                                                data-wishlist-id="<?= $row['wishlistid'] ?>">Remove</a>
 
 
-
-                                                <button class="submit-cart  btn btn-block btn-outline-primary-2"><i
-                                                        class="icon-cart-plus"></i>Add to Cart</button>
-                                            </div>
-
-                                        </form>
-                                    </td>
-                                    <td class="remove-col">
-                                    <a href="#" class="remove-from-wishlist" data-wishlist-id="<?= $row['wishlistid'] ?>">Remove</a>
-    
-                                    <button class="btn-remove"
-                                            cart-item-id=<?= $row['inventory_item_id'] ?>><i class="icon-close"></i></button>
+                                        </td>
+                                    </tr>
+                                <?php }
+                            } else {
+                                ?>
+                                <tr>
+                                    <td>
+                                        <div class="alert alert-dark" role="alert">
+                                            <center>No wishlist items found</center>
+                                        </div>
                                     </td>
                                 </tr>
-                            <?php } ?>
+
+                            <?php }
+
+                            ?>
                         </tbody>
                     </table><!-- End .table table-wishlist -->
+                    <?php
+                    if ($totalPages > 1) { // Only show pagination if there's more than one page
+                        ?>
+                        <nav aria-label="Page navigation example">
+                            <ul class="pagination justify-content-center">
+                                <?php if ($currentPage > 1): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=<?php echo $currentPage - 1; ?>" aria-label="Previous">
+                                            <span aria-hidden="true">&laquo;</span>
+                                            <span class="sr-only">Previous</span>
+                                        </a>
+                                    </li>
+                                <?php endif; ?>
+
+                                <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                                    <li class="page-item <?php echo ($currentPage == $i) ? 'active' : ''; ?>">
+                                        <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                    </li>
+                                <?php endfor; ?>
+
+
+
+                                <?php if ($currentPage < $totalPages): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=<?php echo $currentPage + 1; ?>" aria-label="Next">
+                                            <span aria-hidden="true">&raquo;</span>
+                                            <span class="sr-only">Next</span>
+                                        </a>
+                                    </li>
+                                <?php endif; ?>
+                            </ul>
+                        </nav>
+                    <?php } ?>
                     <!--	<div class="wishlist-share">
                         <div class="social-icons social-icons-sm mb-2">
                             <label class="social-label">Share on:</label>
@@ -178,129 +237,7 @@ if (isset($_SESSION['uid'])) {
     </div><!-- End .mobile-menu-container -->
 
     <!-- Sign in / Register Modal -->
-    <div class="modal fade" id="signin-modal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered" role="document">
-            <div class="modal-content">
-                <div class="modal-body">
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true"><i class="icon-close"></i></span>
-                    </button>
 
-                    <div class="form-box">
-                        <div class="form-tab">
-                            <ul class="nav nav-pills nav-fill" role="tablist">
-                                <li class="nav-item">
-                                    <a class="nav-link active" id="signin-tab" data-toggle="tab" href="#signin"
-                                        role="tab" aria-controls="signin" aria-selected="true">Sign In</a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" id="register-tab" data-toggle="tab" href="#register" role="tab"
-                                        aria-controls="register" aria-selected="false">Register</a>
-                                </li>
-                            </ul>
-                            <div class="tab-content" id="tab-content-5">
-                                <div class="tab-pane fade show active" id="signin" role="tabpanel"
-                                    aria-labelledby="signin-tab">
-                                    <form action="#">
-                                        <div class="form-group">
-                                            <label for="singin-email">Username or email address *</label>
-                                            <input type="text" class="form-control" id="singin-email"
-                                                name="singin-email" required>
-                                        </div><!-- End .form-group -->
-
-                                        <div class="form-group">
-                                            <label for="singin-password">Password *</label>
-                                            <input type="password" class="form-control" id="singin-password"
-                                                name="singin-password" required>
-                                        </div><!-- End .form-group -->
-
-                                        <div class="form-footer">
-                                            <button type="submit" class="btn btn-outline-primary-2">
-                                                <span>LOG IN</span>
-                                                <i class="icon-long-arrow-right"></i>
-                                            </button>
-
-                                            <div class="custom-control custom-checkbox">
-                                                <input type="checkbox" class="custom-control-input"
-                                                    id="signin-remember">
-                                                <label class="custom-control-label" for="signin-remember">Remember
-                                                    Me</label>
-                                            </div><!-- End .custom-checkbox -->
-
-                                            <a href="#" class="forgot-link">Forgot Your Password?</a>
-                                        </div><!-- End .form-footer -->
-                                    </form>
-                                    <div class="form-choice">
-                                        <p class="text-center">or sign in with</p>
-                                        <div class="row">
-                                            <div class="col-sm-6">
-                                                <a href="#" class="btn btn-login btn-g">
-                                                    <i class="icon-google"></i>
-                                                    Login With Google
-                                                </a>
-                                            </div><!-- End .col-6 -->
-                                            <div class="col-sm-6">
-                                                <a href="#" class="btn btn-login btn-f">
-                                                    <i class="icon-facebook-f"></i>
-                                                    Login With Facebook
-                                                </a>
-                                            </div><!-- End .col-6 -->
-                                        </div><!-- End .row -->
-                                    </div><!-- End .form-choice -->
-                                </div><!-- .End .tab-pane -->
-                                <div class="tab-pane fade" id="register" role="tabpanel" aria-labelledby="register-tab">
-                                    <form action="#">
-                                        <div class="form-group">
-                                            <label for="register-email">Your email address *</label>
-                                            <input type="email" class="form-control" id="register-email"
-                                                name="register-email" required>
-                                        </div><!-- End .form-group -->
-
-                                        <div class="form-group">
-                                            <label for="register-password">Password *</label>
-                                            <input type="password" class="form-control" id="register-password"
-                                                name="register-password" required>
-                                        </div><!-- End .form-group -->
-
-                                        <div class="form-footer">
-                                            <button type="submit" class="btn btn-outline-primary-2">
-                                                <span>SIGN UP</span>
-                                                <i class="icon-long-arrow-right"></i>
-                                            </button>
-
-                                            <div class="custom-control custom-checkbox">
-                                                <input type="checkbox" class="custom-control-input" id="register-policy"
-                                                    required>
-                                                <label class="custom-control-label" for="register-policy">I agree to the
-                                                    <a href="#">privacy policy</a> *</label>
-                                            </div><!-- End .custom-checkbox -->
-                                        </div><!-- End .form-footer -->
-                                    </form>
-                                    <div class="form-choice">
-                                        <p class="text-center">or sign in with</p>
-                                        <div class="row">
-                                            <div class="col-sm-6">
-                                                <a href="#" class="btn btn-login btn-g">
-                                                    <i class="icon-google"></i>
-                                                    Login With Google
-                                                </a>
-                                            </div><!-- End .col-6 -->
-                                            <div class="col-sm-6">
-                                                <a href="#" class="btn btn-login  btn-f">
-                                                    <i class="icon-facebook-f"></i>
-                                                    Login With Facebook
-                                                </a>
-                                            </div><!-- End .col-6 -->
-                                        </div><!-- End .row -->
-                                    </div><!-- End .form-choice -->
-                                </div><!-- .End .tab-pane -->
-                            </div><!-- End .tab-content -->
-                        </div><!-- End .form-tab -->
-                    </div><!-- End .form-box -->
-                </div><!-- End .modal-body -->
-            </div><!-- End .modal-content -->
-        </div><!-- End .modal-dialog -->
-    </div><!-- End .modal -->
 
     <!-- Plugins JS File -->
     <script src="assets/js/jquery.min.js"></script>
@@ -315,72 +252,95 @@ if (isset($_SESSION['uid'])) {
     <script src="login.js"></script>
     <script>
         $(document).ready(function () {
-            $("button.submit-cart").click(function () {
-                $(".cart_form").submit(); // Submit the form
-                alert("Item added to cart");
-            });
+            $(".submit-cart").click(function (event) {  // Use class selector, more robust
+                event.preventDefault(); // Prevent default form submission
 
-         /*   $("button.btn-remove").click(function (event) {
-                event.preventDefault();
-                var del_title = $(this).attr('cart-item-id');
-                var item_to_removed = $(this).closest('tr');
-                console.log("About to delete itme : " + del_title);
+                var inventory_product_id = $(this).closest('tr').find('input[name="inventory_product_id"]').val();
+                var qty = $(this).closest('tr').find('input[name="qty"]').val();
                 $.ajax({
                     type: 'POST',
-                    cache: false,
-                    url: 'https://goodguyng.com/wishlist.php/remove_product_from_watch_list.php',
-                    dataType: "json",
-                    data: { remove: del_title },
-                    success: function (data) {
-                        alert(data);
-                        item_to_removed.remove();
-                        location.reload(true);
+                    url: 'cart-ajax.php',
+                    data: {
+                        inventory_product_id: inventory_product_id,
+                        qty: qty
+                    },
+                    success: function (response) {
+                        if (response.success) { // Check for success in JSON response
+                            alert(response.message); // Display success message from server
+
+                            //Optionally update cart count or other elements
+                        } else {
+                            alert("Error: " + response.message); // Handle errors gracefully
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        console.error(xhr.responseText); // Log error for debugging
+                        alert("An error occurred adding to cart."); // Display general error
                     }
                 });
             });
-        */
 
-        $('.remove-from-wishlist').click(function (event) {
-    event.preventDefault(); // Prevent the default link behavior
+            /*   $("button.btn-remove").click(function (event) {
+                   event.preventDefault();
+                   var del_title = $(this).attr('cart-item-id');
+                   var item_to_removed = $(this).closest('tr');
+                   console.log("About to delete itme : " + del_title);
+                   $.ajax({
+                       type: 'POST',
+                       cache: false,
+                       url: 'https://goodguyng.com/wishlist.php/remove_product_from_watch_list.php',
+                       dataType: "json",
+                       data: { remove: del_title },
+                       success: function (data) {
+                           alert(data);
+                           item_to_removed.remove();
+                           location.reload(true);
+                       }
+                   });
+               });
+           */
 
-    const wishlistItemId = $(this).data('wishlist-id');
-    const itemRow = $(this).closest('tr'); // Store the row for easy removal later
+            $('.remove-from-wishlist').click(function (event) {
+                event.preventDefault(); // Prevent the default link behavior
 
-    // Confirmation dialog
-    if (confirm("Are you sure you want to remove this item from your wishlist?")) {
-        $.ajax({
-            type: "POST",
-            url: "remove-from-wishlist.php",
-            data: JSON.stringify({ wishlist_id: wishlistItemId }),
-            contentType: "application/json",
-            dataType: "json",
-            success: function (response) {
-                if (response.success) {
-                    itemRow.remove();  
+                const wishlistItemId = $(this).data('wishlist-id');
+                const itemRow = $(this).closest('tr'); // Store the row for easy removal later
+
+                // Confirmation dialog
+                if (confirm("Are you sure you want to remove this item from your wishlist?")) {
                     $.ajax({
-                        url: "get_wishlist_count.php", //This file needs to be created
-                        type: "GET",
-                        success: function(data) {
-                            $('.wishlist-count').text(data);
-                            
+                        type: "POST",
+                        url: "remove-from-wishlist.php",
+                        data: JSON.stringify({ wishlist_id: wishlistItemId }),
+                        contentType: "application/json",
+                        dataType: "json",
+                        success: function (response) {
+                            if (response.success) {
+                                itemRow.remove();
+                                $.ajax({
+                                    url: "get_wishlist_count.php", //This file needs to be created
+                                    type: "GET",
+                                    success: function (data) {
+                                        $('.wishlist-count').text(data);
+
+                                    },
+                                    error: function (error) {
+                                        console.error("Error updating wishlist count:", error);
+                                        alert("Error updating wishlist count. Please try again.");
+                                    }
+                                });
+
+                            } else {
+                                alert("Error removing from wishlist: " + response.message);
+                            }
                         },
-                        error: function(error) {
-                            console.error("Error updating wishlist count:", error);
-                            alert("Error updating wishlist count. Please try again.");
+                        error: function (error) {
+                            alert("An error occurred during removal.");
+                            console.error(error); // Log the error for debugging
                         }
                     });
-
-                } else {
-                    alert("Error removing from wishlist: " + response.message);
                 }
-            },
-            error: function (error) {
-                alert("An error occurred during removal.");
-                console.error(error); // Log the error for debugging
-            }
-        });
-    } 
-});
+            });
         });
     </script>
 </body>

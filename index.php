@@ -8,6 +8,8 @@ $p = new ProductItem();
 $product_obj = new ProductItem();
 $promotion = new Promotion();
 $cat = new Category();
+
+
 ?>
 
 <!DOCTYPE html>
@@ -562,7 +564,8 @@ $cat = new Category();
 
 
                                 <div class="product-action-vertical">
-                                    <a href="#" class="btn-product-icon btn-wishlist btn-expandable"><span>add to
+                                    <a href="#" data-product-id="<?= $row['InventoryItemID'] ?>"
+                                        class="btn-product-icon btn-wishlist btn-expandable"><span>add to
                                             wishlist</span></a>
 
                                     <a href="<?= $p->get_image($row['InventoryItemID']) ?>"
@@ -706,7 +709,8 @@ $cat = new Category();
 
 
                                     <div class="product-action-vertical">
-                                        <a href="#" class="btn-product-icon btn-wishlist btn-expandable"><span>add to
+                                        <a href="#" data-product-id="<?= $row['InventoryItemID'] ?>"
+                                            class="btn-product-icon btn-wishlist btn-expandable"><span>add to
                                                 wishlist</span></a>
 
                                         <a href="<?= $p->get_image($row['InventoryItemID']) ?>"

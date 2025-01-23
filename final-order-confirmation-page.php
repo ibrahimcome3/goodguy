@@ -58,7 +58,7 @@ if (isset($_SESSION['cart_final'])) {
 
         $mail = new PHPMailer(true);
         $orders = new Order($last_id);
-        include "invoice.php";
+        // include "invoice.php";
 
         try {
             //Server settings

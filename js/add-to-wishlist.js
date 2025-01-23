@@ -1,9 +1,14 @@
 $(document).ready(function() {
+
+  function checkLoginStatus(){
+    return !!$.cookie('isLoggedIn'); //Replace with your cookie, localStorage check, or server request
+
+}
     $(".btn-wishlist").click(function(event) {
       event.preventDefault(); 
       const productId = $(this).data("product-id");
      
-
+      if(checkLoginStatus()){
       $.ajax({
         type: "POST",
         url: "add-product-to-wish-list.php", // Replace with your API endpoint
@@ -33,12 +38,16 @@ $(document).ready(function() {
         error: function(error) {
           // Handle AJAX errors
           alert("An error occurred while adding to wishlist.");
-          alert(error);
+          
 
           console.error(error);
         }
       });
+    }else {
+      alert("Please log in to add items to your wishlist.");
+  }
     });
+
 
   });
   

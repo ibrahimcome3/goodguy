@@ -71,7 +71,6 @@ if (isset($_POST['inventory_product_id'], $_POST['qty']) && is_numeric($_POST['i
         }
     }
     // Prevent form resubmission...
-    var_dump($_SESSION['detail-item']);
     header('location: product-detail.php?itemid=' . $_POST['inventory_product_id']);
     exit();
 }

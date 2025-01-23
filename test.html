@@ -16,15 +16,122 @@
 <body>
     <div class="container">
         
-    <form action="add-product-to-wish-list.php" method="post" class="form-inline mt-4">  
+    <form action="cart-ajax.php" method="post" class="form-inline mt-4">  
         <div class="form-group">
              <label for="product_id" class="sr-only">Product ID</label>
-            <input type="text" class="form-control" id="product_id" name="product_id" placeholder="Enter Product ID">
+            <input type="text" class="form-control" id="product_id" name="inventory_product_id" placeholder="Enter Product ID">
         </div>
-        <button type="submit" class="btn btn-primary">Add</button>
+
+        <div class="form-group">
+            <label for="qty" class="sr-only">Qty</label>
+           <input type="number" class="form-control" id="qty" name="qty" placeholder="gty">
+       </div>
+        <button type="submit" class="submit-cart btn btn-primary">Add</button>
     </form>
     </div>
 
 
 </body>
+<script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/jquery.hoverIntent.min.js"></script>
+    <script src="assets/js/jquery.waypoints.min.js"></script>
+    <script src="assets/js/superfish.min.js"></script>
+    <script src="assets/js/owl.carousel.min.js"></script>
+    <!-- Main JS File -->
+    <script src="assets/js/main.js"></script>
+    <script src="assets/js/main.js"></script>
+    <script src="login.js"></script>
+    <script>
+        $(document).ready(function () {
+            $(".submit-cart").click(function (event) {  // Use class selector, more robust
+                event.preventDefault(); // Prevent default form submission
+                var inventory_product_id = $('input[name="inventory_product_id"]').val();
+                var qty = $("input[name='qty']").val();
+                $.ajax({
+                    type: 'POST',
+                    url: 'cart-ajax.php',
+                    data: {
+                        inventory_product_id: inventory_product_id,
+                        qty: qty
+                    },
+                    success: function (response) {
+                        if (response.success) { // Check for success in JSON response
+                            alert(response.message); // Display success message from server
+
+                            //Optionally update cart count or other elements
+                        } else {
+                            alert("Error: " + response.message); // Handle errors gracefully
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        console.error(xhr.responseText); // Log error for debugging
+                        alert("An error occurred adding to cart."); // Display general error
+                    }
+                });
+            });
+
+            /*   $("button.btn-remove").click(function (event) {
+                   event.preventDefault();
+                   var del_title = $(this).attr('cart-item-id');
+                   var item_to_removed = $(this).closest('tr');
+                   console.log("About to delete itme : " + del_title);
+                   $.ajax({
+                       type: 'POST',
+                       cache: false,
+                       url: 'https://goodguyng.com/wishlist.php/remove_product_from_watch_list.php',
+                       dataType: "json",
+                       data: { remove: del_title },
+                       success: function (data) {
+                           alert(data);
+                           item_to_removed.remove();
+                           location.reload(true);
+                       }
+                   });
+               });
+           */
+
+            $('.remove-from-wishlist').click(function (event) {
+                event.preventDefault(); // Prevent the default link behavior
+
+                const wishlistItemId = $(this).data('wishlist-id');
+                const itemRow = $(this).closest('tr'); // Store the row for easy removal later
+
+                // Confirmation dialog
+                if (confirm("Are you sure you want to remove this item from your wishlist?")) {
+                    $.ajax({
+                        type: "POST",
+                        url: "remove-from-wishlist.php",
+                        data: JSON.stringify({ wishlist_id: wishlistItemId }),
+                        contentType: "application/json",
+                        dataType: "json",
+                        success: function (response) {
+                            if (response.success) {
+                                itemRow.remove();
+                                $.ajax({
+                                    url: "get_wishlist_count.php", //This file needs to be created
+                                    type: "GET",
+                                    success: function (data) {
+                                        $('.wishlist-count').text(data);
+
+                                    },
+                                    error: function (error) {
+                                        console.error("Error updating wishlist count:", error);
+                                        alert("Error updating wishlist count. Please try again.");
+                                    }
+                                });
+
+                            } else {
+                                alert("Error removing from wishlist: " + response.message);
+                            }
+                        },
+                        error: function (error) {
+                            alert("An error occurred during removal.");
+                            console.error(error); // Log the error for debugging
+                        }
+                    });
+                }
+            });
+        });
+    </script>
 </html>

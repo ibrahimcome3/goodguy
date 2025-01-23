@@ -39,12 +39,16 @@
 
                 <a href="index.php" class="logo">
                     <div class="h-100 d-flex align-items-center justify-content-center">
-                        <div><img src="assets/logo/logo.png" alt="goodguyng.com logo" width="202"></div>
+                        <div style="color: red"><img src="assets/images/goodguy.svg" alt="goodguyng.com logo"
+                                width="30"></div>
+                        <div style="margin-left: 10px; 
+                                    font-size: 20px; color: black; margin-top:-8px; font-weight: bold;">
+                            goodguyng.com</div>
                     </div>
                 </a>
             </div><!-- End .header-left -->
 
-            <div class="header-center">
+            <div class=" header-center">
                 <div
                     class="header-search header-search-extended header-search-visible header-search-no-radius d-none d-lg-block">
                     <a href="" class="search-toggle" role="button"><i class="icon-search"></i></a>

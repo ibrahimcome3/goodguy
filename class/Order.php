@@ -11,8 +11,11 @@ class Order extends Connn
     {
 
         parent::__construct();
-        $this->user_id = $_SESSION['uid'];
-
+        if (isset($_SESSION['uid'])) {
+            $this->user_id = $_SESSION['uid'];
+        } else {
+            $this->user_id = 0;
+        }
         $sql = "SELECT * FROM `lm_orders` WHERE `order_id` = $order";
         $pdo = $this->dbc;
         $stmt = $pdo->query($sql);
@@ -157,6 +160,35 @@ class Order extends Connn
         }
 
     }
+
+    function getOrderItems($orderId)
+    {
+        $sql = "SELECT oi.*, it.*, first_image.image_name FROM lm_order_line oi left JOIN ( SELECT inventory_item_id, MIN(image_name) AS image_name FROM inventory_item_image GROUP BY inventory_item_id ) AS first_image ON oi.InventoryItemID = first_image.inventory_item_id left join inventoryitem it on it.InventoryItemID = oi.InventoryItemID WHERE oi.orderID = ?;";
+        $pdo = $this->dbc;
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$orderId]);
+
+        $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if ($items) {
+            foreach ($items as &$item) {
+                $item['image_path'] = $this->getImagePath($item['InventoryItemID'], $item['image_name']);
+            }
+        }
+
+        return $items;
+    }
+
+
+    private function getImagePath($inventoryItemId, $imageName)
+    {
+        $imagePath = "products/product-" . $inventoryItemId . "/product-" . $inventoryItemId . "-image/inventory-" . $inventoryItemId . "-" . $inventoryItemId . "/" . $imageName;
+        // Check if the image exists; if not, return a default image path
+        if (!file_exists($_SERVER['DOCUMENT_ROOT'] . '/' . $imagePath)) {
+            $imagePath = "e.jpeg"; // Default image
+        }
+        return $imagePath;
+    }
+
 
 
 

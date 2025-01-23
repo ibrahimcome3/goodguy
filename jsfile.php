@@ -21,6 +21,7 @@
 <script src="assets/js/reviewjs.js"></script>
 <script src="assets/js/add-cart.js"></script>
 <script src="js/add-to-wishlist.js"></script>
+<script src="js/jquery.cookie.js"></script>
 
 
 
