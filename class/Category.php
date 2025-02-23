@@ -1,4 +1,5 @@
 <?php
+require_once 'c:\wamp64\www\goodguy\class\Connn.php'; // Include Conn.php
 class Category extends Connn
 {
       private $timestamp;

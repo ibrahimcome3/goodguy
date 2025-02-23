@@ -13,16 +13,77 @@ class InventoryItem extends Connn
         $this->timestamp = date('Y-m-d');
     }
 
+    function generateSKU()
+    {
+        // Generate a unique SKU (adjust as needed for your system)
+        return 'SKU-' . date('ymdHis') . '-' . rand(1000, 9999); // Example: SKU-231027143215-1234
+    }
+
+    function generateSKUCode()
+    {
+        // Generate a shorter or differently formatted sku_code
+        return substr($this->generateSKU(), 0, 10); // Example: Take first 10 characters of SKU
+    }
+
+
     function add_inventory_item()
     {
         $pdo = $this->dbc;
-        $data = ['description_' => 'Heinz', 'date_added_' => $this->timestamp, 'vendor_' => 'lm', 'Brand_' => 'Heinz',];
-        $sql = "INSERT INTO `productitem`(`description`, `date_added`, `vendor`, `Brand`) VALUES (:description_, :date_added_, :vendor_, :Brand_)";
-        var_dump($data);
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($data);
-    }
+        $sku = $this->generateSKU(); // Generate SKU before preparing the statement
+        $skuCode = $this->generateSKUCode();
 
+        $data = [
+            ':description' => $_POST['description'],
+            ':quantityOnHand' => $_POST['quantityOnHand'],
+            ':cost' => $_POST['cost'],
+            ':reorderQuantity' => $_POST['reorderQuantity'],
+            ':productItemID' => $_POST['productItemID'],
+            ':date_added' => date('Y-m-d H:i:s'), // Use current datetime
+            ':sku' => $sku,
+            ':barcode' => $_POST['barcode'],
+            ':sku_code' => $skuCode,
+            ':delivery_date' => $_POST['delivery_date'],
+            ':tax' => $_POST['tax'],
+            ':discount' => $_POST['discount']
+        ];
+
+        $sql = "INSERT INTO `inventoryitem` (
+                    `description`, 
+                    `quantityOnHand`, 
+                    `cost`, 
+                    `reorderQuantity`, 
+                    `productItemID`, 
+                    `date_added`, 
+                    `sku`, 
+                    `barcode`, 
+                    `sku_code`,
+                    `delivery_date`, 
+                    `tax`, 
+                    `discount`
+                  ) VALUES (
+                    :description, 
+                    :quantityOnHand, 
+                    :cost, 
+                    :reorderQuantity, 
+                    :productItemID, 
+                    :date_added, 
+                    :sku, 
+                    :barcode, 
+                    :sku_code,
+                    :delivery_date, 
+                    :tax, 
+                    :discount
+                  )";
+
+        try {
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($data);
+            // Success!  Handle as needed (e.g., redirect, message)
+        } catch (PDOException $e) {
+            error_log("Error adding inventory item: " . $e->getMessage());
+            // Handle the error appropriately (e.g., display error message to user)
+        }
+    }
     function get_products()
     {
         $pdo = $this->dbc;

@@ -1,6 +1,7 @@
 <?php
 include "includes.php";
-include "class/invoice.php";
+require_once "class/invoice.php";
+require_once "class/Order.php";
 $invoice = new Invoice(82);
 $order = new Order(82);
 $p = new ProductItem();
@@ -12,8 +13,16 @@ $p = new ProductItem();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GoodGuy Template</title>
+    <title>Order Invoice</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+    <?php include "htlm-includes.php/metadata.php"; ?>
+
     <style>
         .header {
             background-color: aliceblue;
@@ -112,26 +121,149 @@ $p = new ProductItem();
                 /* Smaller image on smaller screens */
             }
         }
+
+
+        .btn-github {
+            background-color: #28a745;
+            /* GitHub Green */
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            /* Adjust padding as needed */
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 500;
+            display: block;
+            /* Makes the button a block element */
+            margin: 20px auto;
+            /* Centers the button horizontally */
+            width: 100%;
+            /* Stretches the button to full width */
+            max-width: 300px;
+            /* Optional: set a maximum width */
+        }
+
+        .btn-github:hover {
+            background-color: #218838;
+            /* Slightly darker green on hover */
+        }
+
+        @media print {
+
+            /* Hide the button when printing */
+            .btn-github {
+                display: none !important;
+            }
+        }
+
+        /* Basic styling for payment options */
+        .payment-option {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            /* Optional: rounded corners */
+            cursor: pointer;
+            /* Makes the whole option clickable */
+        }
+
+        .payment-option input[type="radio"] {
+            margin-right: 10px;
+            /* Space between radio button and label */
+            vertical-align: middle;
+            /* Align radio button with label text */
+        }
+
+        .payment-icon {
+            /* Placeholder for payment icons */
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+
+            /* Replace with actual icon or image */
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+
+
+        .payment-name {
+            font-weight: 500;
+            /* Slightly bolder font-weight */
+        }
+
+        .payment-description {
+            font-size: 0.9em;
+            color: #666;
+            /* Slightly lighter text color for description */
+            margin-top: 5px;
+        }
+
+        /* Styling for checked/selected option */
+        .payment-option input[type="radio"]:checked+label {
+            /* Targets the label next to the checked radio */
+            font-weight: bold;
+            /* Example: make text bold */
+            /* Add other styles as needed */
+        }
+
+        .payment-option:hover {
+            /* Hover effect */
+            background-color: #f5f5f5;
+            /* Light gray background on hover */
+            /* Add other hover styles */
+        }
+
+        .payment-icon {
+            display: inline-block;
+            width: 24px;
+            /* Adjust size as needed */
+            height: 24px;
+            /* Adjust size as needed */
+            vertical-align: middle;
+            /* Vertically align with text */
+            margin-right: 2px;
+            margin-top: -4px;
+            /* Adjust spacing as needed */
+        }
+
+        /* Optional: If using inline SVG, you can control the fill color */
+        .payment-icon svg {
+            fill: #333;
+            /* Or your desired color */
+        }
     </style>
 </head>
 
 <body>
+    <?php include "header-for-other-pages.php"; ?>
 
-    <header class="header">
-        <div class="container">
-            <div class="logo-container">
-                <img src="assets/images/goodguy.svg" alt="goodguyng.com logo" class="logo">
-                <span class="brand-name">goodguyng.com</span>
-            </div>
-        </div>
-    </header>
 
     <main>
+
         <div class="container">
-            <div>
+            <input type="hidden" id="orderID" name="orderID" value="<?php echo $invoice->orderId; ?>">
 
-                <h3>Order Summery</h3>
+            <a href="javascript:history.back()" class="btn btn-secondary mt-3">Back</a>
+            <div style="border: 1px dashed black; padding: 18px; margin: 30px;">
 
+                <h4 class="invoice-title mt-3 text-center">Order Summery</h4>
+
+                <hr />
+                <div class="row invoice-header">
+                    <div class="col">
+                        <img src="assets/images/goodguy.svg" alt="goodguyng.com logo" class="logo text-center">
+                    </div>
+                    <div class="col">
+                        <button style="background-color: #28a745 !important;" class="btn btn-github d-print-none"
+                            onclick="window.print()">Print Invoice</button>
+                    </div>
+                    <div class="col text-right">
+                        <h2>INVOICE</h2>
+                        <p>Invoice Date: <?php echo date("Y-m-d"); ?></p>
+                    </div>
+                </div>
+
+                <hr />
                 <div class="row">
                     <div class="col">
                         <?php echo $invoice->getOrderInfromation();
@@ -149,7 +281,6 @@ $p = new ProductItem();
                         </div>
                     </div>
                 </div>
-
 
 
                 <br />
@@ -234,15 +365,15 @@ $p = new ProductItem();
 
                             <!-- ... other footer rows ... -->
                         <tr>
-                            <td colspan="8" class="text-right"><strong>Total Discount:</strong></td>
+                            <td colspan="9" class="text-right"><strong>Total Discount:</strong></td>
                             <td><strong><?= number_format($totalDiscount, 2) ?></strong></td>
                         </tr>
                         <tr>
-                            <td colspan="8" class="text-right"><strong>Grand Total:</strong></td>
+                            <td colspan="9" class="text-right"><strong>Grand Total:</strong></td>
                             <td><strong><?= number_format($grandTotal, 2) ?></strong></td>
                         </tr>
                         <tr>
-                            <td colspan="8" class="text-right"><strong>Total Items:</strong></td>
+                            <td colspan="9" class="text-right"><strong>Total Items:</strong></td>
                             <td><strong><?= $totalItems ?></strong></td>
                         </tr>
 
@@ -254,27 +385,39 @@ $p = new ProductItem();
                     <div class="col">
                         <h5>Payment Method</h5>
                         <form id="payment-form">
-                            <div class="form-check">
+                            <div class="payment-option">
                                 <input class="form-check-input" type="radio" name="paymentMethod" id="cod" value="cod"
                                     checked>
                                 <label class="form-check-label" for="cod">
-                                    Cash on Delivery
+                                    <span class="payment-icon"> <img src="assets/images/icons/money2.svg" alt="Card"
+                                            class="payment-icon"> </span> <span class="payment-name">Cash on
+                                        Delivery</span>
                                 </label>
+                                <p class="payment-description">Pay with cash when you receive your order.</p>
                             </div>
-                            <div class="form-check">
+
+                            <div class="payment-option">
                                 <input class="form-check-input" type="radio" name="paymentMethod" id="card"
                                     value="card">
                                 <label class="form-check-label" for="card">
-                                    Card Payment
+                                    <span class="payment-icon"> <img src="assets/images/icons/mastercard.svg" alt="Card"
+                                            class="payment-icon" /> </span> <span class="payment-name">Card
+                                        Payment</span>
                                 </label>
+                                <p class="payment-description">Pay securely with your credit or debit card.</p>
                             </div>
-                            <br />
-                            <button type="submit" class="btn btn-primary mt-3" id="submit-payment">Place order</button>
+
+                            <!-- Add more payment options as needed -->
 
                         </form>
+
                     </div>
                 </div>
-
+                <div class="row">
+                    <div class="col"><button type="submit" class="btn btn-primary mt-3 btn-github"
+                            id="submit-payment">Place order</button>
+                    </div>
+                </div>
             </div>
 
         </div>
@@ -282,37 +425,44 @@ $p = new ProductItem();
     </main>
 
 
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-
     <script>
         // Assuming jQuery is included
-
         $(document).ready(function () {
-            $("#payment-form").submit(function (event) {
-                event.preventDefault(); // Prevent default form submission
+            $("#submit-payment").click(function (event) {
+                event.preventDefault();
+
 
                 var selectedPaymentMethod = $("input[name='paymentMethod']:checked").val();
+                var orderID = $("#orderID").val();
 
-                // Send data to server using AJAX
+                alert(selectedPaymentMethod);
+
                 $.ajax({
-                    url: "process_payment.php", // Create this server-side script
+                    url: "process_payment.php",
                     type: "POST",
-                    data: { paymentMethod: selectedPaymentMethod, orderID: 82 }, // Include any other needed data
+                    data: { paymentMethod: selectedPaymentMethod, orderID: orderID },
                     success: function (response) {
-                        // Handle successful payment processing
-                        alert("Payment method updated: " + selectedPaymentMethod);
-                        // Update the invoice display, redirect, etc.
+
+                        if (response.success) {
+                            if (selectedPaymentMethod === 'cod') {
+                                alert("Invoice sent to customer email and order concluded successfully.");
+                            } else {
+                                alert("Payment method updated successfully.");
+                            }
+                            //Optionally redirect to a thank you page or other location.
+                            window.location.href = "thankyou.php";
+                        } else {
+                            alert("Error: " + response.message);
+                        }
                     },
                     error: function (xhr, status, error) {
-                        // Handle errors
                         console.error("Payment processing failed:", error);
-                        alert("Error updating payment method.");
+                        alert("An error occurred. Please try again later.");
                     }
                 });
             });
         });
+
 
 
     </script>
