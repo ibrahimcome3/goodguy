@@ -1,7 +1,7 @@
 <?php
 class Connn
 {
-  protected $dbc;
+  public $dbc;
   private $host = "localhost"; // Host name
   private $username = "root";
   private $password = ""; // Mysql password

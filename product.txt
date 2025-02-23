@@ -1,0 +1,218 @@
+    <form method="post" action="product_adder.php" enctype="multipart/form-data">
+        <!-- ... other product fields ... -->
+        <div id="variant-attributes">
+            <div class="attribute-group">
+                <label for="attribute_name_1">Attribute Name:</label>
+                <input type="text" id="attribute_name_1" name="attribute_name_1"><br> <!-- Add value inputs -->
+                <label for="attribute_value_1">Attribute Value:</label>
+                <input type="text" id="attribute_value_1" name="attribute_value_1"><br>
+            </div>
+
+            <label for="variants[color][]">Color:</label><br>
+            <input type="text" name="variants[color][]"><br> <input type="text" name="variants[color][]"><br><br>
+            <label for="variants[size][]">Size:</label><br>
+            <input type="text" name="variants[size][]"><br> <input type="text" name="variants[size][]"><br><br>
+        </div>
+        <button type="button" id="add-attribute">Add Another Attribute</button>
+        <!-- ... rest of the form ... -->
+
+    </form>
+
+    <script>
+        const addAttributeButton = document.getElementById('add-attribute');
+        const variantAttributes = document.getElementById('variant-attributes');
+        let attributeCount = 1;
+
+        addAttributeButton.addEventListener('click', () => {
+            attributeCount++;
+            const newAttributeGroup = document.createElement('div');
+            newAttributeGroup.classList.add('attribute-group');
+            newAttributeGroup.innerHTML = `
+            <label for="attribute_name_${attributeCount}">Attribute Name:</label>
+            <input type="text" id="attribute_name_${attributeCount}" name="attribute_name_${attributeCount}"><br>
+            <label for="attribute_value_${attributeCount}">Attribute Value:</label>
+            <input type="text" id="attribute_value_${attributeCount}" name="attribute_value_${attributeCount}"><br>
+        `;
+            variantAttributes.appendChild(newAttributeGroup);
+        });
+
+
+    </script>
+
+     <label for="sku">sku:</label><br>
+        <input type="text" id="sku" name="sku" required /><br>
+
+        <label for="barcode">Barcode:</label><br>
+        <input type="text" id="barcode" name="barcode" required /><br>
+
+        <label for="product_image">Product Image:</label><br>
+        <input type="file" name="file[]" multiple name="inventory_item_images" id="fileToUpload" multiple />
+
+
+
+
+        <?php
+include "../conn.php";
+require_once '../class/Conn.php';
+require_once '../class/Category.php';
+require_once '../class/ProductItem.php';
+require_once '../class/InventoryItem.php';
+
+$p = new ProductItem();
+$c = new Category();
+
+$file = $_FILES['file'];
+var_dump($_POST);
+if (isset($file['name'])) {
+
+    $product_name = $_POST['product_name'];
+    $vendor = $_POST['vendor'];
+    $brand = $_POST['brand'];
+    $product_information = $_POST['produt_info'];
+
+    $shipping_and_returns = 2;//$_POST['ship_returns'];
+    $cat = $category = $_POST['category'];
+    $qonhand = 100;//$_POST['quintity_in_inventory'];
+    $cost = $_POST['cost'];
+
+    $sku = $_POST['sku'];
+    $barcode = $_POST['barcode'];
+    $description = $_POST['description'];
+    // Validate POST data
+    $validationResults = [];
+
+    $validationResults[] = $p->validatePost('product_name', 'string', true, 1, 255);
+    $validationResults[] = $p->validatePost('description', 'string', true, 1, 1000);
+    $validationResults[] = $p->validatePost('vendor', 'string', true, 1, 255);
+    $validationResults[] = $p->validatePost('brand', 'string', true, 1, 255);
+    $validationResults[] = $p->validatePost('produt_info', 'string', true, 1, 1000);  //Example max length
+    $validationResults[] = $p->validatePost('category', 'string', true, 1, 255);
+    $validationResults[] = $p->validatePost('cost', 'float', true, 0, 100000); //Example max cost
+    $validationResults[] = $p->validatePost('sku', 'string', true, 1, 50);  // Example max length
+    $validationResults[] = $p->validatePost('barcode', 'string', true, 1, 50); // Example max length
+
+
+    // Check for errors
+
+    $errors = [];
+    foreach ($validationResults as $result) {
+        if (isset($result['error'])) {
+            $errors[] = $result['error'];
+        }
+    }
+
+    //If there are errors display them, otherwise proceed with processing
+    if (!empty($errors)) {
+        echo "<ul style='color: red;'>";
+        foreach ($errors as $error) {
+            echo "<li>$error</li>";
+        }
+        echo "</ul>";
+        exit();
+    }
+
+    $product_name = $validationResults[0]['value'];
+    $vendor = $validationResults[1]['value'];
+    $brand = $validationResults[2]['value'];
+    $description = $validationResults[3]['value'];
+    $product_information = $validationResults[3]['value'];
+    $category = $validationResults[4]['value'];
+    $cost = $validationResults[5]['value'];
+
+
+    // Prepare Product data for insertion
+    $productData = [
+        'product_name' => $product_name,
+        'vendor' => $vendor,
+        'description' => $description,
+        'category' => $category,
+        'brand' => $brand,
+        'product_information' => $product_information,
+        'shipping_returns' => $shipping_and_returns,
+        'user_id' => 10009, // Replace with actual user ID
+    ];
+
+
+    // Now you can use $lastProductId to link this product to other tables
+
+
+
+    if (isset($file['name'])) {
+        if (!$p->checkAllowableImage($file)) {
+            echo "<b style='color:#CC0000'>Image type not allowed.</b>";
+            echo "<a href=" . $_SERVER['HTTP_REFERER'] . ">Back</a>";
+            exit();
+        }
+    }
+
+
+    if (empty($description) || empty($product_information)) {
+        echo "<p><b>Error:</b> Please fill in both the 'Description' and 'Product Information' fields.</p>";
+        exit();
+    }
+
+
+    $lastProductId = $p->insertProductItem($mysqli, $productData);
+    if ($lastProductId !== false) {
+        $last_id = $lastProductId;
+        $productName = $productData['product_name'];
+        $category = $productData['category'];
+        $sku = generateSKUFromCategoryAndName($mysqli, $category, $productName, $lastProductId); // Pass product ID
+        $p->makedir_for_product($last_id);
+        $p->moveProductImage($last_id, $file);
+
+
+        //    if($result){
+        //    $mysqli->commit();
+
+
+        $reorder_quitity = 600;
+        $product_item = $last_id;
+        $cat = $category;
+        $sku = '{"type":"shirt"}';
+        $description = $product_information;
+        $sql = "INSERT INTO `inventoryitem`(`InventoryItemID`, `quantityOnHand`, `cost`, `reorderQuantity`, `productItemID`, `date_added`,  `sku`, barcode) VALUES (null,'$qonhand','$cost','$reorder_quitity','$product_item', CURRENT_TIMESTAMP,'$sku', '$barcode')";
+        echo $sql;
+        $result = $mysqli->query($sql);
+        var_dump($result);
+        $last_id = mysqli_insert_id($mysqli);
+
+        if ($result) {
+            echo $p->makeInventoryItemDirectory($lastProductId, $last_id);
+        }
+    }
+    // } else {
+    //   $mysqli->rollback();
+
+    //}
+}
+
+// header("Location: confirm-page.php?meg=Product has been iploaded");
+
+
+
+
+
+
+
+
+
+
+
+function generateSKUFromCategoryAndName($mysqli, $category, $productName, $productId)
+{
+    // Simpler, MySQL-compatible SKU generation
+    $sku = strtoupper(substr($category, 0, 3)) . "-" . strtoupper(substr($productName, 0, 4)) . "-" . $productId;
+    return $sku;
+}
+
+// Example usage
+$sku = generateSKUFromCategoryAndName($mysqli, "Electronics", "Super SmartPhone", 67);
+echo $sku;
+
+
+
+
+
+
+?>

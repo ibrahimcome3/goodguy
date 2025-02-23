@@ -20,23 +20,20 @@ if (isset($file['name'])) {
     $shipping_and_returns = 2;//$_POST['ship_returns'];
     $cat = $category = $_POST['category'];
     $qonhand = 100;//$_POST['quintity_in_inventory'];
-    $cost = $_POST['cost'];
+    //$cost = $_POST['cost'];
 
-    $sku = $_POST['sku'];
-    $barcode = $_POST['barcode'];
-    $description = $_POST['description'];
+    //$sku = $_POST['sku'];
+    //$barcode = $_POST['barcode'];
+    //$description = $_POST['description'];
     // Validate POST data
     $validationResults = [];
 
     $validationResults[] = $p->validatePost('product_name', 'string', true, 1, 255);
-    $validationResults[] = $p->validatePost('description', 'string', true, 1, 1000);
+    //$validationResults[] = $p->validatePost('description', 'string', true, 1, 1000);
     $validationResults[] = $p->validatePost('vendor', 'string', true, 1, 255);
     $validationResults[] = $p->validatePost('brand', 'string', true, 1, 255);
     $validationResults[] = $p->validatePost('produt_info', 'string', true, 1, 1000);  //Example max length
     $validationResults[] = $p->validatePost('category', 'string', true, 1, 255);
-    $validationResults[] = $p->validatePost('cost', 'float', true, 0, 100000); //Example max cost
-    $validationResults[] = $p->validatePost('sku', 'string', true, 1, 50);  // Example max length
-    $validationResults[] = $p->validatePost('barcode', 'string', true, 1, 50); // Example max length
 
 
     // Check for errors
@@ -61,17 +58,16 @@ if (isset($file['name'])) {
     $product_name = $validationResults[0]['value'];
     $vendor = $validationResults[1]['value'];
     $brand = $validationResults[2]['value'];
-    $description = $validationResults[3]['value'];
+    //$description = $validationResults[3]['value'];
     $product_information = $validationResults[3]['value'];
     $category = $validationResults[4]['value'];
-    $cost = $validationResults[5]['value'];
+
 
 
     // Prepare Product data for insertion
     $productData = [
         'product_name' => $product_name,
         'vendor' => $vendor,
-        'description' => $description,
         'category' => $category,
         'brand' => $brand,
         'product_information' => $product_information,
@@ -93,10 +89,7 @@ if (isset($file['name'])) {
     }
 
 
-    if (empty($description) || empty($product_information)) {
-        echo "<p><b>Error:</b> Please fill in both the 'Description' and 'Product Information' fields.</p>";
-        exit();
-    }
+
 
 
     $lastProductId = $p->insertProductItem($mysqli, $productData);
@@ -106,34 +99,30 @@ if (isset($file['name'])) {
         $category = $productData['category'];
         $sku = generateSKUFromCategoryAndName($mysqli, $category, $productName, $lastProductId); // Pass product ID
         $p->makedir_for_product($last_id);
+        $p->moveProductImage($last_id, $file);
+        header("Location: add-product-varient.php?product_id=$lastProductId");
+        exit();
 
-        //    if($result){
-        //    $mysqli->commit();
-
-
-        $reorder_quitity = 600;
-        $product_item = $last_id;
-        $cat = $category;
-        $sku = '{"type":"shirt"}';
-        $description = $product_information;
-        $sql = "INSERT INTO `inventoryitem`(`InventoryItemID`, `quantityOnHand`, `cost`, `reorderQuantity`, `productItemID`, `date_added`,  `sku`, barcode) VALUES (null,'$qonhand','$cost','$reorder_quitity','$product_item', CURRENT_TIMESTAMP,'$sku', '$barcode')";
-        echo $sql;
-        $result = $mysqli->query($sql);
-        var_dump($result);
-        $last_id = mysqli_insert_id($mysqli);
-
-        if ($result) {
-            echo $p->makeInventoryItemDirectory($lastProductId, $last_id);
-        }
     }
-    // } else {
-    //   $mysqli->rollback();
-
-    //}
+} else {
+    echo "Please select an image for this product.";
 }
 
 // header("Location: confirm-page.php?meg=Product has been iploaded");
+// $reorder_quitity = 600;
+//         $product_item = $last_id;
+//         $cat = $category;
+//         $sku = '{"type":"shirt"}';
+//         $description = $product_information;
+//         $sql = "INSERT INTO `inventoryitem`(`InventoryItemID`, `quantityOnHand`, `cost`, `reorderQuantity`, `productItemID`, `date_added`,  `sku`, barcode) VALUES (null,'$qonhand','$cost','$reorder_quitity','$product_item', CURRENT_TIMESTAMP,'$sku', '$barcode')";
+//         echo $sql;
+//         $result = $mysqli->query($sql);
+//         var_dump($result);
+//         $last_id = mysqli_insert_id($mysqli);
 
+//         if ($result) {
+//             echo $p->makeInventoryItemDirectory($lastProductId, $last_id);
+//         }
 
 
 

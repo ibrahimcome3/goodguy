@@ -8,155 +8,103 @@ require_once '../class/Category.php';
 
 <head>
     <title>Add Product</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> <!-- jQuery is required -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 </head>
 
 <body>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-8 offset-md-2">
+                <h3>Register a product</h3>
+                <form method="post" action="product_adder.php" enctype="multipart/form-data">
 
-    <h1>Add New Product</h1>
+                    <div class="mb-3">
+                        <label for="product_name" class="form-label">Product Name:</label>
+                        <input type="text" class="form-control" id="product_name" name="product_name" required>
+                    </div>
 
-    <form method="post" action="product_adder.php" enctype="multipart/form-data">
-        <label for="product_name">Product Name:</label><br>
-        <input type="text" id="product_name" name="product_name" required><br><br>
-        <label for="description">description:</label><br>
-        <input type="text" id="description" name="description" required /><br>
-        <label for="category">Category:</label><br>
-        <select name="category" id="category" class="form-control">
-            <?php
-            $sql = "SELECT * FROM `category_new` ORDER BY `cat_id` ASC";
-            $result = $mysqli->query($sql);
-            while ($row = mysqli_fetch_array($result)) {
-                ?>
+                    <div class="mb-3">
+                        <label for="category" class="form-label">Category:</label>
+                        <select name="category" id="category" class="form-select">
+                            <?php
+                            $sql = "SELECT * FROM `category_new` ORDER BY `cat_id` ASC";
+                            $result = $mysqli->query($sql);
+                            while ($row = mysqli_fetch_array($result)) {
+                                echo "<option value='{$row['cat_id']}'>{$row['cat_id']} {$row['categoryName']}</option>";
+                            }
+                            ?>
+                        </select>
+                    </div>
 
-                <option value="<?= $row['cat_id'] ?>"><?= $row['cat_id'] . " " ?><?= $row['categoryName'] ?></option>
+                    <div class="mb-3">
+                        <label for="supplier" class="form-label">Vendor Information:</label>
+                        <select name="vendor" class="form-select" id='supplier'>
+                            <?php
+                            $sql = "SELECT * FROM `supplier` ORDER BY `supplier`.`sup_company_name` ASC";
+                            $result = $mysqli->query($sql);
+                            while ($row = mysqli_fetch_array($result)) {
+                                echo "<option value='{$row['sup_id']}'>{$row['sup_company_name']}</option>";
+                            }
+                            ?>
+                        </select>
+                    </div>
 
-            <?php } ?>
-        </select><br><br>
+                    <div class="mb-3">
+                        <label for="brand" class="form-label">Brand:</label>
+                        <select name="brand" class="form-select">
+                            <?php
+                            $sql = "SELECT * FROM `brand` ORDER BY `brand`.`Name` ASC";
+                            $result = $mysqli->query($sql);
+                            while ($row = mysqli_fetch_array($result)) {
+                                echo "<option value='{$row['brandID']}'>{$row['Name']}</option>";
+                            }
+                            ?>
+                        </select>
+                    </div>
 
-        <label class="form-label" for="supplier">
-            <h6 class="my-0">Vendor Information</h6>
-        </label>
-        <select name="vendor" class="form-control" id='supplier'>
-            <?php
-            $sql = "SELECT * FROM `supplier` ORDER BY `supplier`.`sup_company_name` ASC";
-            $result = $mysqli->query($sql);
-            while ($row = mysqli_fetch_array($result)) {
-                ?>
+                    <div class="mb-3">
+                        <label for="product_information" class="form-label">Product Information:</label>
+                        <textarea class="form-control" id="product_information" name="produt_info" rows="3"
+                            required></textarea>
+                    </div>
 
-                <option value="<?= $row['sup_id'] ?>"><?= $row['sup_company_name'] ?></option>
+                    <div class="mb-3">
+                        <label for="ship_returns" class="form-label">Returns policy of a product:</label>
+                        <select name="ship_returns" class="form-select">
+                            <?php
+                            $sql = "SELECT * FROM `shipping_policy`";
+                            $result = $mysqli->query($sql);
+                            while ($row = mysqli_fetch_array($result)) {
+                                echo "<option value='{$row['shipping_policy_id']}'>{$row['shipping_policy']}</option>";
+                            }
+                            ?>
+                        </select>
+                    </div>
 
-            <?php } ?>
-        </select>
-        <br>
+                    <div class="mb-3">
+                        <label for="product_image" class="form-label">Product Image:</label>
+                        <input type="file" class="form-control" id="product_image" name="file[]" multiple
+                            accept="image/*">
+                    </div>
+                    <div class="text-center"> <button type="submit" class="btn btn-primary">Add Product</button> </div>
 
-        <label class="form-label" for="category">
-            <h6 class="my-0"> Brand</h6>
-        </label>
-        <select name="brand" class="form-control">
-            <?php
-            $sql = "SELECT * FROM `brand` ORDER BY `brand`.`Name` ASC";
-            $result = $mysqli->query($sql);
-            while ($row = mysqli_fetch_array($result)) {
-                ?>
-
-                <option value="<?= $row['brandID'] ?>"><?= $row['Name'] ?></option>
-
-            <?php } ?>
-        </select>
-        <br>
-
-        <label for="product_information">Cost:</label><br>
-        <input type="text" id="cost" name="cost" required /><br>
-
-        <label for="product_information">Product Information:</label><br>
-        <textarea id="product_information" name="produt_info" required></textarea><br><br>
-
-
-
-        <label class="form-label" for="category">
-            <h6 class="my-0">Returns policy of a product</h6>
-        </label>
-        <select name="ship_returns" class="form-control">
-            <?php
-            $sql = "SELECT * FROM `shipping_policy`";
-            $result = $mysqli->query($sql);
-            while ($row = mysqli_fetch_array($result)) {
-                ?>
-
-                <option value="<?= $row['shipping_policy_id'] ?>"><?= $row['shipping_policy'] ?></option>
-
-            <?php } ?>
-        </select>
-
-        <br />
-
-        <label for="sku">sku:</label><br>
-        <input type="text" id="sku" name="sku" required /><br>
-
-        <label for="barcode">Barcode:</label><br>
-        <input type="text" id="barcode" name="barcode" required /><br>
-
-        <label for="product_image">Product Image:</label><br>
-        <input type="file" name="file[]" multiple name="inventory_item_images" id="fileToUpload" multiple />
-
-
-        <input type="submit" value="Add Product">
-
-
-
-
-        <script>
-            $(document).ready(function () {
-                $('#category').select2();
-            });
-        </script>
-
-
-    </form>
-    <form method="post" action="product_adder.php" enctype="multipart/form-data">
-        <!-- ... other product fields ... -->
-        <div id="variant-attributes">
-            <div class="attribute-group">
-                <label for="attribute_name_1">Attribute Name:</label>
-                <input type="text" id="attribute_name_1" name="attribute_name_1"><br> <!-- Add value inputs -->
-                <label for="attribute_value_1">Attribute Value:</label>
-                <input type="text" id="attribute_value_1" name="attribute_value_1"><br>
+                </form>
             </div>
-
-            <label for="variants[color][]">Color:</label><br>
-            <input type="text" name="variants[color][]"><br> <input type="text" name="variants[color][]"><br><br>
-            <label for="variants[size][]">Size:</label><br>
-            <input type="text" name="variants[size][]"><br> <input type="text" name="variants[size][]"><br><br>
         </div>
-        <button type="button" id="add-attribute">Add Another Attribute</button>
-        <!-- ... rest of the form ... -->
-
-    </form>
+    </div>
 
     <script>
-        const addAttributeButton = document.getElementById('add-attribute');
-        const variantAttributes = document.getElementById('variant-attributes');
-        let attributeCount = 1;
+        $(document).ready(function () {
+            $('#category').select2(); // Initialize Select2 on the category dropdown.
+            $('#supplier').select2(); // Initialize Select2 on the supplier dropdown.
+            $('select[name="brand"]').select2(); // Initialize Select2 on the brand dropdown.
 
-        addAttributeButton.addEventListener('click', () => {
-            attributeCount++;
-            const newAttributeGroup = document.createElement('div');
-            newAttributeGroup.classList.add('attribute-group');
-            newAttributeGroup.innerHTML = `
-            <label for="attribute_name_${attributeCount}">Attribute Name:</label>
-            <input type="text" id="attribute_name_${attributeCount}" name="attribute_name_${attributeCount}"><br>
-            <label for="attribute_value_${attributeCount}">Attribute Value:</label>
-            <input type="text" id="attribute_value_${attributeCount}" name="attribute_value_${attributeCount}"><br>
-        `;
-            variantAttributes.appendChild(newAttributeGroup);
+            $('select[name="ship_returns"]').select2(); // Initialize Select2 on the shipping returns dropdown.
         });
-
-
     </script>
-
-
 
 </body>
 

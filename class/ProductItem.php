@@ -3,7 +3,7 @@ require_once "Connn.php";
 class ProductItem extends Connn
 {
     private $timestamp;
-
+    public $dbc;
 
 
     function __construct()
@@ -12,6 +12,8 @@ class ProductItem extends Connn
         $defaultTimeZone = 'UTC';
         date_default_timezone_set($defaultTimeZone);
         $this->timestamp = date('Y-m-d');
+        $this->dbc = $this->getConnection();
+
     }
 
     function get_image_600_199($ivid)
@@ -79,38 +81,48 @@ class ProductItem extends Connn
             return false; // Or create it if you want: mkdir($productDir, 0777, true);
         }
 
-        $inventoryDir = $productDir . "/inventory-" . $inventoryItemId;
+        $inventoryDir = $productDir . "/inventory-" . $productId . "-" . $inventoryItemId;
         $resizedDir = $inventoryDir . "/resized";
         $resized600Dir = $inventoryDir . "/resized_600";
+        echo $resizedDir;
+        echo $resized600Dir;
 
         if (!is_dir($inventoryDir)) {
             mkdir($inventoryDir, 0777, true);
+            if (!is_dir($resizedDir)) {   //Resized subdir
+                mkdir($resizedDir, 0777, true);
+            }
+
+            if (!is_dir($resized600Dir)) { //Resized 600 subdir
+                mkdir($resized600Dir, 0777, recursive: true);
+            }
             return true;
         }
 
-        if (!is_dir($resizedDir) && !mkdir($resizedDir, 0777, true)) {   //Resized subdir
-            return false;
-        }
-        if (!is_dir($resized600Dir) && !mkdir($resized600Dir, 0777, true)) { //Resized 600 subdir
-            return false;
-        }
 
-        return true;  // Directory already exists
+
+
+
     }
-    function makeSubDirectoriesForVarients($product_item)
+    function makeSubDirectoriesForVarients($product_id, $inventory_item_id)
     {
-        $dir = "../products/product-" . $productId;
-        if (is_dir($dir)) {
+        //Construct the full path
+        $basePath = "../products/product-{$product_id}/inventory-{$product_id}-{$inventory_item_id}/";
+        $resizedPath = $basePath . "resized/";
+        $resized600Path = $basePath . "resized_600/";
 
+        // Attempt to create directories; handle potential errors
+        if (!is_dir($basePath) && !mkdir($basePath, 0777, true)) {
+            return ["error" => "Error creating base directory: " . $basePath];
+        }
+        if (!is_dir($resizedPath) && !mkdir($resizedPath, 0777, true)) {
+            return ["error" => "Error creating resized directory: " . $resizedPath];
+        }
+        if (!is_dir($resized600Path) && !mkdir($resized600Path, 0777, true)) {
+            return ["error" => "Error creating resized_600 directory: " . $resized600Path];
         }
 
-        mkdir("../products/product-" . $product_item, 0777, true);
-        // if (!file_exists("../products/product-" . $product_item . "/" . "product-" . $product_item . "-image/" . "inventory-" . $product_item . "-" . $last_id . "/")) {
-        //     mkdir("../products/product-" . $product_item . "/" . "product-" . $product_item . "-image/" . "inventory-" . $product_item . "-" . $last_id . "/", 0777, true);
-        //     mkdir("../products/product-" . $product_item . "/" . "product-" . $product_item . "-image/" . "inventory-" . $product_item . "-" . $last_id . "/resized/", 0777, true);
-        //     mkdir("../products/product-" . $product_item . "/" . "product-" . $product_item . "-image/" . "inventory-" . $product_item . "-" . $last_id . "/resized_600/", 0777, true);
-        //     return true;
-        // }
+        return ["success" => true]; // Indicate success
     }
 
     function get_image($inventory_item_id)
@@ -299,19 +311,7 @@ class ProductItem extends Connn
         $stmt->close();
     }
 
-    function createProductDirectory($last_id, )
-    {
-        $pdo = $this->dbc;
-        makedir($last_id);
-        $temp = explode(".", $_FILES["files"]["name"][0]);
-        $newfilename = round(microtime(true)) . '.' . end($temp);
-        // Define the target directory
-        $target_dir = "../products/product-" . $last_id . "/" . "product-" . $last_id . "-image/";
-        $target_file_name = $target_dir . $newfilename;
-        return $target_file_name;
 
-
-    }
 
     function moveImageforProduct($target_file_name, $file, $last_id)
     {
@@ -327,6 +327,58 @@ class ProductItem extends Connn
 
     }
 
+    function moveProductImage($productId, $files)
+    {
+
+        $productDir = "../products/product-" . $productId;
+        $productImageDir = $productDir . "/product-" . $productId . "-image";
+
+        // Create directories if they don't exist
+        if (!is_dir($productDir) && !mkdir($productDir, 0777, true)) {
+            return ["error" => "Error creating product directory."];
+        }
+        if (!is_dir($productImageDir) && !mkdir($productImageDir, 0777, true)) {
+            return ["error" => "Error creating product image directory."];
+        }
+
+
+        $uploadedImages = []; //Store paths of uploaded images
+
+        foreach ($files['name'] as $key => $name) {
+            if ($files["error"][$key] == UPLOAD_ERR_OK) {  //Check for upload errors for each file
+
+                $temp = explode(".", $name);
+                $newFilename = round(microtime(true)) . $key . '.' . end($temp); //More unique filename
+                $targetFile = $productImageDir . "/" . $newFilename;
+
+
+                if (move_uploaded_file($files["tmp_name"][$key], $targetFile)) {
+                    $this->convertImage1($targetFile, $targetFile, 100);
+
+                    $sql = "INSERT INTO `product_images` (`p_imgeid`, `image`, `product_id`) VALUES (NULL, ?, ?)";
+                    $stmt = $this->dbc->prepare($sql);
+
+                    if ($stmt->execute([$newFilename, $productId])) {
+                        $uploadedImages[] = ["name" => $name, "path" => $targetFile];
+                    } else {
+                        return ["error" => "Database insertion failed for image: " . $name];
+                    }
+
+
+                } else {
+                    return ["error" => "Error uploading file: " . $name];
+                }
+            } else {
+                return ["error" => "Upload error for image: " . $name . ". Error code: " . $files['error'][$key]];
+            }
+        }
+
+        return ["images" => $uploadedImages];
+    }
+
+
+
+
     function makedir_for_product($last_id)
     {
 
@@ -337,32 +389,6 @@ class ProductItem extends Connn
     }
 
 
-    function resize_image($file, $new_width, $new_height, $to_be_saved, $filename)
-    {
-        echo $file;
-        list($original_width, $original_height) = getimagesize($file);
-        $image = imagecreatefromjpeg($file);
-
-        // Calculate new dimensions while maintaining aspect ratio
-        $aspect_ratio = $original_width / $original_height;
-        if ($new_width / $new_height > $aspect_ratio) {
-            $new_width = $new_height * $aspect_ratio;
-        } else {
-            $new_height = $new_width / $aspect_ratio;
-        }
-        $resized_image = imagecreatetruecolor(600, 600);
-        $x = (600 / 2) - ($new_width / 2);
-        $y = (600 / 2) - ($new_height / 2);
-
-        $color = imagecolorallocate($resized_image, 255, 255, 255);
-        imagefill($resized_image, 0, 0, $color);
-        imagecopyresampled($resized_image, $image, $x, $y, 0, 0, $new_width, $new_height, $original_width, $original_height);
-
-
-        imagejpeg($resized_image, $to_be_saved . $filename);
-
-        return 1;//$resized_image;
-    }
 
 
 
@@ -451,8 +477,125 @@ class ProductItem extends Connn
 
         return 1;
     }
+    function imageprocessorforproductInInventory($product_id, $inventory_item_id, $files)
+    {
+        $pdo = $this->dbc;
 
-    function imageprocessorforproductInInventory($product_item, $file, $i, $c = 0)
+        //Correct and simpler path construction
+        $basePath = "../products/product-{$product_id}/inventory-{$product_id}-{$inventory_item_id}/";
+        $resizedPath = $basePath . "resized/";
+        $resized600Path = $basePath . "resized_600/";
+
+
+        // Create directories (using makeSubDirectoriesForVarients)
+        $dirResult = $this->makeSubDirectoriesForVarients($product_id, $inventory_item_id); // Call the function
+        if (isset($dirResult['error'])) {
+            return ["error" => "Directory creation failed: " . $dirResult['error']];
+        }
+
+        //Process uploaded files
+        var_dump($files);
+        for ($i = 0; $i < count($files); $i++) {
+            if ($files["image"]["error"][$i] == UPLOAD_ERR_OK) {
+                $temp = explode(".", $files["image"]["name"][$i]);
+                $newFilename = round(microtime(true)) . $i . '.' . end($temp);
+                $targetFile = $basePath . $newFilename;  //Simplified target path
+
+                if (move_uploaded_file($files["image"]["tmp_name"][$i], $targetFile)) {
+
+                    //Resize and convert images in one step
+                    $this->resizeImage($targetFile, $resizedPath . $newFilename, 199, 199);
+                    $this->resizeImage($targetFile, $resized600Path . $newFilename, 600, 600);
+
+
+                    $this->insertImageIntoDatabase($inventory_item_id, $newFilename, $i); //Insert into db.
+
+                } else {
+                    return ["error" => "Error uploading image: " . $files["image"]["name"][$i]];
+                }
+            } else {
+                return ["error" => "Upload error for image: " . $files["image"]["name"][$i] . ". Error code: " . $files["image"]["error"][$i]];
+            }
+        }
+
+        return ["success" => true];
+    }
+
+    //Improved image resizing function; handles more image types
+    private function resizeImage($source, $destination, $width, $height)
+    {
+        list($originalWidth, $originalHeight) = getimagesize($source);
+        $image = imagecreatefromjpeg($source); // Attempt to create image from JPEG
+
+        if (!$image) {
+            $image = imagecreatefrompng($source); //Try PNG
+            if (!$image) {
+                $image = imagecreatefromgif($source); //Try GIF
+                if (!$image) {
+                    return false; // Or handle the error appropriately
+                }
+            }
+        }
+
+        $aspect_ratio = $originalWidth / $originalHeight;
+        if ($width / $height > $aspect_ratio) {
+            $width = $height * $aspect_ratio;
+        } else {
+            $height = $width / $aspect_ratio;
+        }
+        $resizedImage = imagecreatetruecolor($width, $height);
+        $x = ($width / 2) - ($width / 2);
+        $y = ($height / 2) - ($height / 2);
+        $color = imagecolorallocate($resizedImage, 255, 255, 255);
+        imagefill($resizedImage, 0, 0, $color);
+        imagecopyresampled($resizedImage, $image, $x, $y, 0, 0, $width, $height, $originalWidth, $originalHeight);
+        imagejpeg($resizedImage, $destination, 100); // Save as JPEG
+        imagedestroy($resizedImage);
+        return true;
+    }
+
+
+
+    function resize_image($file, $new_width, $new_height, $to_be_saved, $filename)
+    {
+        echo $file;
+        list($original_width, $original_height) = getimagesize($file);
+        $image = imagecreatefromjpeg($file);
+
+        // Calculate new dimensions while maintaining aspect ratio
+        $aspect_ratio = $original_width / $original_height;
+        if ($new_width / $new_height > $aspect_ratio) {
+            $new_width = $new_height * $aspect_ratio;
+        } else {
+            $new_height = $new_width / $aspect_ratio;
+        }
+        $resized_image = imagecreatetruecolor(600, 600);
+        $x = (600 / 2) - ($new_width / 2);
+        $y = (600 / 2) - ($new_height / 2);
+
+        $color = imagecolorallocate($resized_image, 255, 255, 255);
+        imagefill($resized_image, 0, 0, $color);
+        imagecopyresampled($resized_image, $image, $x, $y, 0, 0, $new_width, $new_height, $original_width, $original_height);
+
+
+        imagejpeg($resized_image, $to_be_saved . $filename);
+
+        return 1;//$resized_image;
+    }
+    private function insertImageIntoDatabase($inventoryItemId, $newFilename, $isPrimary)
+    {
+        $sql = "INSERT INTO `inventory_item_image` (`inventory_item_image_id`, `image_name`, `image_path`, `is_primary`, `inventory_item_id`) 
+                VALUES (NULL, ?, ?, ?, ?)";
+        $stmt = $this->dbc->prepare($sql);
+        $isPrimary = ($isPrimary === 0) ? 0 : 1; //Ensure is_primary is 0 or 1
+        $stmt->execute([$newFilename, $newFilename, $isPrimary, $inventoryItemId]);
+        if (!$stmt) {
+            return ["error" => "Database insertion failed for image"];
+        }
+
+    }
+
+    function imageprocessorforproductInInventory1($product_item, $file, $i, $c = 0)
     {
         $pdo = $this->dbc;
         $target_dir = "../products/product-" . $product_item . "/" . "product-" . $product_item . "-image/" . "inventory-" . $product_item . "-" . $last_id . "/";
@@ -494,6 +637,32 @@ class ProductItem extends Connn
 
         }
         $c++;
+    }
+
+    function handleVariantImageUpload($productId, $files)
+    {
+
+        $productDir = "../products/product-" . $productId . "/product-" . $productId . "-image/"; // Consistent directory structure
+        if (!is_dir($productDir) && !mkdir($productDir, 0777, true)) {
+            return "default_image.jpg"; // Or handle the directory creation error appropriately
+        }
+
+
+        if ($files["error"] == UPLOAD_ERR_OK) {
+            $temp = explode(".", $files["name"]);
+            $newFilename = round(microtime(true)) . '.' . end($temp); // Include index in filename
+            $targetFile = $productDir . $newFilename;
+
+            if (move_uploaded_file($files["tmp_name"], $targetFile)) {
+                // ... your image processing/resizing functions ...
+                return $targetFile; // Return full path
+            } else {
+                return "default_image.jpg"; // Or handle the move_uploaded_file error
+            }
+        } else {
+            return "default_image.jpg"; // Handle any upload errors
+        }
+
     }
 }
 
