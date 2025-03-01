@@ -1,34 +1,24 @@
 <?php
-require_once "Connn.php";
-class InventoryItem extends Connn
+// removed require_once "../db_conncection/conn.php";
+
+class InventoryItem
 {
     private $timestamp;
+    private $pdo; // Store the PDO connection here
 
-
-    function __construct()
+    public function __construct($pdo)
     {
-        parent::__construct();
+        $this->pdo = $pdo; // Store the PDO connection
         $defaultTimeZone = 'UTC';
         date_default_timezone_set($defaultTimeZone);
         $this->timestamp = date('Y-m-d');
     }
 
-    function generateSKU()
-    {
-        // Generate a unique SKU (adjust as needed for your system)
-        return 'SKU-' . date('ymdHis') . '-' . rand(1000, 9999); // Example: SKU-231027143215-1234
-    }
-
-    function generateSKUCode()
-    {
-        // Generate a shorter or differently formatted sku_code
-        return substr($this->generateSKU(), 0, 10); // Example: Take first 10 characters of SKU
-    }
-
+    // ... (rest of the methods, now using $this->pdo) ...
 
     function add_inventory_item()
     {
-        $pdo = $this->dbc;
+        // $pdo = $this->dbc; REMOVE
         $sku = $this->generateSKU(); // Generate SKU before preparing the statement
         $skuCode = $this->generateSKUCode();
 
@@ -76,7 +66,7 @@ class InventoryItem extends Connn
                   )";
 
         try {
-            $stmt = $pdo->prepare($sql);
+            $stmt = $this->pdo->prepare($sql); // Use $this->pdo
             $stmt->execute($data);
             // Success!  Handle as needed (e.g., redirect, message)
         } catch (PDOException $e) {
@@ -86,8 +76,8 @@ class InventoryItem extends Connn
     }
     function get_products()
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->query("select * from productitem");
+
+        $stmt = $this->pdo->query("select * from productitem"); // Use $this->pdo
         while ($row = $stmt->fetch()) {
             echo $row['description'] . "<br />\n";
         }
@@ -95,27 +85,26 @@ class InventoryItem extends Connn
 
     function get_all_drinks()
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->query("select * from inventoryitem where category in (select `cat_id` from category_new where `cat_path` like '%1/%')");
+        //$pdo = $this->dbc; REMOVED
+        $stmt = $this->pdo->query("select * from inventoryitem where category in (select `cat_id` from category_new where `cat_path` like '%1/%')"); // Use $this->pdo
         return $stmt;
     }
 
     function get_all_drinks_count()
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->query("select count(*) as count from inventoryitem where category in (select `cat_id` from category_new where `cat_id` in (SELECT `cat_id` from category_new WHERE `cat_path` like '%1/%'))");
+        //$pdo = $this->dbc; REMOVED
+        $stmt = $this->pdo->query("select count(*) as count from inventoryitem where category in (select `cat_id` from category_new where `cat_id` in (SELECT `cat_id` from category_new WHERE `cat_path` like '%1/%'))"); // Use $this->pdo
         $row = $stmt->fetch();
         return $row['count'];
-
     }
 
 
     function get_inventory_items_product($category_id)
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `ParentID` = $category_id) ");
+        // $pdo = $this->dbc; REMOVED
+        $stmt = $this->pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `ParentID` = $category_id) "); // Use $this->pdo
         if ($stmt->rowCount() === 0)
-            $stmt = $pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `categoryID` = $category_id) ");
+            $stmt = $this->pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `categoryID` = $category_id) "); // Use $this->pdo
         if ($stmt->rowCount() === 0)
             print ("<center><b>No items in this category</b></center>");
         return $stmt;
@@ -123,10 +112,10 @@ class InventoryItem extends Connn
 
     function get_multiple_inventory_items_product($category_id)
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `ParentID` = $category_id) ");
+        // $pdo = $this->dbc; REMOVED
+        $stmt = $this->pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `ParentID` = $category_id) "); // Use $this->pdo
         if ($stmt->rowCount() === 0)
-            $stmt = $pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `categoryID` = $category_id) ");
+            $stmt = $this->pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `categoryID` = $category_id) "); // Use $this->pdo
         if ($stmt->rowCount() === 0)
             print ("<center><b>No items in this category</b></center>");
         return $stmt;
@@ -135,45 +124,34 @@ class InventoryItem extends Connn
     function get_multiple_inventory_items_product2($sql, $starting_limit, $limit)
     {
         $sql = $sql . ' LIMIT ' . $starting_limit . ',' . $limit;
-        $pdo = $this->dbc;
+        //$pdo = $this->dbc; REMOVED
 
-        $stmt = $pdo->query($sql);
-        return $stmt;
-
-        /* $stmt = $pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `ParentID` in ($category_id))");
-         if($stmt->rowCount() === 0)
-             $stmt = $pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `categoryID` in ($category_id) )");
-               if($stmt->rowCount() === 0)
-                   print("<center><b>No items in this category</b></center>");
-        */
+        $stmt = $this->pdo->query($sql); // Use $this->pdo
         return $stmt;
     }
 
 
     function get_product_inventory($product_id = 1)
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->prepare("SELECT * FROM inventoryitem as i WHERE i.productItemID = ?");
+        // $pdo = $this->dbc; REMOVED
+        $stmt = $this->pdo->prepare("SELECT * FROM inventoryitem as i WHERE i.productItemID = ?"); // Use $this->pdo
 
         $stmt->execute([$product_id]);
         while ($row = $stmt->fetch()) {
             echo $row['description'] . "<br />\n";
         }
-
-
     }
 
     function get_product_image($id)
     {
-        $pdo = $this->dbc;
+        // $pdo = $this->dbc; REMOVED
         $sql = "select * from inventory_item_image where inventory_item_id = $id and `is_primary` = 1";
-        $stmt = $pdo->query($sql);
+        $stmt = $this->pdo->query($sql); // Use $this->pdo
         $row = $stmt->fetch();
         if ($stmt->rowCount() > 0)
             return $row['image_path'];
         else
             return "e.jpg";
-
     }
 
     function decript_string($string)
@@ -188,16 +166,15 @@ class InventoryItem extends Connn
     }
     function get_description($id)
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->query("select * from inventoryitem where InventoryItemID = $id");
+        // $pdo = $this->dbc; REMOVED
+        $stmt = $this->pdo->query("select * from inventoryitem where InventoryItemID = $id"); // Use $this->pdo
         $row = $stmt->fetch();
         return $row['small_description'];
-
     }
     function check_item_in_existance($id)
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->query("select * from inventoryitem where InventoryItemID = $id");
+        // $pdo = $this->dbc; REMOVED
+        $stmt = $this->pdo->query("select * from inventoryitem where InventoryItemID = $id"); // Use $this->pdo
         $row = $stmt->fetch();
         $row_count = $stmt->rowCount();
         if ($row_count > 0) {
@@ -209,9 +186,9 @@ class InventoryItem extends Connn
 
     function get_color($c)
     {
+        // $pdo = $this->dbc; REMOVED
         $sql = "select JSON_VALUE(sku, '$.color') as color from inventoryitem where `InventoryItemID` = $c";
-        $pdo = $this->dbc;
-        $stmt = $pdo->query($sql);
+        $stmt = $this->pdo->query($sql); // Use $this->pdo
         $row = $stmt->fetch();
         $row_count = $stmt->rowCount();
         echo $row['color'];
@@ -221,14 +198,45 @@ class InventoryItem extends Connn
             return null;
         }
         //return strtoupper($row['color']);
-
-
-
     }
 
+    /**
+     * Gets the total inventory quantity for a given product ID.
+     *
+     * @param int $productID The ID of the product.
+     * @return int The total quantity of inventory items for the product, or 0 if no items are found.
+     */
+    public function getTotalInventoryByProductId($productID)
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT SUM(quantityOnHand) AS total_quantity FROM inventoryitem WHERE productItemID = ?"); // Use $this->pdo
+            $stmt->execute([$productID]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return $result['total_quantity'] ?? 0; // Returns 0 if total_quantity is null (no items)
+        } catch (PDOException $e) {
+            // Log the error (you might want to use a proper logging mechanism here)
+            error_log("Error fetching total inventory for product ID $productID: " . $e->getMessage());
+
+            return 0; // Return 0 in case of error
+        }
+    }
+
+    /**
+     * Gets inventory items for a product.
+     *
+     * @param int $productID The ID of the product.
+     * @return array An array of inventory items for the product
+     */
+    public function getInventoryItemsByProductId($productID)
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT * FROM inventoryitem WHERE productItemID = ?"); // Use $this->pdo
+            $stmt->execute([$productID]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error fetching inventory items for product ID $productID: " . $e->getMessage());
+            return [];
+        }
+    }
 }
-
-
-
-
-?>

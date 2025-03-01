@@ -18,7 +18,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $quantityOnHand = $_POST['quantity'];
     $image_paths = []; // Array to store processed image paths
     $image_path = handleVariantImageUpload($product_id, $_FILES['image']);  // Process image and get path
-    $sku = '{"size":"128gb"}';
+    $sku = convertColorAndSizeToSku($colors, $sizes);
+
 
 
 
@@ -89,4 +90,19 @@ function handleVariantImageUpload($productId, $files)
         return "default_image.jpg"; // Handle any upload errors
     }
 
+}
+
+function convertColorAndSizeToSku($color, $size)
+{
+    $skuArray = [];
+
+    if (!empty($color)) {
+        $skuArray['color'] = $color;
+    }
+
+    if (!empty($size)) {
+        $skuArray['size'] = $size;
+    }
+
+    return json_encode($skuArray);
 }

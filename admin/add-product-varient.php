@@ -33,8 +33,9 @@ $product_id = $_GET['product_id'];
             <div class="variant-group border p-3 mb-3">
                 <div class="mb-3">
                     <label for="color_1">Color:</label>
-                    <input type="color" class="form-control form-control-color" id="color_1" name="color">
+                    <input type="color" class="form-control form-control-color" id="color" name="color">
                 </div>
+
                 <div class="mb-3">
                     <label for="size_1">Size:</label>
                     <input type="text" class="form-control" id="size_1" name="size">
@@ -43,10 +44,7 @@ $product_id = $_GET['product_id'];
                     <label for="size_1">Description:</label>
                     <textarea type="text" class="form-control" id="description" name="description"></textarea>
                 </div>
-                <div class="mb-3">
-                    <label for="sku">SKU:</label>
-                    <input type="text" class="form-control" id="sku" name="sku">
-                </div>
+
                 <div class="mb-3">
                     <label for="tax">Tax (%):</label>
                     <input type="number" step="0.01" class="form-control" id="tax" name="tax" required="">

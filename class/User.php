@@ -1,22 +1,28 @@
 <?php
+require_once '../class/Connn.php';
 class User extends Connn
 {
    public $user_id;
    public $user_email;
    public $user_address;
+   public $user_role;
 
 
    function __construct()
    {
       parent::__construct();
-      $this->user_id = $_SESSION['uid'];
-      $pdo = $this->dbc;
-      $sql = "SELECT * FROM `customer` WHERE `customer_id` =  " . $this->user_id;
-      $stmt = $pdo->query($sql);
-      $row = $stmt->fetch();
-      $this->user_email = $row['customer_email'];
-      $this->user_address = $row['customer_address1'] . " " . $row['customer_address2'];
-
+      if (isset($_SESSION['uid'])) {
+         $this->user_id = $_SESSION['uid'];
+      }
+      if (isset($this->user_id)) {
+         $pdo = $this->dbc;
+         $sql = "SELECT * FROM `customer` WHERE `customer_id` =  " . $this->user_id;
+         $stmt = $pdo->query($sql);
+         $row = $stmt->fetch();
+         $this->user_email = $row['customer_email'];
+         $this->user_address = $row['customer_address1'] . " " . $row['customer_address2'];
+         $this->user_role = $row['user_role'];
+      }
    }
 
 
@@ -168,5 +174,31 @@ class User extends Connn
       else
          return true;
    }
-}
+   public function updateUserVendorStatus($mysqli, $userId, $newStatus)
+   {
+      $sql = "UPDATE customer SET vendor_status = ? WHERE customer_id = ?";
+      $stmt = $mysqli->prepare($sql);
+      $stmt->bind_param("si", $newStatus, $userId);
+      return $stmt->execute();
+   }
+   public function getVendorStatus($mysqli, $userId)
+   {
+      $sql = "SELECT user_role FROM `customer` WHERE `customer_id` = ?";
+      $stmt = $mysqli->prepare($sql);
+      $stmt->bind_param("i", $userId);
+      $stmt->execute();
+      $result = $stmt->get_result();
+      $row = $result->fetch_assoc();
+      return $row['user_role'];
+   }
 
+   public function getUserById($mysqli, $userId)
+   {
+      $sql = "SELECT * FROM customer WHERE customer_id = ?";
+      $stmt = $mysqli->prepare($sql);
+      $stmt->bind_param("i", $userId);
+      $stmt->execute();
+      $result = $stmt->get_result();
+      return $result->fetch_assoc();
+   }
+}

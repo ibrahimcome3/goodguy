@@ -13,7 +13,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $inventoryItemId = $_POST['id'];
     $productId = $_POST['product_id'];
     $description = $_POST['description'];
-    $sku = $_POST['sku'];
+
     //$sku = '{"v":"dd"}';
     $cost = $_POST['cost'];
     $tax = $_POST['tax'];
@@ -25,22 +25,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // $sku = $mysqli->real_escape_string($sku);
     $barcode = $mysqli->real_escape_string($barcode);
 
-    var_dump($description);
-    var_dump($sku);
-    var_dump($barcode);
-    var_dump($cost);
-    var_dump($tax);
-    var_dump($quantityOnHand);
-    var_dump($inventoryItemId);
-    var_dump($productId);
-
-    var_dump($_POST);
 
     //try {
     // Update inventory item details
-    $updateSql = "UPDATE inventoryitem SET `description`=?, sku=?, cost=?, tax=?, quantityOnHand=?, barcode=? WHERE inventoryitemID=?";
+    $updateSql = "UPDATE inventoryitem SET `description`=?, cost=?, tax=?, quantityOnHand=?, barcode=? WHERE inventoryitemID=?";
     $updateStmt = $mysqli->prepare($updateSql);
-    $updateStmt->bind_param("ssdddii", $description, $sku, $cost, $tax, $quantityOnHand, $barcode, $inventoryItemId);
+    $updateStmt->bind_param("sdddii", $description, $cost, $tax, $quantityOnHand, $barcode, $inventoryItemId);
 
 
     if (!$updateStmt->execute()) {

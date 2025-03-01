@@ -58,6 +58,57 @@ class ProductItem extends Connn
 
     }
 
+    public function getAllProductsByVendorId_($mysqli, $vendorId)
+    {
+        $sql = "SELECT * FROM productitem WHERE vendor_id = ?";
+        $stmt = $mysqli->prepare($sql);
+
+        if (!$stmt) {
+            // Handle prepare failure
+            error_log("Error in prepare: " . $mysqli->error);
+            return false; // Or throw an exception
+        }
+
+        $stmt->bind_param("i", $vendorId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows > 0) {
+            return $result->fetch_all(MYSQLI_ASSOC);
+        } else {
+            return []; // Return an empty array if no products are found
+        }
+    }
+    public function getAllProductsByVendorId($mysqli, $vendorId, $limit = null, $offset = null)
+    {
+        $sql = "SELECT * FROM productitem WHERE vendor_id = ?";
+        $params = [$vendorId];
+        $types = "i";
+
+        if ($limit !== null && $offset !== null) {
+            $sql .= " LIMIT ? OFFSET ?";
+            $params[] = $limit;
+            $params[] = $offset;
+            $types .= "ii";
+        }
+
+        $stmt = $mysqli->prepare($sql);
+        if (!$stmt) {
+            error_log("Error preparing statement: " . $mysqli->error);
+            return false;
+        }
+
+        $stmt->bind_param($types, ...$params);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows > 0) {
+            return $result->fetch_all(MYSQLI_ASSOC);
+        } else {
+            return [];
+        }
+    }
+
     function get_product_id($inventory_item_id)
     {
         $pdo = $this->dbc;
@@ -69,8 +120,23 @@ class ProductItem extends Connn
         else
             return 1;
 
+    }
 
-
+    public function getProductById($mysqli, $productId)
+    {
+        $sql = "SELECT * FROM productitem WHERE productID = ?";
+        $stmt = $mysqli->prepare($sql);
+        if (!$stmt) {
+            error_log("Error preparing statement: " . $mysqli->error);
+            return false;
+        }
+        $stmt->bind_param("i", $productId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result->num_rows > 0) {
+            return $result->fetch_assoc();
+        }
+        return false;
     }
 
     function makeInventoryItemDirectory($productId, $inventoryItemId)
@@ -216,7 +282,7 @@ class ProductItem extends Connn
     }
 
 
-    public function shipping_and_re_trun_rule($id)
+    function shipping_and_re_trun_rule($id)
     {
         $pdo = $this->dbc;
         $stmt = $pdo->prepare("SELECT * FROM `shipping_policy` WHERE `shipping_policy_id` = ?");
@@ -522,7 +588,7 @@ class ProductItem extends Connn
     }
 
     //Improved image resizing function; handles more image types
-    private function resizeImage($source, $destination, $width, $height)
+    function resizeImage($source, $destination, $width, $height)
     {
         list($originalWidth, $originalHeight) = getimagesize($source);
         $image = imagecreatefromjpeg($source); // Attempt to create image from JPEG
@@ -582,7 +648,7 @@ class ProductItem extends Connn
 
         return 1;//$resized_image;
     }
-    private function insertImageIntoDatabase($inventoryItemId, $newFilename, $isPrimary)
+    function insertImageIntoDatabase($inventoryItemId, $newFilename, $isPrimary)
     {
         $sql = "INSERT INTO `inventory_item_image` (`inventory_item_image_id`, `image_name`, `image_path`, `is_primary`, `inventory_item_id`) 
                 VALUES (NULL, ?, ?, ?, ?)";
@@ -664,6 +730,137 @@ class ProductItem extends Connn
         }
 
     }
-}
 
+    public function deleteProduct($mysqli, $productId)
+    {
+        $sql = "DELETE FROM productitem WHERE productID = ?";
+        $stmt = $mysqli->prepare($sql);
+        if ($stmt) {
+            $stmt->bind_param("i", $productId);
+            return $stmt->execute();
+        }
+        return false;
+    }
+
+    public function deleteProductCompletely($mysqli, $productId)
+    {
+        $mysqli->begin_transaction(); // Start transaction for atomicity
+
+        try {
+            // 1. Delete associated inventory items
+            $sql = "DELETE FROM inventoryitem WHERE productItemID = ?";
+            $stmt = $mysqli->prepare($sql);
+            $stmt->bind_param("i", $productId);
+            $stmt->execute();
+            if ($stmt->error) {
+                throw new Exception("Error deleting inventory items: " . $stmt->error);
+            }
+
+            // 2. Delete associated images
+            $sql = "DELETE FROM inventory_item_image WHERE inventory_item_id IN (SELECT InventoryItemID FROM inventoryitem WHERE productItemID = ?)";
+            $stmt = $mysqli->prepare($sql);
+            $stmt->bind_param("i", $productId);
+            $stmt->execute();
+            if ($stmt->error) {
+                throw new Exception("Error deleting images: " . $stmt->error);
+            }
+
+            // 3. Delete product images from the product_images table
+            $sql = "DELETE FROM product_images WHERE product_id = ?";
+            $stmt = $mysqli->prepare($sql);
+            $stmt->bind_param("i", $productId);
+            $stmt->execute();
+            if ($stmt->error) {
+                throw new Exception("Error deleting product images: " . $stmt->error);
+            }
+
+
+            // 4. Delete the product itself
+            $sql = "DELETE FROM productitem WHERE productID = ?";
+            $stmt = $mysqli->prepare($sql);
+            $stmt->bind_param("i", $productId);
+            $stmt->execute();
+            if ($stmt->error) {
+                throw new Exception("Error deleting product: " . $stmt->error);
+            }
+
+            // 5. Delete the product's directory and subdirectories
+            $this->deleteProductDirectory($productId);
+
+            $mysqli->commit(); // Commit transaction if all went well
+            return true;
+        } catch (Exception $e) {
+            $mysqli->rollback(); // Rollback if any error occurred
+            error_log("Error deleting product completely: " . $e->getMessage());
+            return false;
+        }
+    }
+    //Helper Function to delete Product Directory
+    private function deleteProductDirectory($productId)
+    {
+        $productDir = "../products/product-" . $productId;
+        if (is_dir($productDir)) {
+            $this->recursiveDeleteDirectory($productDir);
+        }
+    }
+
+    private function recursiveDeleteDirectory($dir)
+    {
+        if (!is_dir($dir)) {
+            return false; // Not a directory
+        }
+        $files = scandir($dir);
+        foreach ($files as $file) {
+            if ($file !== "." && $file !== "..") {
+                $path = $dir . "/" . $file;
+                if (is_dir($path)) {
+                    $this->recursiveDeleteDirectory($path); // Recursive call for subdirectories
+                } else {
+                    unlink($path); // Delete file
+                }
+            }
+        }
+        rmdir($dir); // Delete the directory itself after deleting files
+        return true;
+    }
+
+
+
+    public function deleteImage($mysqli, $imageId, $productId)
+    {
+        // 1. Get the image path from the database
+        $sql = "SELECT image FROM product_images WHERE p_imgeid = ?";
+        $stmt = $mysqli->prepare($sql);
+        $stmt->bind_param("i", $imageId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $imagePath = "../products/product-{$productId}/product-{$productId}-image/" . $row['image'];
+
+        // 2. Delete the image file from the file system
+        if (file_exists($imagePath)) {
+            if (!unlink($imagePath)) {
+                throw new Exception("Error deleting image file: $imagePath");
+            }
+        } else {
+            // Handle case where file does not exist
+            error_log("Image file not found: " . $imagePath);
+        }
+
+        // 3. Delete the image record from the database
+        $sql = "DELETE FROM product_images WHERE p_imgeid = ?";
+        $stmt = $mysqli->prepare($sql);
+        $stmt->bind_param("i", $imageId);
+        if (!$stmt->execute()) {
+            throw new Exception("Error deleting image from database: " . $stmt->error);
+        }
+
+        return true;
+    }
+
+    // ... rest of your ProductItem class code ...
+
+
+
+}
 ?>

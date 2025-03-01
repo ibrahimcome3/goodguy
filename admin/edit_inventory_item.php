@@ -1,4 +1,13 @@
 <?php
+
+session_start(); // Start the session at the beginning
+
+// Check if the user is logged in
+if (!isset($_SESSION['uid'])) {
+    // Redirect to login page or display an error
+    header("Location: ../login.php"); // Adjust the path if needed
+    exit;
+}
 include "../conn.php";
 require_once '../class/Conn.php';
 require_once '../class/Category.php';
@@ -20,11 +29,9 @@ $stmt->bind_param("i", $inventoryItemId);
 $stmt->execute();
 $result = $stmt->get_result();
 $inventoryItem = $result->fetch_assoc();
-var_dump($inventoryItem);
 if (!$inventoryItem) {
     die("Inventory item not found.");
 }
-
 
 // Fetch image paths for this inventory item
 $imageSql = "SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ?";
@@ -36,6 +43,19 @@ $imagePaths = [];
 while ($imageRow = $imageResult->fetch_assoc()) {
     $imagePaths[] = $imageRow['image_path'];
 }
+
+// Convert JSON SKU to comma-separated values
+$skuArray = json_decode($inventoryItem['sku'], true);
+$skuDisplay = "";
+if (is_array($skuArray)) {
+    $skuParts = [];
+    foreach ($skuArray as $key => $value) {
+        $skuParts[] = "$key: $value";
+    }
+    $skuDisplay = implode(", ", $skuParts);
+} else {
+    $skuDisplay = "Invalid SKU format";
+}
 ?>
 
 <!DOCTYPE html>
@@ -44,6 +64,14 @@ while ($imageRow = $imageResult->fetch_assoc()) {
 <head>
     <title>Edit Inventory Item</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script>
+        window.onpageshow = function (event) {
+            if (event.persisted) {
+                window.location.reload(); // Force a reload from the server
+            }
+        };
+    </script>
+
 </head>
 
 <body>
@@ -64,28 +92,12 @@ while ($imageRow = $imageResult->fetch_assoc()) {
             </div>
 
             <div class="mb-3">
-                <label for="sku" class="form-label">SKU:</label>
-                <input type="text" class="form-control" id="sku" name="sku" value="<?= $inventoryItem['sku'] ?>">
+                <label for="sku" class="form-label">Product Property:</label>
+                <input type="hidden" name="sku" value='<?= $inventoryItem['sku'] ?>'>
+                <input type="text" class="form-control" value='<?= $skuDisplay ?>' readonly>
             </div>
-
-            <h4>SKU Details:</h4>
             <a href="manage-sku.php?inventory_item_id=<?= $inventoryItemId ?>">add and remove properties</a>
-            <?php
-            $skuData = json_decode($inventoryItem['sku'], true);
-            if ($skuData === null && json_last_error() !== JSON_ERROR_NONE) {
-                echo "Error decoding JSON: " . json_last_error_msg();
-                exit; // Stop processing if there's a JSON error
-            }
-            ?>
-            <div id="sku-fields">
-                <?php foreach ($skuData as $key => $value): ?>
-                    <div class="mb-3">
-                        <label for="sku_<?= $key ?>" class="form-label"><?= ucfirst($key) ?>:</label>
-                        <input type="text" class="form-control" id="sku_<?= $key ?>" name="sku_[<?= $key ?>]"
-                            value="<?= $value ?>">
-                    </div>
-                <?php endforeach; ?>
-            </div>
+
 
 
             <div class="mb-3">

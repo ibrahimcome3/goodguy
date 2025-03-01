@@ -29,14 +29,17 @@ require_once '../class/Category.php';
                     <div class="mb-3">
                         <label for="category" class="form-label">Category:</label>
                         <select name="category" id="category" class="form-select">
+                            <option value="">Select a category or add a new one</option>
                             <?php
                             $sql = "SELECT * FROM `category_new` ORDER BY `cat_id` ASC";
                             $result = $mysqli->query($sql);
                             while ($row = mysqli_fetch_array($result)) {
-                                echo "<option value='{$row['cat_id']}'>{$row['cat_id']} {$row['categoryName']}</option>";
+                                echo "<option value='{$row['cat_id']}'>{$row['categoryName']}</option>";
                             }
                             ?>
                         </select>
+                        <input type="text" class="form-control mt-2" id="new_category" name="new_category"
+                            placeholder="Enter new category name (if not found)" style="display:none;">
                     </div>
 
                     <div class="mb-3">
@@ -96,16 +99,24 @@ require_once '../class/Category.php';
         </div>
     </div>
 
+
     <script>
         $(document).ready(function () {
-            $('#category').select2(); // Initialize Select2 on the category dropdown.
-            $('#supplier').select2(); // Initialize Select2 on the supplier dropdown.
-            $('select[name="brand"]').select2(); // Initialize Select2 on the brand dropdown.
+            $('#category').select2();
+            $('#supplier').select2();
+            $('select[name="brand"]').select2();
+            $('select[name="ship_returns"]').select2();
 
-            $('select[name="ship_returns"]').select2(); // Initialize Select2 on the shipping returns dropdown.
+            $('#category').on('change', function () {
+                if ($(this).val() === '') {
+                    $('#new_category').show();
+                } else {
+                    $('#new_category').hide();
+                    $('#new_category').val(''); // Clear the input if a category is selected
+                }
+            });
         });
     </script>
-
 </body>
 
 </html>

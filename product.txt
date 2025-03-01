@@ -216,3 +216,641 @@ echo $sku;
 
 
 ?>
+
+     <?php
+            $skuData = json_decode($inventoryItem['sku'], true);
+            if ($skuData === null && json_last_error() !== JSON_ERROR_NONE) {
+                echo "Error decoding JSON: " . json_last_error_msg();
+                exit; // Stop processing if there's a JSON error
+            }
+            ?>
+            <div id="sku-fields">
+                <?php foreach ($skuData as $key => $value): ?>
+                    <div class="mb-3">
+                        <label for="sku_<?= $key ?>" class="form-label"><?= ucfirst($key) ?>:</label>
+                        <input type="text" class="form-control" id="sku_<?= $key ?>" name="sku_[<?= $key ?>]"
+                            value="<?= $value ?>">
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+
+
+            <?php
+include "../conn.php";
+require_once '../class/Conn.php';
+require_once '../class/Category.php';
+require_once '../class/ProductItem.php';
+require_once '../class/InventoryItem.php';
+
+$p = new ProductItem();
+
+// Get inventory item ID from the URL parameter
+if (!isset($_GET['id'])) {
+    die("Inventory item ID not provided.");
+}
+$inventoryItemId = $_GET['id'];
+
+// Fetch inventory item details (using a parameterized query for security)
+$sql = "SELECT * FROM inventoryitem WHERE inventoryitemID = ?";
+$stmt = $mysqli->prepare($sql);
+$stmt->bind_param("i", $inventoryItemId);
+$stmt->execute();
+$result = $stmt->get_result();
+$inventoryItem = $result->fetch_assoc();
+if (!$inventoryItem) {
+    die("Inventory item not found.");
+}
+
+// Fetch image paths for this inventory item
+$imageSql = "SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ?";
+$imageStmt = $mysqli->prepare($imageSql);
+$imageStmt->bind_param("i", $inventoryItemId);
+$imageStmt->execute();
+$imageResult = $imageStmt->get_result();
+$imagePaths = [];
+while ($imageRow = $imageResult->fetch_assoc()) {
+    $imagePaths[] = $imageRow['image_path'];
+}
+
+// Convert JSON SKU to comma-separated values
+$skuArray = json_decode($inventoryItem['sku'], true);
+$skuDisplay = "";
+if (is_array($skuArray)) {
+    $skuParts = [];
+    foreach ($skuArray as $key => $value) {
+        $skuParts[] = "$key: $value";
+    }
+    $skuDisplay = implode(", ", $skuParts);
+} else {
+    $skuDisplay = "Invalid SKU format";
+}
+?>
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Edit Inventory Item</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container mt-5">
+        <h2>Edit Inventory Item (ID: <?= $inventoryItemId ?>)</h2>
+        <form method="post" action="update_inventory_item.php" enctype="multipart/form-data">
+            <input type="hidden" name="id" value="<?= $inventoryItemId ?>">
+            <div class="mb-3">
+                <label for="product_id" class="form-label">Product ID:</label>
+                <input type="number" class="form-control" id="product_id" name="product_id"
+                    value="<?= $inventoryItem['productItemID'] ?>" readonly>
+            </div>
+
+            <div class="mb-3">
+                <label for="description" class="form-label">Description:</label>
+                <textarea class="form-control" id="description"
+                    name="description"><?= $inventoryItem['description'] ?></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label for="sku" class="form-label">Product Property:</label>
+                <input type="hidden" name="sku" value='<?= $inventoryItem['sku']?>'>
+                <input type="text" class="form-control"  value="<?= $skuDisplay ?>" readonly>
+            </div>
+            <a href="manage-sku.php?inventory_item_id=<?= $inventoryItemId ?>">add and remove properties</a>
+
+
+
+            <div class="mb-3">
+                <label for="cost" class="form-label">Cost:</label>
+                <input type="number" step="0.01" class="form-control" id="cost" name="cost"
+                    value="<?= $inventoryItem['cost'] ?>">
+            </div>
+
+            <div class="mb-3">
+                <label for="tax" class="form-label">Tax (%):</label>
+                <input type="number" step="0.01" class="form-control" id="tax" name="tax"
+                    value="<?= $inventoryItem['tax'] ?>">
+            </div>
+
+            <div class="mb-3">
+                <label for="quantityOnHand" class="form-label">Quantity:</label>
+                <input type="number" class="form-control" id="quantityOnHand" name="quantityOnHand"
+                    value="<?= $inventoryItem['quantityOnHand'] ?>">
+            </div>
+
+            <div class="mb-3">
+                <label for="barcode" class="form-label">Barcode:</label>
+                <input type="text" class="form-control" id="barcode" name="barcode"
+                    value="<?= $inventoryItem['barcode'] ?>">
+            </div>
+
+            <div class="mb-3">
+                <label for="new_image" class="form-label">New Image:</label>
+                <br>
+                <input type="file" class="form-control" id="image_1" name="image[]">
+            </div>
+
+            <div class="mb-3">
+                <label for="image" class="form-label">Images:</label>
+                <?php foreach ($imagePaths as $imagePath): ?>
+                    <div>
+                        <img src="../products/product-<?= $inventoryItem['productItemID'] ?>/inventory-<?= $inventoryItem['productItemID'] ?>-<?= $inventoryItemId ?>/resized/<?= $imagePath ?>"
+                            alt="Inventory Item Image" class="inventory-item-image" style="max-width:100px;">
+                        <input type="checkbox" name="images_to_delete[]" value="<?= $imagePath ?>"> Delete
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <button type="submit">Update</button>
+        </form>
+    </div>
+</body>
+
+</html>
+
+
+
+<?php
+include "../conn.php";
+require_once '../class/Conn.php';
+require_once '../class/Category.php';
+
+// Function to fetch all categories (no recursion needed here)
+function getAllCategories() {
+    global $mysqli;
+    $categories = [];
+    $sql = "SELECT * FROM categories";
+    $result = $mysqli->query($sql);
+    while ($row = $result->fetch_assoc()) {
+        $categories[] = $row;
+    }
+    return $categories;
+}
+
+$allCategories = getAllCategories();
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    if (isset($_POST['action']) && $_POST['action'] == 'add_category') {
+        addCategory($mysqli, $_POST);
+    } elseif (isset($_POST['action']) && $_POST['action'] == 'edit_category') {
+        editCategory($mysqli, $_POST);
+    } elseif (isset($_POST['action']) && $_POST['action'] == 'delete_category') {
+        deleteCategory($mysqli, $_POST);
+    }
+}
+
+?>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Manage Categories</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>Manage Categories</h1>
+
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Category Name</th>
+                    <th>Parent Category</th>
+                    <th>Level</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($allCategories as $category): ?>
+                    <tr>
+                        <td><?= $category['name'] ?></td>
+                        <td>
+                            <?php
+                                $parentName = ($category['parent_id'] == 0) ? 'Top-Level' : '';
+                                if($category['parent_id'] != 0){
+                                    $parentSql = "SELECT name FROM categories WHERE category_id = ?";
+                                    $parentStmt = $mysqli->prepare($parentSql);
+                                    $parentStmt->bind_param('i', $category['parent_id']);
+                                    $parentStmt->execute();
+                                    $parentResult = $parentStmt->get_result();
+                                    $parentRow = $parentResult->fetch_assoc();
+                                    $parentName = $parentRow['name'];
+                                }
+                                echo $parentName;
+                            ?>
+                        </td>
+                        <td><?= $category['level'] ?></td>
+                        <td>
+                            <form method="post" action="manage_categories.php" style="display: inline;">
+                                <input type="hidden" name="category_id" value="<?= $category['category_id'] ?>">
+                                <input type="hidden" name="action" value="edit_category">
+                                <button type="submit" class="btn btn-warning btn-sm">Edit</button>
+                            </form>
+                            <form method="post" action="manage_categories.php" style="display: inline;">
+                                <input type="hidden" name="category_id" value="<?= $category['category_id'] ?>">
+                                <input type="hidden" name="action" value="delete_category">
+                                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                            </form>
+                            <form method="post" action="manage_categories.php" style="display: inline;">
+                                <input type="hidden" name="parent_id" value="<?= $category['category_id'] ?>">
+                                <input type="hidden" name="action" value="add_category">
+                                <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addSubCategoryModal" onclick="setAddSubCategoryModal(<?= $category['category_id'] ?>,1)">Add Subcategory</button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+
+
+        <!-- Modal for adding a subcategory -->
+        <div class="modal fade" id="addSubCategoryModal" tabindex="-1" aria-labelledby="addSubCategoryModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="addSubCategoryModalLabel">Add Subcategory</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="addSubCategoryForm" method="post" action="manage_categories.php">
+                            <input type="hidden" id="parentId" name="parent_id" value="">
+                            <input type="hidden" name="action" value="add_category">
+                            <div class="mb-3">
+                                <label for="subCategoryName" class="form-label">Subcategory Name:</label>
+                                <input type="text" class="form-control" id="subCategoryName" name="name" required>
+                            </div>
+                            <input type="hidden" name="level" value="1">
+                            <button type="submit" class="btn btn-primary">Add Subcategory</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            function setAddSubCategoryModal(parentId,level) {
+                document.getElementById('parentId').value = parentId;
+                document.getElementById('subCategoryName').value = '';
+                document.querySelector('[name="level"]').value = level + 1;
+            }
+        </script>
+
+    </div>
+
+    <!-- Bootstrap JS (required for the modal) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+
+</body>
+</html>
+
+<?php
+
+// ... (Your addCategory, editCategory, deleteCategory functions from previous response) ...
+
+?>
+   <form method="post" action="manage_categories.php" style="display: inline;">
+                                <input type="hidden" name="category_id" value="<?= $category['category_id'] ?>">
+                                <input type="hidden" name="action" value="delete_category">
+                                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                            </form>
+
+
+                            <?php
+include "../conn.php";
+require_once '../class/Conn.php';
+require_once '../class/Category.php';
+
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action'])) {
+    if ($_POST['action'] == 'edit_category') {
+        editCategory($mysqli, $_POST);
+        exit; // Stop further processing after handling AJAX
+    } elseif ($_POST['action'] == 'delete_category') {
+        deleteCategory($mysqli, $_POST);
+        exit; // Stop further processing after handling AJAX
+    }
+}
+
+function editCategory($mysqli, $postData)
+{
+    $categoryId = $postData['category_id'];
+    $newName = $postData['name'];
+
+    $sql = "UPDATE categories SET name = ? WHERE category_id = ?";
+    $stmt = $mysqli->prepare($sql);
+    $stmt->bind_param("si", $newName, $categoryId);
+
+    if ($stmt->execute()) {
+        $response = ['success' => true, 'message' => 'Category updated successfully!'];
+    } else {
+        $response = ['success' => false, 'message' => 'Error updating category: ' . $stmt->error];
+    }
+
+    header('Content-Type: application/json');
+    echo json_encode($response);
+}
+
+function deleteCategory($mysqli, $postData)
+{
+    $categoryId = $postData['category_id'];
+
+    $mysqli->begin_transaction(); // Start a transaction
+
+    try {
+        // Check for child categories first
+        $childrenSql = "SELECT * FROM categories WHERE parent_id = ?";
+        $childrenStmt = $mysqli->prepare($childrenSql);
+        $childrenStmt->bind_param("i", $categoryId);
+        $childrenStmt->execute();
+        $childrenResult = $childrenStmt->get_result();
+
+        if ($childrenResult->num_rows > 0) {
+            throw new Exception("Cannot delete a category with child categories!");
+        }
+
+        // Check for associated products
+        $productSql = "SELECT * FROM productitem WHERE category = ?";
+        $productStmt = $mysqli->prepare($productSql);
+        $productStmt->bind_param("s", $categoryId);
+        $productStmt->execute();
+        $productResult = $productStmt->get_result();
+
+        // Delete associated products
+        while ($product = $productResult->fetch_assoc()) {
+            $deleteProductSql = "DELETE FROM productitem WHERE productID = ?";
+            $deleteProductStmt = $mysqli->prepare($deleteProductSql);
+            $deleteProductStmt->bind_param("i", $product['productID']);
+            if (!$deleteProductStmt->execute()) {
+                throw new Exception("Error deleting product with ID " . $product['productID']);
+            }
+        }
+
+        // Finally, delete the category
+        $deleteCategorySql = "DELETE FROM categories WHERE category_id = ?";
+        $deleteCategoryStmt = $mysqli->prepare($deleteCategorySql);
+        $deleteCategoryStmt->bind_param("i", $categoryId);
+        if (!$deleteCategoryStmt->execute()) {
+            throw new Exception("Error deleting category.");
+        }
+
+        $mysqli->commit(); // Commit the transaction
+        $response = ['success' => true, 'message' => 'Category and associated products deleted successfully!'];
+    } catch (Exception $e) {
+        $mysqli->rollback(); // Roll back the transaction
+        $response = ['success' => false, 'message' => $e->getMessage()];
+    }
+
+    header('Content-Type: application/json');
+    echo json_encode($response);
+}
+?>
+
+
+
+function editCategory($mysqli, $postData)
+{
+    // ... (Your existing editCategory function - no changes needed) ...
+}
+
+function deleteCategory($mysqli, $postData)
+{
+    $categoryId = $postData['category_id'];
+
+    $mysqli->begin_transaction(); // Start a transaction
+
+    try {
+        // Check for child categories first
+        $childrenSql = "SELECT * FROM categories WHERE parent_id = ?";
+        $childrenStmt = $mysqli->prepare($childrenSql);
+        $childrenStmt->bind_param("i", $categoryId);
+        $childrenStmt->execute();
+        $childrenResult = $childrenStmt->get_result();
+
+        if ($childrenResult->num_rows > 0) {
+            throw new Exception("Cannot delete a category with child categories!");
+        }
+
+        // Check for associated products
+        $productSql = "SELECT * FROM productitem WHERE category = ?";
+        $productStmt = $mysqli->prepare($productSql);
+        $productStmt->bind_param("s", $categoryId);
+        $productStmt->execute();
+        $productResult = $productStmt->get_result();
+
+        // Delete associated products
+        while ($product = $productResult->fetch_assoc()) {
+            deleteProductItemFromCategory($mysqli,$product['productID']);
+        }
+
+        // Finally, delete the category
+        $deleteCategorySql = "DELETE FROM categories WHERE category_id = ?";
+        $deleteCategoryStmt = $mysqli->prepare($deleteCategorySql);
+        $deleteCategoryStmt->bind_param("i", $categoryId);
+        if (!$deleteCategoryStmt->execute()) {
+            throw new Exception("Error deleting category.");
+        }
+
+        $mysqli->commit(); // Commit the transaction
+        $response = ['success' => true, 'message' => 'Category and associated products deleted successfully!'];
+    } catch (Exception $e) {
+        $mysqli->rollback(); // Roll back the transaction
+        $response = ['success' => false, 'message' => $e->getMessage()];
+    }
+
+    header('Content-Type: application/json');
+    echo json_encode($response);
+}
+function deleteProductItemFromCategory($mysqli,$productId){
+    
+    $mysqli->begin_transaction(); // Start a transaction
+    try {
+        // Find all inventory items related to the product
+        $inventoryItemSql = "SELECT InventoryItemID FROM inventoryitem WHERE productItemID = ?";
+        $inventoryItemStmt = $mysqli->prepare($inventoryItemSql);
+        $inventoryItemStmt->bind_param("i", $productId);
+        $inventoryItemStmt->execute();
+        $inventoryItemResult = $inventoryItemStmt->get_result();
+
+        // Delete inventory item images
+        while ($inventoryItemRow = $inventoryItemResult->fetch_assoc()) {
+            $deleteImagesSql = "DELETE FROM inventory_item_image WHERE inventory_item_id = ?";
+            $deleteImagesStmt = $mysqli->prepare($deleteImagesSql);
+            $deleteImagesStmt->bind_param("i", $inventoryItemRow['InventoryItemID']);
+            if (!$deleteImagesStmt->execute()) {
+                throw new Exception("Error deleting images for inventory item with ID " . $inventoryItemRow['InventoryItemID']);
+            }
+        }
+         $inventoryItemResult->data_seek(0);
+        // Delete inventory items
+        while ($inventoryItemRow = $inventoryItemResult->fetch_assoc()) {
+            $deleteInventorySql = "DELETE FROM inventoryitem WHERE InventoryItemID = ?";
+            $deleteInventoryStmt = $mysqli->prepare($deleteInventorySql);
+            $deleteInventoryStmt->bind_param("i", $inventoryItemRow['InventoryItemID']);
+            if (!$deleteInventoryStmt->execute()) {
+                throw new Exception("Error deleting inventory item with ID " . $inventoryItemRow['InventoryItemID']);
+            }
+        }
+         $deleteProductSql = "DELETE FROM productitem WHERE productID = ?";
+            $deleteProductStmt = $mysqli->prepare($deleteProductSql);
+            $deleteProductStmt->bind_param("i", $productId);
+            if (!$deleteProductStmt->execute()) {
+                throw new Exception("Error deleting product with ID " . $productId);
+            }
+
+
+    } catch (Exception $e) {
+        $mysqli->rollback();
+      throw new Exception($e->getMessage());
+    }
+}
+function deleteProductItem($mysqli, $postData)
+{
+    $productId = $postData['product_id'];
+   
+    $mysqli->begin_transaction(); // Start a transaction
+    try {
+        // Find all inventory items related to the product
+        $inventoryItemSql = "SELECT InventoryItemID FROM inventoryitem WHERE productItemID = ?";
+        $inventoryItemStmt = $mysqli->prepare($inventoryItemSql);
+        $inventoryItemStmt->bind_param("i", $productId);
+        $inventoryItemStmt->execute();
+        $inventoryItemResult = $inventoryItemStmt->get_result();
+
+        // Delete inventory item images
+        while ($inventoryItemRow = $inventoryItemResult->fetch_assoc()) {
+            $deleteImagesSql = "DELETE FROM inventory_item_image WHERE inventory_item_id = ?";
+            $deleteImagesStmt = $mysqli->prepare($deleteImagesSql);
+            $deleteImagesStmt->bind_param("i", $inventoryItemRow['InventoryItemID']);
+            if (!$deleteImagesStmt->execute()) {
+                throw new Exception("Error deleting images for inventory item with ID " . $inventoryItemRow['InventoryItemID']);
+            }
+        }
+         $inventoryItemResult->data_seek(0);
+        // Delete inventory items
+        while ($inventoryItemRow = $inventoryItemResult->fetch_assoc()) {
+            $deleteInventorySql = "DELETE FROM inventoryitem WHERE InventoryItemID = ?";
+            $deleteInventoryStmt = $mysqli->prepare($deleteInventorySql);
+            $deleteInventoryStmt->bind_param("i", $inventoryItemRow['InventoryItemID']);
+            if (!$deleteInventoryStmt->execute()) {
+                throw new Exception("Error deleting inventory item with ID " . $inventoryItemRow['InventoryItemID']);
+            }
+        }
+         $deleteProductSql = "DELETE FROM productitem WHERE productID = ?";
+            $deleteProductStmt = $mysqli->prepare($deleteProductSql);
+            $deleteProductStmt->bind_param("i", $productId);
+            if (!$deleteProductStmt->execute()) {
+                throw new Exception("Error deleting product with ID " . $productId);
+            }
+
+
+        $mysqli->commit(); // Commit the transaction
+        $response = ['success' => true, 'message' => 'Product and associated inventory items deleted successfully!'];
+    } catch (Exception $e) {
+        $mysqli->rollback(); // Roll back the transaction
+        $response = ['success' => false, 'message' => $e->getMessage()];
+    }
+
+    header('Content-Type: application/json');
+    echo json_encode($response);
+}
+
+
+
+<!DOCTYPE html>
+<?php
+include "../conn.php";
+require_once  '../class/Conn.php';
+require_once  '../class/Category.php';
+require_once  '../class/ProductItem.php';
+$p = new ProductItem();
+$products = $p->getAllProducts($mysqli);
+?>
+<html>
+
+<head>
+
+    <title>Product Manager</title>
+
+    <link rel="stylesheet" href="bootstrap/bootstrap-5.3.3-dist/css/bootstrap.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="bootstrap/bootstrap-5.3.3-dist/js/bootstrap.min.js"></script>
+    <script src="cat.js"></script>
+    <script src="jquery.searchabledropdown-1.0.8.src.js"></script>
+
+
+    <style>
+        .mb-3 {
+            margin-bottom: 1rem !important;
+        }
+    </style>
+
+</head>
+
+<body>
+    <div class="container">
+    <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>productID</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($products as $product): ?>
+                    <tr id="product-row-<?= $product['productID'] ?>">
+                        <td><?= $product['productID'] ?></td>
+                        <td><?= $product['product_name'] ?></td>
+                        <td><?= $product['description'] ?></td>
+                        <td><?= $product['category'] ?></td>
+                       <td>
+                            <button type="button" class="btn btn-danger btn-sm delete-product-button" data-product-id="<?= $product['productID'] ?>">Delete</button>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+
+        <script>
+             $(".delete-product-button").click(function(event) {
+                    event.preventDefault(); // Prevent the default form submission
+
+                    // Get the category ID
+                    var productId = $(this).data('product-id');
+
+                    // Send the AJAX request
+                    if (confirm("Are you sure you want to delete this product?")) {
+                        $.ajax({
+                            url: "edit_category.php",
+                            type: "POST",
+                            data: {
+                                action: "delete_product",
+                                product_id: productId
+                            },
+                            dataType: "json",
+                            success: function(response) {
+                                if (response.success) {
+                                    // Remove the table row
+                                    $("#product-row-" + productId).remove();
+                                    // Display a success message
+                                    alert(response.message);
+                                } else {
+                                    // Display an error message
+                                    alert(response.message);
+                                }
+                            },
+                            error: function(xhr, status, error) {
+                                alert("Error deleting product: " + error);
+                            }
+                        });
+                    }
+                });
+        </script>
+    </div>
+</body>
+
+</html>
