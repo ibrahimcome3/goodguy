@@ -3,11 +3,11 @@ class WishList extends Connn
 {
    private $user_id;
    public $no_of_wish_list_item;
-
-   function __construct($id)
+   private $pdo; // Store the PDO connection here
+   public function __construct($pdo, $id)
    {
       parent::__construct();
-      $pdo = $this->dbc;
+      $this->pdo = $pdo; // Store the PDO connection
       $this->user_id = $id;
       $this->get_wished_list_item_($id);
    }

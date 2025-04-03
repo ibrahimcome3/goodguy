@@ -1,38 +1,36 @@
 <?php
 
+require_once 'Connn.php';
+require_once "invoice.php";
+require_once "Order.php";
+require_once "ProductItem.php";
 
-require_once "class/invoice.php";
-require_once "class/Order.php";
-require_once "class/ProductItem.php";
-
-$invoice = new Invoice(82);
-$order = new Order(82);
+//$invoice = new Invoice(orderId: 78);
 $p = new ProductItem();
-class Order extends Connn
+class Order
 {
     public $user_id;
     private $order_id;
     private $order_date;
-
-
-
-    function __construct($order = 0)
+    private $pdo; // Store the PDO connection here
+    public function __construct($pdo)
     {
 
-        parent::__construct();
+        $this->pdo = $pdo; // Store the PDO connection
+
         if (isset($_SESSION['uid'])) {
             $this->user_id = $_SESSION['uid'];
         } else {
             $this->user_id = 0;
         }
-        $sql = "SELECT * FROM `lm_orders` WHERE `order_id` = $order";
-        $pdo = $this->dbc;
-        $stmt = $pdo->query($sql);
-        $row = $stmt->fetch();
-        if ($row) {
-            $this->order_id = $row['order_id'];
-            $this->order_date = $row['order_date_created'];
-        }
+        // $sql = "SELECT * FROM `lm_orders` WHERE `order_id` = $order";
+
+        // $stmt = $pdo->query($sql);
+        // $row = $stmt->fetch();
+        // if ($row) {
+        //     $this->order_id = $row['order_id'];
+        //     $this->order_date = $row['order_date_created'];
+        // }
 
 
 
@@ -58,7 +56,7 @@ class Order extends Connn
     {
 
         $sql = "SELECT * FROM `lm_orders` WHERE `customer_id` = " . $this->user_id;
-        $pdo = $this->dbc;
+        $pdo = $this->pdo;
         $stmt = $pdo->query($sql);
         if ($stmt) {
             return $stmt;
@@ -74,7 +72,7 @@ class Order extends Connn
     {
         $id = $id_;
         $sql = "SELECT * FROM `lm_order_line` left join inventoryitem on lm_order_line.InventoryItemID = inventoryitem.InventoryItemID left join inventory_item_image on inventoryitem.InventoryItemID = inventory_item_image.`inventory_item_id` WHERE `orderID` = $id group by inventoryitem.InventoryItemID;";
-        $pdo = $this->dbc;
+        $pdo = $this->pdo;
         $stmt = $pdo->query($sql);
         if ($stmt) {
             return $stmt;
@@ -85,7 +83,7 @@ class Order extends Connn
     {
 
         $sql = "SELECT * FROM `lm_orders` WHERE  = $id";
-        $pdo = $this->dbc;
+        $pdo = $this->pdo;
         $stmt = $pdo->query($sql);
         if ($stmt) {
             return $stmt;
@@ -109,7 +107,7 @@ class Order extends Connn
     function remove_order_item_from_an_order($oid, $id)
     {
         $sql = "DELETE FROM `lm_order_line` WHERE `InventoryItemID` = $id and `orderID` = $oid";
-        $pdo = $this->dbc;
+        $pdo = $this->pdo;
         $stmt = $pdo->query($sql);
         if ($stmt) {
             if ($this->count_order_item_from_an_order($oid) <= 0) {
@@ -127,26 +125,18 @@ class Order extends Connn
     function count_number_of_orders()
     {
         $sql = "SELECT count(*) as c FROM `lm_orders` WHERE `customer_id` = " . $this->user_id;
-        $pdo = $this->dbc;
+        $pdo = $this->pdo;
         $stmt = $pdo->query($sql);
         $row = $stmt->fetch();
         return $row['c'];
 
     }
 
-    function count_order_item_from_an_order($oid)
-    {
-        $sql = "SELECT count(*) as c FROM `lm_order_line` WHERE `orderID` = $oid ";
-        $pdo = $this->dbc;
-        $stmt = $pdo->query($sql);
-        $row = $stmt->fetch();
-        return $row['c'];
-    }
 
     function cancel_order($id)
     {
         $sql = "DELETE FROM `lm_orders` WHERE `order_id` = $id";
-        $pdo = $this->dbc;
+        $pdo = $this->pdo;
         $stmt = $pdo->query($sql);
         if ($stmt) {
             return true;
@@ -158,7 +148,7 @@ class Order extends Connn
 
     function get_order_item_price($id, $order_id)
     {
-        $pdo = $this->dbc;
+        $pdo = $this->pdo;
         $stmt = $pdo->query("select * from lm_order_line where orderID = $order_id and InventoryItemID = $id");
         $row_count = $stmt->rowCount();
         if ($row_count > 0) {
@@ -173,7 +163,7 @@ class Order extends Connn
     function getOrderItems($orderId)
     {
         $sql = "SELECT oi.*, it.*, first_image.image_name FROM lm_order_line oi left JOIN ( SELECT inventory_item_id, MIN(image_name) AS image_name FROM inventory_item_image GROUP BY inventory_item_id ) AS first_image ON oi.InventoryItemID = first_image.inventory_item_id left join inventoryitem it on it.InventoryItemID = oi.InventoryItemID WHERE oi.orderID = ?;";
-        $pdo = $this->dbc;
+        $pdo = $this->pdo;
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$orderId]);
 
@@ -201,7 +191,7 @@ class Order extends Connn
     public function concludeOrder($orderID)
     {
         //Update order status in the database
-        $pdo = $this->dbc;
+        $pdo = $this->pdo;
         $sql = "UPDATE lm_orders SET order_status = 'concluded' WHERE order_id = ?";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$orderID]);
@@ -210,7 +200,7 @@ class Order extends Connn
     public function updatePaymentMethod($orderID, $paymentMethod)
     {
         //Update the payment method column in the order table
-        $pdo = $this->dbc;
+        $pdo = $this->pdo;
         $sql = "UPDATE lm_orders SET payment_method = ? WHERE order_id = ?";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$paymentMethod, $orderID]);
@@ -287,7 +277,7 @@ class Order extends Connn
         $orderItemHtml .= "</tbody></table>"; // Close the main table
         $orderItemHtml .= $this->poweredByGoodguy();
         $orderItemHtml .= $this->orderfooter();
-        echo $orderItemHtml;
+        //echo $orderItemHtml;
     }
 
 
@@ -366,6 +356,168 @@ class Order extends Connn
 
         return $totals;
     }
+
+
+    public function updateOrderItemQuantity($mysqli, $orderItemId, $quantity)
+    {
+        $stmt = $mysqli->prepare("UPDATE lm_order_line SET quwantitiyofitem = ? WHERE order_item_id = ?");
+        $stmt->bind_param("ii", $quantity, $orderItemId);
+        return $stmt->execute(); // Return true on success, false on failure
+    }
+
+    public function deleteOrderItem($mysqli, $orderItemId)
+    {
+        $stmt = $mysqli->prepare("DELETE FROM lm_order_line WHERE order_item_id = ?");
+        $stmt->bind_param("i", $orderItemId);
+        return $stmt->execute(); // Return true on success, false on failure
+    }
+
+    public function getOrderDetailsFromLmOrders($mysqli, $orderId)
+    {
+        $stmt = $mysqli->prepare("SELECT * FROM lm_orders WHERE order_id = ?");
+        $stmt->bind_param("i", $orderId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        return $result->fetch_assoc(); // Return an associative array or null if not found
+    }
+
+    public function getOrderItemsFromLmOrders($mysqli, $orderId)
+    {
+        $stmt = $mysqli->prepare("SELECT * FROM lm_order_items WHERE order_id = ?");
+        $stmt->bind_param("i", $orderId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        return $result->fetch_all(MYSQLI_ASSOC); // Return an array of associative arrays or empty array if none found
+    }
+
+    function count_order_item_from_an_order($mysqli, $oid)
+    {
+        $sql = "SELECT COUNT(*) AS total_items FROM `lm_order_line` WHERE `orderID` = ?";
+        $stmt = $mysqli->prepare($sql); // Use prepared statement for security
+        $stmt->bind_param("i", $oid);
+        $stmt->execute(); // Bind parameter to prevent SQL injection
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc(); // Fetch as associative array
+        return $row['total_items']; // Return the count
+    }
+    public function addOrderTracking($mysqli, $orderId, $location)
+    {
+        $sql = "INSERT INTO lm_order_tracking (order_id, location) VALUES (?, ?)";
+        $stmt = $mysqli->prepare($sql);
+        $stmt->bind_param("is", $orderId, $location);
+        return $stmt->execute();
+    }
+
+    public function getOrderTrackingHistory($mysqli, $orderId)
+    {
+        $sql = "SELECT * FROM lm_order_tracking WHERE order_id = ? ORDER BY timestamp DESC";
+        $stmt = $mysqli->prepare($sql);
+        $stmt->bind_param("i", $orderId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $history = [];
+        while ($row = $result->fetch_assoc()) {
+            $history[] = $row;
+        }
+        return $history;
+    }
+    public function updateOrderLocation($mysqli, $orderId, $newLocation)
+    {
+        $sql = "UPDATE `lm_orders` SET order_location = ? WHERE order_id = ?";
+        $stmt = $mysqli->prepare($sql);
+        $stmt->bind_param("si", $newLocation, $orderId);
+        return $stmt->execute();
+    }
+    public function acceptOrder($mysqli, $orderId)
+    {
+        $sql = "UPDATE `lm_orders` SET order_status = 'Accepted' WHERE order_id = ?";
+        $stmt = $mysqli->prepare($sql);
+        $stmt->bind_param("i", $orderId);
+        return $stmt->execute();
+    }
+
+    public function createOrder($userId, $shippingAddressId, $paymentMethod, $total, $cartItems)
+    {
+        // echo $userId;
+        // echo $shippingAddressId;
+        //echo $paymentMethod;
+        // echo $total;
+        // var_dump($cartItems);
+
+
+
+        $pdo = $this->pdo;
+        try {
+            // Start a transaction to ensure data consistency
+            $pdo->beginTransaction();
+
+            // 1. Insert the order into the 'lm_orders' table
+            $stmt = $pdo->prepare("INSERT INTO lm_orders (customer_id, order_total, order_total_items, order_status, order_date_created, order_shipping_address, payment_method) VALUES (?, ?, ?, 'pending', NOW(), ?, ?)");
+            var_dump($stmt);
+            $stmt->execute([$userId, $total, count($cartItems), $shippingAddressId, $paymentMethod]);
+
+            $orderId = $pdo->lastInsertId();
+            var_dump($orderId);
+
+
+            // 2. Insert the order items into the 'lm_order_line' table
+            $stmt = $pdo->prepare("INSERT INTO lm_order_line (orderID, InventoryItemID, quwantitiyofitem, item_price, status) VALUES (?, ?, ?, ?, 'pending')");
+            foreach ($cartItems as $item) {
+                $stmt->execute([$orderId, $item['product']['InventoryItemID'], $item['quantity'], $item['cost']]);
+            }
+
+            // Commit the transaction
+            $pdo->commit();
+
+            return $orderId;
+        } catch (Exception $e) {
+            // Rollback the transaction if any error occurred
+            $pdo->rollBack();
+            // Log the error or handle it appropriately
+            error_log("Error creating order: " . $e->getMessage());
+            //return false; // Or throw an exception
+        }
+    }
+
+
+    public function getOrderDetails($orderId)
+    {
+        $pdo = $this->pdo;
+        $stmt = $pdo->prepare("SELECT * FROM lm_orders WHERE order_id = ?");
+        $stmt->execute([$orderId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ? $row : null;
+    }
+
+    public function updateOrderStatus($orderId, $status)
+    {
+        $pdo = $this->pdo;
+        $stmt = $pdo->prepare("UPDATE lm_orders SET lm_orders.order_status = ? WHERE order_id = ?");
+        return $stmt->execute([$status, $orderId]);
+    }
+
+    public function getOrderShippingAddress($addressId)
+    {
+        $pdo = $this->pdo;
+        $stmt = $pdo->prepare("SELECT * FROM shipping_address WHERE shipping_address_no = ?");
+        $stmt->execute([$addressId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ? $row : null;
+    }
+
+    public function getStateName($stateId)
+    {
+        $pdo = $this->pdo;
+        $stmt = $pdo->prepare("SELECT state_name FROM shipping_state WHERE state_id = ?");
+        $stmt->execute([$stateId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ? $row['state_name'] : null;
+    }
+
+
 
 
 }

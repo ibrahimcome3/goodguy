@@ -15,6 +15,8 @@ require_once '../class/Category.php';
 </head>
 
 <body>
+    <?php include '../seller/navbar.php'; ?> <!-- Include navbar.php here -->
+
     <div class="container mt-5">
         <div class="row">
             <div class="col-md-8 offset-md-2">

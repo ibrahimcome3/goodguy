@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <?php
 include "includes.php";
+
 $wished_list_count = 0;
 if (!$invt->check_item_in_existance($_GET['itemid'])) {
         echo "Item does not exist <a href='index.php'>click here to go home page</a>";
@@ -15,7 +16,7 @@ $row = mysqli_fetch_array($result);
 $category = $row['category'];
 $icudrop = $row['productItemID'];
 $product_info = $row['product_information'];
-$product_add_info = $row['additional_information'];
+$product_name = $row['product_name'];
 $shipping_returns = $row['shipping_returns'];
 
 $id_of_what_get_image = $_GET['itemid'];
@@ -35,8 +36,6 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
 
 <html lang="en">
 
-
-<!-- molla/product-sidebar.html  22 Nov 2019 10:03:32 GMT -->
 
 <head>
         <meta charset="UTF-8">
@@ -130,13 +129,13 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
 
                                                                                                         $p = $pi[0];
                                                                                                 } else {
-                                                                                                        $p = getImage($id_of_what_get_image);
+                                                                                                        $p = $product_obj->get_cover_image($id_of_what_get_image);
                                                                                                 }
                                                                                                 ?>
                                                                                                 <img id="product-zoom"
                                                                                                         src="<?= $p; ?>"
                                                                                                         data-image="<?= $p ?>"
-                                                                                                        data-zoom-image="<?= getImage($id_of_what_get_image); ?>"
+                                                                                                        data-zoom-image="<?= $product_obj->get_cover_image($id_of_what_get_image); ?>"
                                                                                                         alt="product image">
 
                                                                                                 <a href="#"
@@ -226,73 +225,46 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                         <!-- End .product-content -->
                                                                                         <form action="cart.php"
                                                                                                 method="post">
+
                                                                                                 <div
                                                                                                         class="details-filter-row details-row-size">
                                                                                                         <?php
-                                                                                                        $invt_item = new InventoryItem();
-                                                                                                        $color = $invt_item->get_color($_GET['itemid']);
-                                                                                                        $arr_color = array();
-                                                                                                        $var_obj = new Variation();
-                                                                                                        $var_obj_size = new Variation();
+                                                                                                        $var_obj = new Variation($pdo);
                                                                                                         $product_obj = new ProductItem();
-                                                                                                        $stmt = $var_obj->get_color_variation($product_obj->get_product_id($_GET['itemid']));
+                                                                                                        $colorVariations = $var_obj->get_color_variations_for_product_from_sku($product_obj->get_product_id($_GET['itemid']));
 
-
-                                                                                                        if ($color) { ?>
+                                                                                                        if (!empty($colorVariations)) {
+                                                                                                                ?>
                                                                                                                 <label>Color:</label>
-                                                                                                                <input type="hidden"
-                                                                                                                        name="color"
-                                                                                                                        value="<?= $var_obj->get_color_variation_($_GET['itemid']) ?>" />
-                                                                                                        <?php } ?>
-                                                                                                        <div
-                                                                                                                class="product-nav product-nav-dots">
-                                                                                                                <?php
-
-
-
-                                                                                                                if (isset($color)) {
-
-                                                                                                                        $stmt2 = $var_obj_size->get_size_variation($product_obj->get_product_id($_GET['itemid']), strtoupper($color));
-                                                                                                                } else {
-
-                                                                                                                        $stmt2 = $var_obj_size->get_size_variation($product_obj->get_product_id($_GET['itemid']));
-                                                                                                                }
-                                                                                                                if (isset($color)) {
-                                                                                                                        while ($row = $stmt->fetch()) {
-
-                                                                                                                                $arr_color[$row['InventoryItemID']] = $row['color'];
-                                                                                                                                //array_push($arr_color, $row['color']);
-                                                                                                                                $arr_color = array_unique($arr_color);
-
+                                                                                                                <div
+                                                                                                                        class="product-nav product-nav-dots">
+                                                                                                                        <?php
+                                                                                                                        foreach ($colorVariations as $itemId => $color) {
                                                                                                                                 ?>
-
-                                                                                                                                <?php
-                                                                                                                        }
-                                                                                                                        foreach ($arr_color as $key => $color) {
-
-                                                                                                                                ?>
-
-                                                                                                                                <a href="product-detail.php?itemid=<?= $key ?>"
+                                                                                                                                <a href="product-detail.php?itemid=<?= $itemId ?>"
                                                                                                                                         style="background: <?= $color ?>"><span
                                                                                                                                                 class="sr-only">Color
                                                                                                                                                 name</span></a>
-                                                                                                                        <?php }
-                                                                                                                }
-                                                                                                                ?>
-                                                                                                        </div>
-                                                                                                        <!-- End .product-nav -->
+                                                                                                                                <?php
+                                                                                                                        }
+                                                                                                                        ?>
+                                                                                                                </div>
+                                                                                                                <?php
+                                                                                                        }
+                                                                                                        ?>
                                                                                                 </div>
-                                                                                                <!-- End .details-filter-row -->
-                                                                                                <?php if ($var_obj_size->check_for_size_variation($_GET['itemid'])) { ?>
+
+
+                                                                                                <?php
+                                                                                                $sizeVariations = $var_obj->get_size_variations_for_product_from_sku($product_obj->get_product_id($_GET['itemid']));
+                                                                                                if (!empty($sizeVariations)) {
+                                                                                                        ?>
                                                                                                         <div
                                                                                                                 class="details-filter-row details-row-size">
                                                                                                                 <label
                                                                                                                         for="size">Size:</label>
                                                                                                                 <div
                                                                                                                         class="select-custom">
-
-
-
                                                                                                                         <select name="size"
                                                                                                                                 id="size"
                                                                                                                                 class="size form-control">
@@ -303,80 +275,98 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                                                                         size
                                                                                                                                 </option>
                                                                                                                                 <?php
-                                                                                                                                while ($row2 = $stmt2->fetch()) {
+                                                                                                                                foreach ($sizeVariations as $itemId => $size) {
                                                                                                                                         ?>
                                                                                                                                         <option
-                                                                                                                                                value="<?= $row2['size'] ?>">
-                                                                                                                                                <?= $row2['size'] ?>
+                                                                                                                                                value="<?= $size ?>">
+                                                                                                                                                <?= $size ?>
                                                                                                                                         </option>
-                                                                                                                                <?php } ?>
-
+                                                                                                                                        <?php
+                                                                                                                                }
+                                                                                                                                ?>
                                                                                                                         </select>
                                                                                                                 </div>
                                                                                                                 <!-- End .select-custom -->
-
                                                                                                                 <a href="#"
                                                                                                                         class="size-guide"><i
                                                                                                                                 class="icon-th-list"></i>size
                                                                                                                         guide</a>
                                                                                                         </div>
                                                                                                         <!-- End .details-filter-row -->
-                                                                                                <?php } ?>
-
-
-
+                                                                                                        <?php
+                                                                                                }
+                                                                                                ?>
                                                                                                 <div
-                                                                                                        class="product-details-action">
-                                                                                                        <div
-                                                                                                                class="details-action-col">
-                                                                                                                <label
-                                                                                                                        for="qty">Qty:</label>
-                                                                                                                <div
-                                                                                                                        class="product-details-quantity">
+                                                                                                        class="details-filter-row details-row-size">
+                                                                                                        <?php
+                                                                                                        $invt_item = new InventoryItem($pdo);
+                                                                                                        $color = $invt_item->get_color($_GET['itemid']);
+                                                                                                        $arr_color = array();
+                                                                                                        $var_obj = new Variation($pdo);
+                                                                                                        $var_obj_size = new Variation($pdo);
+                                                                                                        $product_obj = new ProductItem();
 
-                                                                                                                        <input type="hidden"
-                                                                                                                                name="inventory_product_id"
-                                                                                                                                value="<?= $_GET['itemid'] ?>" />
-                                                                                                                        <input type="number"
-                                                                                                                                name="qty"
-                                                                                                                                id="qty"
-                                                                                                                                class="form-control"
-                                                                                                                                value="1"
-                                                                                                                                min="1"
-                                                                                                                                max="20"
-                                                                                                                                step="1"
-                                                                                                                                data-decimals="0"
-                                                                                                                                required>
+                                                                                                        ?>
+
+
+
+                                                                                                        <!-- End .details-filter-row -->
+
+
+
+
+                                                                                                        <div
+                                                                                                                class="product-details-action">
+                                                                                                                <div
+                                                                                                                        class="details-action-col">
+                                                                                                                        <label
+                                                                                                                                for="qty">Qty:</label>
+                                                                                                                        <div
+                                                                                                                                class="product-details-quantity">
+
+                                                                                                                                <input type="hidden"
+                                                                                                                                        name="inventory_product_id"
+                                                                                                                                        value="<?= $_GET['itemid'] ?>" />
+                                                                                                                                <input type="number"
+                                                                                                                                        name="qty"
+                                                                                                                                        id="qty"
+                                                                                                                                        class="form-control"
+                                                                                                                                        value="1"
+                                                                                                                                        min="1"
+                                                                                                                                        max="20"
+                                                                                                                                        step="1"
+                                                                                                                                        data-decimals="0"
+                                                                                                                                        required>
+
+
+                                                                                                                        </div>
+                                                                                                                        <!-- End .product-details-quantity -->
+
+                                                                                                                        <input type="submit"
+                                                                                                                                class="submit ubmit-cart btn-product btn-cart submit-cart"
+                                                                                                                                value="add to cart" />
+                                                                                                                        <!--  <a href="#" product-info="//$_GET['itemid']" class="submit-cart btn-product btn-cart submit-cart"><span>add to cart</span></a> -->
 
 
                                                                                                                 </div>
-                                                                                                                <!-- End .product-details-quantity -->
+                                                                                                                <!-- End .details-action-col -->
 
-                                                                                                                <input type="submit"
-                                                                                                                        class="submit ubmit-cart btn-product btn-cart submit-cart"
-                                                                                                                        value="add to cart" />
-                                                                                                                <!--  <a href="#" product-info="//$_GET['itemid']" class="submit-cart btn-product btn-cart submit-cart"><span>add to cart</span></a> -->
+                                                                                                                <div
+                                                                                                                        class="details-action-wrapper">
+                                                                                                                        <a href="add-to-watch-list.php?itemid=<?= $_GET['itemid'] ?>"
+                                                                                                                                class="btn-product btn-wishlist"
+                                                                                                                                title="Wishlist"
+                                                                                                                                data-product-id="<?= $_GET['itemid'] ?>"><span>Add
+                                                                                                                                        to
+                                                                                                                                        Wishlist</span></a>
 
 
+                                                                                                                </div>
+                                                                                                                <!-- End .details-action-wrapper -->
+                                                                                                                <!-- End .details-action-wrapper -->
                                                                                                         </div>
-                                                                                                        <!-- End .details-action-col -->
-
-                                                                                                        <div
-                                                                                                                class="details-action-wrapper">
-                                                                                                                <a href="add-to-watch-list.php?itemid=<?= $_GET['itemid'] ?>"
-                                                                                                                        class="btn-product btn-wishlist"
-                                                                                                                        title="Wishlist"
-                                                                                                                        data-product-id="<?= $_GET['itemid'] ?>"><span>Add
-                                                                                                                                to
-                                                                                                                                Wishlist</span></a>
-
-
-                                                                                                        </div>
-                                                                                                        <!-- End .details-action-wrapper -->
-                                                                                                        <!-- End .details-action-wrapper -->
+                                                                                                        <!-- End .product-details-action -->
                                                                                                 </div>
-                                                                                                <!-- End .product-details-action -->
-
 
                                                                                         </form>
 
@@ -439,16 +429,7 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                         aria-controls="product-desc-tab"
                                                                                         aria-selected="true">Description</a>
                                                                         </li>
-                                                                        <li class="nav-item">
-                                                                                <a class="nav-link"
-                                                                                        id="product-info-link"
-                                                                                        data-toggle="tab"
-                                                                                        href="#product-info-tab"
-                                                                                        role="tab"
-                                                                                        aria-controls="product-info-tab"
-                                                                                        aria-selected="false">Additional
-                                                                                        information</a>
-                                                                        </li>
+
                                                                         <li class="nav-item">
                                                                                 <a class="nav-link"
                                                                                         id="product-shipping-link"
@@ -479,14 +460,7 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                         <p> <?= $product_info ?> </p>
                                                                                 </div><!-- End .product-desc-content -->
                                                                         </div><!-- .End .tab-pane -->
-                                                                        <div class="tab-pane fade" id="product-info-tab"
-                                                                                role="tabpanel"
-                                                                                aria-labelledby="product-info-link">
-                                                                                <div class="product-desc-content">
-                                                                                        <h3>Information</h3>
-                                                                                        <?= $product_add_info ?>
-                                                                                </div><!-- End .product-desc-content -->
-                                                                        </div><!-- .End .tab-pane -->
+
                                                                         <div class="tab-pane fade"
                                                                                 id="product-shipping-tab"
                                                                                 role="tabpanel"

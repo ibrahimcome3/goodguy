@@ -3,7 +3,7 @@
 include "includes.php";
 
 $Orvi = new Review();
-$var_obj = new Variation();
+$var_obj = new Variation($pdo);
 $p = new ProductItem();
 $product_obj = new ProductItem();
 $promotion = new Promotion();
@@ -346,20 +346,25 @@ $cat = new Category();
                                             <div class="product-nav product-nav-dots">
 
                                                 <?php
-                                                $arr_color = array();
-                                                $stmt_ = $var_obj->get_color_variation($product_obj->get_product_id($row['InventoryItemID']));
-                                                while ($row_ = $stmt_->fetch()) {
+                                                // ... other code ...
+                                            
+                                                $colorVariations = $var_obj->get_color_variations_for_product_from_sku($product_obj->get_product_id($row['InventoryItemID']));
 
-                                                    $arr_color[$row_['InventoryItemID']] = $row_['color'];
-                                                    $arr_color = array_unique($arr_color);
-                                                }
-                                                foreach ($arr_color as $key => $color) {
+                                                if (!empty($colorVariations)) {
                                                     ?>
-                                                    <a href="product-detail.php?itemid=<?= $key ?>"
-                                                        style="background: <?= $color ?>"><span class="sr-only">Color
-                                                            name</span></a>
+                                                    <div class="product-nav product-dots">
+                                                        <?php foreach ($colorVariations as $itemId => $color): ?>
+                                                            <a href="product-detail.php?itemid=<?= $itemId ?>"
+                                                                style="background: <?= $color ?>">
+                                                                <span class="sr-only">Color name</span>
+                                                            </a>
+                                                        <?php endforeach; ?>
+                                                    </div>
+                                                    <?php
+                                                }
 
-                                                <?php } ?>
+                                                // ... rest of your code ...
+                                                ?>
                                             </div><!-- End .product-nav -->
                                         </div><!-- End .product-body -->
                                         <div class="product-image-gallery">
@@ -826,16 +831,14 @@ $cat = new Category();
                     }'>
 
                     <?php
-                    $sql = "SELECT * FROM `brand` WHERE CHAR_LENGTH(`image`) > 0;";
-                    $result = $mysqli->query($sql);
-                    while ($row = $result->fetch_assoc()) {
-
+                    $sql = "SELECT * FROM `brand` WHERE CHAR_LENGTH(`brand_logo`) > 0;";
+                    $result = $pdo->query($sql); // Use $pdo here
+                    while ($row = $result->fetch(PDO::FETCH_ASSOC)) { // Corrected line: Use fetch(PDO::FETCH_ASSOC)
                         ?>
                         <a href="#" class="brand">
-                            <img src="<?= $row['image'] ?>" alt="<?= $row['Name'] ?>">
+                            <img src="brand/<?= $row['brand_logo'] ?>" alt="<?= $row['Name'] ?>">
                         </a>
                     <?php } ?>
-
                 </div><!-- End .owl-carousel -->
             </div><!-- End .container -->
 

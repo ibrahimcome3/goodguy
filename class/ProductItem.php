@@ -47,17 +47,6 @@ class ProductItem extends Connn
         }
     }
 
-    function get_product_inventory($product_id = 1)
-    {
-        $pdo = $this->dbc;
-        $stmt = $pdo->prepare("SELECT * FROM inventoryitem as i WHERE i.productItemID = ?");
-        $stmt->execute([$product_id]);
-        while ($row = $stmt->fetch()) {
-            echo $row['description'] . "<br />\n";
-        }
-
-    }
-
     public function getAllProductsByVendorId_($mysqli, $vendorId)
     {
         $sql = "SELECT * FROM productitem WHERE vendor_id = ?";
@@ -560,13 +549,13 @@ class ProductItem extends Connn
         }
 
         //Process uploaded files
-        var_dump($files);
+
         for ($i = 0; $i < count($files); $i++) {
             if ($files["image"]["error"][$i] == UPLOAD_ERR_OK) {
                 $temp = explode(".", $files["image"]["name"][$i]);
                 $newFilename = round(microtime(true)) . $i . '.' . end($temp);
                 $targetFile = $basePath . $newFilename;  //Simplified target path
-
+                echo $targetFile;
                 if (move_uploaded_file($files["image"]["tmp_name"][$i], $targetFile)) {
 
                     //Resize and convert images in one step
@@ -574,7 +563,7 @@ class ProductItem extends Connn
                     $this->resizeImage($targetFile, $resized600Path . $newFilename, 600, 600);
 
 
-                    $this->insertImageIntoDatabase($inventory_item_id, $newFilename, $i); //Insert into db.
+                    $this->insertImageIntoDatabase($inventory_item_id, $newFilename, $targetFile, $i); //Insert into db.
 
                 } else {
                     return ["error" => "Error uploading image: " . $files["image"]["name"][$i]];
@@ -586,6 +575,20 @@ class ProductItem extends Connn
 
         return ["success" => true];
     }
+
+    function insertImageIntoDatabase($inventoryItemId, $newFilename, $imagePath, $isPrimary)
+    {
+        $sql = "INSERT INTO `inventory_item_image` (`inventory_item_image_id`, `image_name`, `image_path`, `is_primary`, `inventory_item_id`) 
+                VALUES (NULL, ?, ?, ?, ?)";
+        $stmt = $this->dbc->prepare($sql);
+        $isPrimary = ($isPrimary === 0) ? 0 : 1; //Ensure is_primary is 0 or 1
+        $stmt->execute([$newFilename, $imagePath, $isPrimary, $inventoryItemId]);
+        if (!$stmt) {
+            return ["error" => "Database insertion failed for image"];
+        }
+
+    }
+
 
     //Improved image resizing function; handles more image types
     function resizeImage($source, $destination, $width, $height)
@@ -648,18 +651,6 @@ class ProductItem extends Connn
 
         return 1;//$resized_image;
     }
-    function insertImageIntoDatabase($inventoryItemId, $newFilename, $isPrimary)
-    {
-        $sql = "INSERT INTO `inventory_item_image` (`inventory_item_image_id`, `image_name`, `image_path`, `is_primary`, `inventory_item_id`) 
-                VALUES (NULL, ?, ?, ?, ?)";
-        $stmt = $this->dbc->prepare($sql);
-        $isPrimary = ($isPrimary === 0) ? 0 : 1; //Ensure is_primary is 0 or 1
-        $stmt->execute([$newFilename, $newFilename, $isPrimary, $inventoryItemId]);
-        if (!$stmt) {
-            return ["error" => "Database insertion failed for image"];
-        }
-
-    }
 
     function imageprocessorforproductInInventory1($product_item, $file, $i, $c = 0)
     {
@@ -684,7 +675,7 @@ class ProductItem extends Connn
 
 
 
-            $new_out = substr($out, 3);
+            $new_out = "product-" . $product_item . "-image/inventory-" . $product_item . "-" . $last_id . "/" . $newfilename; //corrected line
             $file_name = $file["name"][$i];
             $newfilename = explode(".", $newfilename);
             $inserted_file_name = $newfilename[0] . ".jpg";
@@ -857,6 +848,33 @@ class ProductItem extends Connn
 
         return true;
     }
+
+    function get_cover_image($inventory_item_id)
+    {
+        $pdo = $this->dbc;
+
+        // 1. Try to get the primary image (is_primary = 1)
+        $stmt = $pdo->prepare("SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ? AND is_primary = 1 LIMIT 1");
+        $stmt->execute([$inventory_item_id]);
+        $row = $stmt->fetch();
+
+        if ($row) {
+            return $row['image_path']; // Return the primary image path
+        }
+
+        // 2. If no primary image, get the first image (any image)
+        $stmt = $pdo->prepare("SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ? LIMIT 1");
+        $stmt->execute([$inventory_item_id]);
+        $row = $stmt->fetch();
+
+        if ($row) {
+            return $row['image_path']; // Return the first image path
+        }
+
+        // 3. If no images found, return the default image path
+        return "e.jpeg"; // Default image path (you can change this)
+    }
+
 
     // ... rest of your ProductItem class code ...
 

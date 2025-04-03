@@ -1,5 +1,8 @@
 <?php
+// Start the session at the VERY beginning of the file!
+session_start();
 
+// ... (Rest of your header.php code) ...
 ?>
 <header class="header header-10 header-intro-clearance">
     <div class="header-top">

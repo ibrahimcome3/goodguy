@@ -854,3 +854,255 @@ $products = $p->getAllProducts($mysqli);
 </body>
 
 </html>
+
+
+<?php
+session_start();
+include "../conn.php";
+require_once '../class/Connn.php';
+require_once '../class/ProductItem.php';
+
+$p = new ProductItem();
+
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $productId = $_POST['product_id'];
+
+    // Validate and sanitize POST data (add more robust validation as needed)
+    $product_name = filter_input(INPUT_POST, 'product_name', FILTER_SANITIZE_STRING);
+    $description = filter_input(INPUT_POST, 'description', FILTER_SANITIZE_STRING);
+    $brand = filter_input(INPUT_POST, 'brand', FILTER_SANITIZE_STRING);
+    $product_information = filter_input(INPUT_POST, 'produt_info', FILTER_SANITIZE_STRING);
+    $category = filter_input(INPUT_POST, 'category', FILTER_SANITIZE_STRING);
+    $cost = filter_input(INPUT_POST, 'cost', FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION);
+    $sku = filter_input(INPUT_POST, 'sku', FILTER_SANITIZE_STRING);
+    $barcode = filter_input(INPUT_POST, 'barcode', FILTER_SANITIZE_STRING);
+
+    //Handle Image Uploads
+    $imagesToDelete = isset($_POST['images_to_delete']) ? $_POST['images_to_delete'] : [];
+    $newImages = [];
+    if (isset($_FILES['file']) && !empty($_FILES['file']['name'])) {
+        $newImages = $p->moveProductImage($productId, $_FILES['file']);
+        if (isset($newImages['error'])) {
+            $error = $newImages['error'];
+        }
+    }
+
+    //Check if there is at least one image
+    $sql = "SELECT COUNT(*) AS imageCount FROM product_images WHERE product_id = ?";
+    $stmt = $mysqli->prepare($sql);
+    $stmt->bind_param("i", $productId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $imageCount = $row['imageCount'];
+
+    if ($imageCount - count($imagesToDelete) + count($newImages) < 1) {
+        echo "<p style='color:red;'>You need at least one image for a product.</p>";
+        exit;
+    }
+
+    $mysqli->begin_transaction();
+    try {
+
+
+        // Update product information
+        $sql = "UPDATE productitem SET product_name = ?,  brand = ?, product_information = ?, category = ? WHERE productID = ?";
+        $stmt = $mysqli->prepare($sql);
+        $stmt->bind_param("sssii", $product_name, $brand, $product_information, $category, $productId);
+        $stmt->execute();
+        if ($stmt->error) {
+            throw new Exception("Error updating product information: " . $stmt->error);
+        }
+
+        // Delete images if specified
+        if (!empty($imagesToDelete)) {
+            foreach ($imagesToDelete as $imageId) {
+                $p->deleteImage($mysqli, $imageId, $productId);
+            }
+        }
+
+        if (isset($_POST['categories'])) {
+            // Delete existing category associations for this product
+            $deleteSql = "DELETE FROM product_categories WHERE product_id = ?";
+            $deleteStmt = $mysqli->prepare($deleteSql);
+            $deleteStmt->bind_param("i", $productId);
+            $deleteStmt->execute();
+
+            // Insert the new category associations
+            foreach ($_POST['categories'] as $categoryId) {
+                $insertSql = "INSERT INTO product_categories (product_id, category_id) VALUES (?, ?)";
+                $insertStmt = $mysqli->prepare($insertSql);
+                $insertStmt->bind_param("ii", $productId, $categoryId);
+                $insertStmt->execute();
+            }
+        }
+
+
+        $mysqli->commit();
+        header("Location: seller-dashboard.php");
+        exit;
+    } catch (Exception $e) {
+        $mysqli->rollback();
+        echo "<p style='color: red;'>Error updating product: " . $e->getMessage() . "</p>";
+    }
+}
+?>
+
+
+
+<?php
+// payment.php
+require_once "includes.php";
+session_start();
+
+// Check if the order ID is set
+if (!isset($_GET['order_id']) || !is_numeric($_GET['order_id'])) {
+    header("Location: index.php"); // Redirect to home page if order ID is invalid
+    exit();
+}
+
+$orderId = $_GET['order_id'];
+
+// Get order details
+$order = new Order($pdo);
+$orderDetails = $order->getOrderDetails($orderId);
+
+// Check if the order exists
+if (!$orderDetails) {
+    header("Location: index.php"); // Redirect to home page if order doesn't exist
+    exit();
+}
+
+// Get shipping address details
+$user = new User($pdo);
+$shippingAddress = $user->getOrderShippingAddress($orderDetails['order_shipping_address']);
+
+// Handle payment processing (if form is submitted)
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Get payment details from the form
+    $paymentMethod = $_POST['payment_method']; // e.g., 'card', 'bank_transfer', 'pay_on_delivery'
+
+    // Validate payment details (you'll need to implement more robust validation)
+    $paymentValid = true; // Assume payment is valid for now
+
+    if ($paymentValid) {
+        // Process the payment based on the selected method
+        $paymentSuccessful = false; // Assume payment fails initially
+
+        if ($paymentMethod == 'card') {
+            // Process card payment (you'll need to integrate with a payment gateway here)
+            // For this example, we'll just simulate a successful payment
+            $paymentSuccessful = true;
+        } elseif ($paymentMethod == 'bank_transfer') {
+            // Process bank transfer (you'll need to implement your bank transfer logic here)
+            // For this example, we'll just simulate a successful payment
+            $paymentSuccessful = true;
+        } elseif ($paymentMethod == 'pay_on_delivery') {
+            // No payment processing needed for pay on delivery
+            $paymentSuccessful = true;
+        }
+
+        if ($paymentSuccessful) {
+            // Update order status to 'processing' or 'completed'
+            if ($paymentMethod == 'pay_on_delivery') {
+                $order->updateOrderStatus($orderId, 'processing');
+            } else {
+                $order->updateOrderStatus($orderId, 'completed');
+            }
+
+            // Clear the cart
+            unset($_SESSION['cart']);
+
+            // Redirect to order confirmation page
+            header("Location: order-confirmation.php?order_id=" . $orderId);
+            exit();
+        } else {
+            // Payment failed
+            $_SESSION['payment_error'] = "Payment failed. Please try again.";
+        }
+    } else {
+        // Payment details invalid
+        $_SESSION['payment_error'] = "Invalid payment details. Please check your information.";
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment</title>
+    <?php include "htlm-includes.php/metadata.php"; ?>
+</head>
+
+<body>
+    <?php include "header-for-other-pages.php"; ?>
+    <main class="main">
+        <nav aria-label="breadcrumb" class="breadcrumb-nav border-0 mb-0">
+            <div class="container d-flex align-items-center">
+                <ol class="breadcrumb">
+                    <?php echo breadcrumbs(); ?>
+                </ol>
+            </div><!-- End .container -->
+        </nav><!-- End .breadcrumb-nav -->
+        <div class="page-content">
+            <div class="container">
+                <h3>Payment</h3>
+
+                <?php if (isset($_SESSION['payment_error'])) { ?>
+                    <div class="alert alert-danger" role="alert">
+                        <?php echo $_SESSION['payment_error']; ?>
+                    </div>
+                    <?php unset($_SESSION['payment_error']); ?>
+                <?php } ?>
+
+                <h5>Order Details</h5>
+                <p>Order ID: <?= $orderId ?></p>
+                <p>Order Total: <?= $orderDetails['order_total'] ?></p>
+                <!-- Display other order details here -->
+
+                <h5>Shipping Address</h5>
+                <?php if ($shippingAddress) { ?>
+                    <p>
+                        <?= $shippingAddress['address1'] ?><br>
+                        <?= $shippingAddress['address2'] ?><br>
+                        <?= $shippingAddress['city'] ?>, <?= $user->getStateName($shippingAddress['State']) ?><br>
+                        <?= $shippingAddress['country'] ?>
+                    </p>
+                <?php } else { ?>
+                    <p>Shipping address not found.</p>
+                <?php } ?>
+
+                <h5>Payment Method</h5>
+                <form action="payment.php?order_id=<?= $orderId ?>" method="post">
+                    <?php if ($orderDetails['payment_method'] == 'card') { ?>
+                        <!-- Card Payment Form -->
+                        <div class="form-group">
+                            <label for="card_number">Card Number:</label>
+                            <input type="text" name="card_number" id="card_number" class="form-control" required>
+                        </div>
+                        <!-- Add more card payment fields (e.g., expiry date, CVV) -->
+                    <?php } elseif ($orderDetails['payment_method'] == 'bank_transfer') { ?>
+                        <!-- Bank Transfer Instructions -->
+                        <p>Please make a bank transfer to the following account:</p>
+                        <!-- Display bank account details -->
+                        <p>Account Name: Goodguy</p>
+                        <p>Account Number: 1234567890</p>
+                        <p>Bank Name: First Bank</p>
+                    <?php } elseif ($orderDetails['payment_method'] == 'pay_on_delivery') { ?>
+                        <!-- Pay on delivery instructions -->
+                        <p>You will pay on delivery.</p>
+                    <?php } ?>
+
+                    <input type="hidden" name="payment_method" value="<?= $orderDetails['payment_method'] ?>">
+                    <button type="submit" class="btn btn-primary">Complete Payment</button>
+                </form>
+            </div>
+        </div>
+    </main>
+    <?php include "footer.php"; ?>
+</body>
+
+</html>

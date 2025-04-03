@@ -1,17 +1,53 @@
 <?php
 // removed require_once "../db_conncection/conn.php";
+// Go up one level from the current file's directory
+
 
 class InventoryItem
 {
     private $timestamp;
     private $pdo; // Store the PDO connection here
+    public $discount_percent;
+    public $cost;
 
     public function __construct($pdo)
     {
+
         $this->pdo = $pdo; // Store the PDO connection
         $defaultTimeZone = 'UTC';
         date_default_timezone_set($defaultTimeZone);
         $this->timestamp = date('Y-m-d');
+    }
+
+
+    public function setDiscountPercent($percent)
+    {
+        $this->discount_percent = max(0, min(100, $percent)); //Ensure it's between 0 and 100
+    }
+
+    public function getDiscountedPrice()
+    {
+        if (isset($this->discount_percent)) {
+            $discount = $this->discount_percent / 100;
+            return $this->cost * (1 - $discount);
+        } else {
+            return $this->cost;
+        }
+    }
+
+
+    public function setDiscountAmount($amount)
+    {
+        $this->discount_amount = max(0, $amount); //Ensure amount is not negative
+    }
+
+    public function getDiscountedPriceAmount()
+    {
+        if (isset($this->discount_amount)) {
+            return $this->cost - $this->discount_amount;
+        } else {
+            return $this->cost;
+        }
     }
 
     // ... (rest of the methods, now using $this->pdo) ...
@@ -142,17 +178,7 @@ class InventoryItem
         }
     }
 
-    function get_product_image($id)
-    {
-        // $pdo = $this->dbc; REMOVED
-        $sql = "select * from inventory_item_image where inventory_item_id = $id and `is_primary` = 1";
-        $stmt = $this->pdo->query($sql); // Use $this->pdo
-        $row = $stmt->fetch();
-        if ($stmt->rowCount() > 0)
-            return $row['image_path'];
-        else
-            return "e.jpg";
-    }
+
 
     function decript_string($string)
     {
@@ -173,14 +199,14 @@ class InventoryItem
     }
     function check_item_in_existance($id)
     {
-        // $pdo = $this->dbc; REMOVED
-        $stmt = $this->pdo->query("select * from inventoryitem where InventoryItemID = $id"); // Use $this->pdo
-        $row = $stmt->fetch();
-        $row_count = $stmt->rowCount();
-        if ($row_count > 0) {
-            return true;
-        } else {
-            return false;
+        try {
+            $stmt = $this->pdo->prepare("SELECT 1 FROM inventoryitem WHERE InventoryItemID = ? LIMIT 1");
+            $stmt->execute([$id]);
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            // Log the error (you might want to use a proper logging mechanism here)
+            error_log("Error checking item existence for ID $id: " . $e->getMessage());
+            return false; // Return false in case of error
         }
     }
 
@@ -191,7 +217,6 @@ class InventoryItem
         $stmt = $this->pdo->query($sql); // Use $this->pdo
         $row = $stmt->fetch();
         $row_count = $stmt->rowCount();
-        echo $row['color'];
         if (strlen($row['color']) > 0) {
             return strtoupper($row['color']);
         } else {
@@ -239,4 +264,66 @@ class InventoryItem
             return [];
         }
     }
+
+    public function get_product_details($pdo, $inventory_item_id)
+    {
+
+        $stmt = $pdo->prepare("SELECT * FROM inventoryitem WHERE InventoryItemID = ?");
+        $stmt->execute([$inventory_item_id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ? $row : null;
+    }
+
+    public function get_product_image($pdo, $inventory_item_id)
+    {
+        $stmt = $pdo->prepare("SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ? AND is_primary = 1 LIMIT 1");
+        $stmt->execute([$inventory_item_id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ? $row['image_path'] : null;
+    }
+
+    public function getPaginatedProducts($page, $perPage, $searchTerm = null)
+    {
+        $offset = ($page - 1) * $perPage;
+        $params = [];
+        $sql = "SELECT * FROM inventoryitem";
+
+        if ($searchTerm) {
+            $sql .= " WHERE description LIKE ?";
+            $params[] = "%$searchTerm%";
+        }
+
+        $sql .= " LIMIT ? OFFSET ?";
+        $params[] = $perPage;
+        $params[] = $offset;
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Count total products (for pagination)
+        $countSql = "SELECT COUNT(*) as total FROM inventoryitem";
+        if ($searchTerm) {
+            $countSql .= " WHERE description LIKE ?";
+        }
+        $countStmt = $this->pdo->prepare($countSql);
+        if ($searchTerm) {
+            $countStmt->execute(["%$searchTerm%"]);
+        } else {
+            $countStmt->execute();
+        }
+        $totalProducts = $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
+
+        return [
+            'products' => $products,
+            'total' => $totalProducts,
+            'perPage' => $perPage,
+            'currentPage' => $page,
+        ];
+    }
+
+
+
 }

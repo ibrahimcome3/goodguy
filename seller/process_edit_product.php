@@ -14,7 +14,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $description = filter_input(INPUT_POST, 'description', FILTER_SANITIZE_STRING);
     $brand = filter_input(INPUT_POST, 'brand', FILTER_SANITIZE_STRING);
     $product_information = filter_input(INPUT_POST, 'produt_info', FILTER_SANITIZE_STRING);
-    $category = filter_input(INPUT_POST, 'category', FILTER_SANITIZE_STRING);
+    //Removed $category from here
+    // $category = filter_input(INPUT_POST, 'category', FILTER_SANITIZE_STRING);
     $cost = filter_input(INPUT_POST, 'cost', FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION);
     $sku = filter_input(INPUT_POST, 'sku', FILTER_SANITIZE_STRING);
     $barcode = filter_input(INPUT_POST, 'barcode', FILTER_SANITIZE_STRING);
@@ -45,10 +46,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     $mysqli->begin_transaction();
     try {
+
+
         // Update product information
-        $sql = "UPDATE productitem SET product_name = ?,  brand = ?, product_information = ?, category = ? WHERE productID = ?";
+        //Removed category
+        $sql = "UPDATE productitem SET product_name = ?,  brand = ?, product_information = ? WHERE productID = ?";
         $stmt = $mysqli->prepare($sql);
-        $stmt->bind_param("sssii", $product_name, $brand, $product_information, $category, $productId);
+        //Removed category
+        $stmt->bind_param("sssi", $product_name, $brand, $product_information, $productId);
         $stmt->execute();
         if ($stmt->error) {
             throw new Exception("Error updating product information: " . $stmt->error);
@@ -60,6 +65,28 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $p->deleteImage($mysqli, $imageId, $productId);
             }
         }
+
+        // Handle categories (modified to use categories[] array)
+        if (isset($_POST['categories']) && is_array($_POST['categories'])) {
+            // Delete existing category associations for this product
+            $deleteSql = "DELETE FROM product_categories WHERE product_id = ?";
+            $deleteStmt = $mysqli->prepare($deleteSql);
+            $deleteStmt->bind_param("i", $productId);
+            $deleteStmt->execute();
+
+            // Insert the new category associations
+            foreach ($_POST['categories'] as $categoryId) {
+                //Ensure the categoryId is an integer to avoid SQL injection.
+                $categoryId = intval($categoryId);
+                if ($categoryId) {
+                    $insertSql = "INSERT INTO product_categories (product_id, category_id) VALUES (?, ?)";
+                    $insertStmt = $mysqli->prepare($insertSql);
+                    $insertStmt->bind_param("ii", $productId, $categoryId);
+                    $insertStmt->execute();
+                }
+            }
+        }
+
 
         $mysqli->commit();
         header("Location: seller-dashboard.php");

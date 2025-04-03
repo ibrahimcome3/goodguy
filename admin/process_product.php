@@ -59,8 +59,8 @@ try {
 
 
         // Insert into database
-        $sql = "INSERT INTO productitem (product_name, category, date_added, vendor, brand, product_information, additional_information, shipping_returns, user_id, product_image) 
-                VALUES (:product_name, :category, NOW(), :vendor, :brand, :product_information, :additional_information, :shipping_returns, :user_id, :product_image)";
+        $sql = "INSERT INTO productitem (product_name, category, date_added, vendor, brand, product_information, additional_information, shipping_returns, vendor_id) 
+                VALUES (:product_name, :category, NOW(), :vendor, :brand, :product_information, :additional_information, :shipping_returns, :user_id)";
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(':product_name', $productName);
         $stmt->bindParam(':category', $category);
@@ -70,7 +70,6 @@ try {
         $stmt->bindParam(':additional_information', $additionalInformation);
         $stmt->bindParam(':shipping_returns', $shippingReturns);
         $stmt->bindParam(':user_id', $userId);
-        $stmt->bindParam(':product_image', $targetFile); // Assuming you store the file path
         $stmt->execute();
 
         echo "New product added successfully";

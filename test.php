@@ -1,4 +1,4 @@
-<?php
+<!-- <?php
 
 // Connects to the database
 $conn = oci_connect('custom', 'custom321', '200.0.0.80:1521/hbldb');
@@ -93,4 +93,4 @@ function guess_mime_type($data)
 // Close the connection
 
 
-?>
+?> -->

@@ -108,30 +108,6 @@ if (isset($file['name'])) {
     echo "Please select an image for this product.";
 }
 
-// header("Location: confirm-page.php?meg=Product has been iploaded");
-// $reorder_quitity = 600;
-//         $product_item = $last_id;
-//         $cat = $category;
-//         $sku = '{"type":"shirt"}';
-//         $description = $product_information;
-//         $sql = "INSERT INTO `inventoryitem`(`InventoryItemID`, `quantityOnHand`, `cost`, `reorderQuantity`, `productItemID`, `date_added`,  `sku`, barcode) VALUES (null,'$qonhand','$cost','$reorder_quitity','$product_item', CURRENT_TIMESTAMP,'$sku', '$barcode')";
-//         echo $sql;
-//         $result = $mysqli->query($sql);
-//         var_dump($result);
-//         $last_id = mysqli_insert_id($mysqli);
-
-//         if ($result) {
-//             echo $p->makeInventoryItemDirectory($lastProductId, $last_id);
-//         }
-
-
-
-
-
-
-
-
-
 
 function generateSKUFromCategoryAndName($mysqli, $category, $productName, $productId)
 {

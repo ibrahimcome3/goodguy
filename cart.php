@@ -1,76 +1,228 @@
 <?php
+session_start();
+require_once "includes.php"; // Include necessary files
 
-include "includes.php";
-$options = [
-    \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-    \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-    \PDO::ATTR_EMULATE_PREPARES => false,
-];
-$host = 'localhost';
-$db = 'lm_test';
-$user = 'root';
-$pass = '';
-$charset = 'utf8mb4';
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
-try {
-    $pdo = new \PDO($dsn, $user, $pass, $options);
-} catch (\PDOException $e) {
-    throw new \PDOException($e->getMessage(), (int) $e->getCode());
-}
-$arr = array();
-foreach ($_POST as $key => $val) {
-    if ($key === 'color')
-        $arr[$key] = $val;
-    if ($key === 'size')
-        $arr[$key] = $val;
+// Initialize the cart if it doesn't exist
+if (!isset($_SESSION['cart'])) {
+    $_SESSION['cart'] = [];
 }
 
-//var_dump($_POST);
+// Handle adding items to the cart
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['inventory_product_id']) && isset($_POST['qty'])) {
+    $inventory_product_id = $_POST['inventory_product_id'];
+    $quantity = $_POST['qty'];
+    $size = isset($_POST['size']) ? $_POST['size'] : null; // Get size if available
+    $color = isset($_POST['color']) ? $_POST['color'] : null; // Get color if available
 
-//var_dump($arr);
+    // Validate input (you should add more robust validation)
+    if (!is_numeric($inventory_product_id) || !is_numeric($quantity) || $quantity <= 0) {
+        // Handle invalid input (e.g., display an error message)
+        $_SESSION['cart_error'] = "Invalid product ID or quantity.";
+        header("Location: " . $_SERVER['HTTP_REFERER']);
+        exit();
+    }
 
-// If the user clicked the add to cart button on the product page we can check for the form data
-if (isset($_POST['inventory_product_id'], $_POST['qty']) && is_numeric($_POST['inventory_product_id']) && is_numeric($_POST['qty'])) {
-    // Set the post variables so we easily identify them, also make sure they are integer
-    $cart = new Cart();
-    $arryofproperties = array();
-
-    $product_id = (int) $_POST['inventory_product_id'];
-    $product_with_key = array();
-    $product_with_key['product'] = $product_id;
-    $product_array = array();
-    $product_array = array($product_with_key, $arr);
-    $JSON_product_order = json_encode($product_array);
-    //echo $JSON_product_order;
-
-
-    //$product_id = (int) $cart->get_right_inventroy_item_neede($arr); 
-    $quantity = (int) $_POST['qty'];
-
-    $stmt = $pdo->prepare('SELECT * FROM inventoryitem WHERE InventoryItemID = ?');
-    $stmt->execute([$_POST['inventory_product_id']]);
-    // Fetch the product from the database and return the result as an Array
-    $product = $stmt->fetch(PDO::FETCH_ASSOC);
-    // Check if the product exists (array is not empty)
-    if ($product && $quantity > 0) {
-        // Product exists in database, now we can create/update the session variable for the cart
-        if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
-            if (array_key_exists($product_id, $_SESSION['cart'])) {
-                // Product exists in cart so just update the quanity
-                $_SESSION['cart'][$product_id] += $quantity;
-                $_SESSION['detail-item'][$product_id] = $JSON_product_order;
-            } else {
-                // Product is not in cart so add it
-                $_SESSION['cart'][$product_id] = $quantity;
-                $_SESSION['detail-item'][$product_id] = $JSON_product_order;
-            }
-        } else {
-            // There are no products in cart, this will add the first product to cart
-            $_SESSION['cart'] = array($product_id => $quantity);
-            $_SESSION['detail-item'][$product_id] = $JSON_product_order;
+    // Check if the item is already in the cart
+    $item_found = false;
+    foreach ($_SESSION['cart'] as $key => $item) {
+        if ($item['inventory_product_id'] == $inventory_product_id && $item['size'] == $size && $item['color'] == $color) {
+            $_SESSION['cart'][$key]['quantity'] += $quantity;
+            $item_found = true;
+            break;
         }
     }
-    // Prevent form resubmission...
-    header('location: product-detail.php?itemid=' . $_POST['inventory_product_id']);
+
+    // If the item is not in the cart, add it
+    if (!$item_found) {
+        $_SESSION['cart'][] = [
+            'inventory_product_id' => $inventory_product_id,
+            'quantity' => $quantity,
+            'size' => $size,
+            'color' => $color,
+        ];
+    }
+
+    // Redirect back to the product page or cart page
+    header("Location: cart_.php"); // Redirect to the cart page
     exit();
 }
+
+// Handle removing items from the cart
+if (isset($_GET['remove']) && is_numeric($_GET['remove'])) {
+    $remove_index = $_GET['remove'];
+    if (isset($_SESSION['cart'][$remove_index])) {
+        unset($_SESSION['cart'][$remove_index]);
+        $_SESSION['cart'] = array_values($_SESSION['cart']); // Re-index the array
+    }
+    header("Location: cart_.php");
+    exit();
+}
+
+// Handle updating cart quantities
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_cart'])) {
+    foreach ($_POST['quantity'] as $key => $quantity) {
+        if (isset($_SESSION['cart'][$key])) {
+            if ($quantity <= 0) {
+                unset($_SESSION['cart'][$key]);
+            } else {
+                $_SESSION['cart'][$key]['quantity'] = $quantity;
+            }
+        }
+    }
+    $_SESSION['cart'] = array_values($_SESSION['cart']); // Re-index the array
+    header("Location: cart_.php");
+    exit();
+}
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Shopping Cart</title>
+    <?php include "htlm-includes.php/metadata.php"; ?>
+</head>
+
+<body>
+    <div class="page-wrapper">
+        <?php include "header-for-other-pages.php"; ?>
+        <main class="main">
+            <nav aria-label="breadcrumb" class="breadcrumb-nav">
+                <div class="container">
+                    <ol class="breadcrumb">
+                        <?php echo breadcrumbs(); ?>
+                    </ol>
+                </div><!-- End .container -->
+            </nav><!-- End .breadcrumb-nav -->
+
+            <div class="page-content">
+                <div class="cart">
+                    <div class="container">
+                        <?php if (isset($_SESSION['cart_error'])) { ?>
+                            <div class="alert alert-danger" role="alert">
+                                <?php echo $_SESSION['cart_error']; ?>
+                            </div>
+                            <?php unset($_SESSION['cart_error']); ?>
+                        <?php } ?>
+                        <?php if (empty($_SESSION['cart'])) { ?>
+                            <p>Your cart is empty.</p>
+                            <a href="index.php" class="btn btn-outline-primary-2"><span>GO SHOP</span><i
+                                    class="icon-long-arrow-right"></i></a>
+                        <?php } else { ?>
+                            <div class="row">
+                                <div class="col-lg-9">
+                                    <table class="table table-cart table-mobile">
+                                        <thead>
+                                            <tr>
+                                                <th>Product</th>
+                                                <th>Price</th>
+                                                <th>Quantity</th>
+                                                <th>Total</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+
+                                        <tbody>
+                                            <?php
+                                            $total_cost = 0;
+                                            foreach ($_SESSION['cart'] as $key => $item) {
+                                                $product_id = $item['inventory_product_id'];
+                                                $quantity = $item['quantity'];
+                                                $size = $item['size'];
+
+                                                // Get product details from the database
+                                                $product_details = $invt->get_product_details($pdo, $product_id);
+                                                $product_price = $product_details['cost'];
+                                                $product_name = $product_details['description'];
+                                                $product_image = $invt->get_product_image($pdo, $product_id);
+
+                                                $item_total = $product_price * $quantity;
+                                                $total_cost += $item_total;
+                                                ?>
+                                                <tr>
+                                                    <td class="product-col">
+                                                        <div class="product">
+                                                            <figure class="product-media">
+                                                                <a href="product-detail.php?itemid=<?= $product_id ?>">
+                                                                    <img src="<?= $product_image ?>" alt="Product image">
+                                                                </a>
+                                                            </figure>
+
+                                                            <h3 class="product-title">
+                                                                <a
+                                                                    href="product-detail.php?itemid=<?= $product_id ?>"><?= $product_name ?></a>
+                                                                <?php if ($size) { ?>
+                                                                    <br>Size: <?= $size ?>
+                                                                <?php } ?>
+                                                            </h3><!-- End .product-title -->
+                                                        </div><!-- End .product -->
+                                                    </td>
+                                                    <td class="price-col">&#8358;<?= number_format($product_price, 2) ?></td>
+                                                    <td class="quantity-col">
+                                                        <form action="cart.php" method="post">
+                                                            <div class="cart-product-quantity">
+                                                                <input type="number" class="form-control"
+                                                                    name="quantity[<?= $key ?>]" value="<?= $quantity ?>"
+                                                                    min="1" max="10" step="1" data-decimals="0" required>
+                                                            </div><!-- End .cart-product-quantity -->
+                                                    </td>
+                                                    <td class="total-col">&#8358;<?= number_format($item_total, 2) ?></td>
+                                                    <td class="remove-col"><a href="cart.php?remove=<?= $key ?>"
+                                                            class="btn-remove"><i class="icon-close"></i></a></td>
+                                                </tr>
+                                            <?php } ?>
+                                        </tbody>
+                                    </table><!-- End .table table-wishlist -->
+                                    <button type="submit" name="update_cart" class="btn btn-outline-dark-2"><span>UPDATE
+                                            CART</span><i class="icon-refresh"></i></button>
+                                    </form>
+                                </div><!-- End .col-lg-9 -->
+                                <aside class="col-lg-3">
+                                    <div class="summary summary-cart">
+                                        <h3 class="summary-title">Cart Total</h3><!-- End .summary-title -->
+
+                                        <table class="table table-summary">
+                                            <tbody>
+                                                <tr class="summary-subtotal">
+                                                    <td>Subtotal:</td>
+                                                    <td>&#8358;<?= number_format($total_cost, 2) ?></td>
+                                                </tr><!-- End .summary-subtotal -->
+                                                <tr class="summary-total">
+                                                    <td>Total:</td>
+                                                    <td>&#8358;<?= number_format($total_cost, 2) ?></td>
+                                                </tr><!-- End .summary-total -->
+                                            </tbody>
+                                        </table><!-- End .table table-summary -->
+
+                                        <a href="shipping-address-selection.php"
+                                            class="btn btn-outline-primary-2 btn-order btn-block">PROCEED TO CHECKOUT</a>
+                                    </div><!-- End .summary -->
+                                </aside><!-- End .col-lg-3 -->
+                            </div><!-- End .row -->
+                        <?php } ?>
+                    </div><!-- End .container -->
+                </div><!-- End .cart -->
+            </div><!-- End .page-content -->
+        </main><!-- End .main -->
+
+        <footer class="footer">
+            <?php include "footer.php"; ?>
+        </footer><!-- End .footer -->
+    </div><!-- End .page-wrapper -->
+    <button id="scroll-top" title="Back to Top"><i class="icon-arrow-up"></i></button>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu-overlay"></div><!-- End .mobil-menu-overlay -->
+
+    <?php include "mobile-menue-index-page.php"; ?>
+    <!-- Sign in / Register Modal -->
+    <?php include "login-modal.php"; ?>
+
+    <!-- Plugins JS File -->
+    <?php include "jsfile.php"; ?>
+</body>
+
+</html>

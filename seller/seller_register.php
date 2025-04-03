@@ -42,7 +42,7 @@
     $customerFullName = $user['customer_fname'] . " " . $user['customer_lname'];
 
     ?>
-
+    <?php include "navbar.php"; ?>
     <div class="container mt-5">
         <h2>Seller Registration</h2>
         <p>To become a seller, please provide the following details:</p>

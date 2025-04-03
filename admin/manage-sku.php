@@ -219,10 +219,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <div class="row">
                         <?php foreach ($otherInventoryItemDetails as $otherItemId => $otherDetails): ?>
                             <div class="col-md-3 mb-3">
-                                <div class="card">
+                            <div class="card">
                                     <?php
-                                    $imagePath = $otherDetails['image_path'] ? "../products/product-{$productId}/inventory-{$productId}-{$otherItemId}/resized/{$otherDetails['image_path']}" : 'logo.svg'; // Replace with your default image path
-                                    echo "<img src='{$imagePath}' alt='Inventory Item Image' class='card-img-top inventory-item-image'>";
+                                        // Corrected image path
+                                        $imagePath = $otherDetails['image_path'] ? "../{$otherDetails['image_path']}" : 'logo.svg';
+                                        echo "<img src='{$imagePath}' alt='Inventory Item Image' class='card-img-top inventory-item-image'>";
                                     ?>
                                     <div class="card-body">
                                         <div class="form-check">

@@ -1,67 +1,31 @@
 <?php
-session_start();
 
-include 'class/Conn.php';
-include 'class/InventoryItem.php';
-include 'class/Category.php';
-include 'class/Review.php';
-include 'class/ProductItem.php';
-include 'class/Variation.php';
-include "class/Promotion.php";
-include "class/WishList.php";
-include "class/Cart.php";
-include "class/Shipment.php";
+require_once 'class/Conn.php'; // Make sure Conn.php is included first
+require_once 'class/InventoryItem.php'; // Include InventoryItem.php BEFORE instantiation
+require_once 'class/Category.php';
+require_once 'class/Review.php';
+require_once 'class/ProductItem.php';
+require_once 'class/Variation.php';
+require_once "class/Promotion.php";
+require_once "class/WishList.php";
+require_once "class/Cart.php";
+require_once "class/Shipment.php";
+require_once "class/User.php";
+require_once "class/Order.php";
 
-include "conn.php";
-include 'breadcrumps.php';
-$product_obj = new ProductItem();
-$promotion = new Promotion();
-$Orvi = new Review();
+require_once(__DIR__ . '/db_connection/conn.php'); // Database connection
+require_once 'breadcrumps.php';
 
-$invt = new InventoryItem();
+//Instantiate classes after database connection
+$product_obj = new ProductItem(); // Pass PDO connection
+$promotion = new Promotion(); // Pass PDO connection
+$Orvi = new Review(); // Pass PDO connection
+$invt = new InventoryItem($pdo); // Pass PDO connection
+$cart = new Cart($pdo, $promotion);
+
+
 if (isset($_SESSION['uid'])) {
-     $wishlist = new WishList($_SESSION['uid']);
-     include "class/User.php";
-     include "class/Order.php";
-     $user_ = new User();
-     $orders = new Order();
+     $wishlist = new WishList($pdo, $_SESSION['uid']); // Pass PDO connection
+     $user = new User(); // Pass PDO connection
 }
-
-function getImage($id_of_what_get_image)
-{
-     include "conn.php";
-     $sql = "select * from inventory_item_image where inventory_item_id = $id_of_what_get_image and `is_primary` = 1";
-     $result = $mysqli->query($sql);
-     $row = mysqli_fetch_array($result);
-     if (mysqli_num_rows($result) > 0)
-          return $row['image_path'];
-     else
-          return "e.jpg";
-}
-
-$var = array();
-$var1 = array();
-$options = [
-     \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-     \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-     \PDO::ATTR_EMULATE_PREPARES => false,
-];
-
-
-$host = 'localhost';
-$db = 'lm_test';
-$user = 'root';
-$pass = '';
-$port = "3306";
-$charset = 'utf8mb4';
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset;port=$port";
-try {
-     $pdo = new \PDO($dsn, $user, $pass, $options);
-     $db = $pdo;
-} catch (\PDOException $e) {
-     throw new \PDOException($e->getMessage(), (int) $e->getCode());
-}
-
-$var = array();
-$var1 = array();
 ?>

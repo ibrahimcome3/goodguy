@@ -1,86 +1,90 @@
 <?php
+session_start();
+require_once "conn.php"; // Your database connection file
+require_once "includes.php"; // Include any necessary files
+require_once "login/Auth.php"; // Your authentication class
+require_once "login/Util.php"; // Your utility functions
 
-require_once "conn.php";
-require_once "includes.php";
-require_once "login/Auth.php";
-require_once "login/Util.php";
-
+// Instantiate classes
 $auth = new Auth();
-$db_handle = new DBController();
+$db_handle = new DBController(); // Assuming this is your database class
 $util = new Util();
 
-
 $current_time = time();
-$current_date = date("Y-m-d H:i:s", $current_time);
-$cookie_expiration_time = $current_time + (30 * 24 * 60 * 60);
+$cookie_expiration_time = $current_time + (30 * 24 * 60 * 60); // 30 days
 
+// Validate login from cookies (if any)
 require_once "login/authCookieSessionValidate.php";
 
 if ($isLoggedIn) {
-    $util->redirect("login.php");
+    // Redirect to appropriate page after successful cookie validation
+
+    var_dump($_SESSION);
+    echo "you are logged in pleace <a href='logout.php'>click</a> here to log out";
+    // if (isset($_SESSION['last_viewed_product'])) {
+    //     header("Location: product-detail.php?id=" . $_SESSION['last_viewed_product']);
+    // } else {
+    //     header("Location: index.php");
+    // }
+    exit;
 }
 
-if (!empty($_POST["login"])) {
-    $isAuthenticated = false;
+$message = ""; // Initialize message variable
 
-    $email = $_POST["singinemail"];
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["login"])) {
+    $email = filter_input(INPUT_POST, "singinemail", FILTER_SANITIZE_EMAIL); // Sanitize email input
     $password = $_POST["singinpassword"];
 
-    $user = $auth->getMemberByemail(email: $email);
+    try {
+        $user = $auth->getMemberByemail(email: $email);
 
+        if ($user && password_verify($password, $user[0]["password"])) {
+            $_SESSION["uid"] = $user[0]["customer_id"];
+            $user_id = $user[0]["customer_id"];
 
-    if ($user && password_verify($password, $user[0]["password"])) { // Check if $user is not null
-        $isAuthenticated = true;
-    }
+            // Set Auth Cookies if 'Remember Me' checked
+            if (isset($_POST["remember"]) && $_POST["remember"] == "on") {
+                $random_password = $util->getToken(length: 16);
+                $random_selector = $util->getToken(32);
 
-    if ($isAuthenticated) {
-        $_SESSION["uid"] = $user[0]["customer_id"];
-        $user_id = $user[0]["customer_id"];
+                // Securely hash the random values BEFORE storing them as cookies
+                $random_password_hash = password_hash($random_password, PASSWORD_DEFAULT);
+                $random_selector_hash = password_hash($random_selector, PASSWORD_DEFAULT);
 
-        // Set Auth Cookies if 'Remember Me' checked
-        if (!empty($_POST["remember"])) {
-            setcookie("email", $email, $cookie_expiration_time);
+                $expiry_date = date("Y-m-d H:i:s", $cookie_expiration_time);
 
-            $random_password = $util->getToken(length: 16);
-            setcookie("random_password", $random_password, $cookie_expiration_time);
+                //Handle existing tokens
+                $userToken = $auth->getTokenByemail(email: $email, expired: 0);
+                if (!empty($userToken)) {
+                    $auth->markAsExpired($userToken[0]["user_id"]);
+                }
 
-            $random_selector = $util->getToken(32);
-            setcookie("random_selector", $random_selector, $cookie_expiration_time);
+                $auth->insertToken(email: $email, random_password_hash: $random_password_hash, random_selector_hash: $random_selector_hash, expiry_date: $expiry_date, cuid: $user_id);
 
-            $random_password_hash = password_hash($random_password, PASSWORD_DEFAULT);
-            $random_selector_hash = password_hash($random_selector, PASSWORD_DEFAULT);
-
-            $expiry_date = date("Y-m-d H:i:s", $cookie_expiration_time);
-
-            // mark existing token as expired
-            $userToken = $auth->getTokenByemail(email: $email, expired: 0);
-            if (!empty($userToken[0]["user_id"])) {
-                $auth->markAsExpired($userToken[0]["user_id"]);
+                //Set cookies - use secure and httponly flags for better security
+                setcookie("email", $email, $cookie_expiration_time, "/", "", true, true);
+                setcookie("random_password", $random_password, $cookie_expiration_time, "/", "", true, true);
+                setcookie("random_selector", $random_selector, $cookie_expiration_time, "/", "", true, true);
+            } else {
+                $util->clearAuthCookie();
             }
-            // Insert new token
 
-            $auth->insertToken(email: $email, random_password_hash: $random_password_hash, random_selector_hash: $random_selector_hash, expiry_date: $expiry_date, cuid: $user_id);
+            // Redirect to appropriate page after successful login
+            if (isset($_SESSION['last_viewed_product'])) {
+                header("Location: product-detail.php?id=" . $_SESSION['last_viewed_product']);
+            } else {
+                header("Location: index.php");
+            }
+            exit; // Important: Add exit to prevent further code execution
         } else {
-            $util->clearAuthCookie();
+            $message = "Invalid email or password.";
         }
-        if (isset($_SESSION['last_viewed_product'])) {
-            $lastViewedProductId = $_SESSION['last_viewed_product'];
-            $expiryTime = time() + (10 * 365 * 24 * 60 * 60); // 10 years in seconds
-            setcookie('isLoggedIn', 'true', $expiryTime, '/');
-            header("Location: product-detail.php?id=$lastViewedProductId");
-        } else {
-            $expiryTime = time() + (10 * 365 * 24 * 60 * 60); // 10 years in seconds
-            setcookie('isLoggedIn', 'true', $expiryTime, '/');
-            $util->redirect("dashboard.php");
-
-            //header("Location: index.php");
-        }
-
-    } else {
-        $message = "Invalid Login";
+    } catch (Exception $e) {
+        $message = "An error occurred: " . $e->getMessage();
     }
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -113,7 +117,7 @@ if (!empty($_POST["login"])) {
             <nav aria-label="breadcrumb" class="breadcrumb-nav border-0 mb-0">
                 <div class="container">
                     <ol class="breadcrumb">
-                        <?php echo breadcrumbs(); ?>
+                        <?php //echo breadcrumbs(); ?>
                     </ol>
                 </div><!-- End .container -->
             </nav><!-- End .breadcrumb-nav -->

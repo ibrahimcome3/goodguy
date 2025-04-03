@@ -112,6 +112,15 @@ if (is_array($skuArray)) {
                     value="<?= $inventoryItem['tax'] ?>">
             </div>
 
+            <?php echo $inventoryItem['discount'] ?>
+            <div class="mb-3">
+                <label for="tax" class="form-label">Discount:</label>
+                <input type="number" step="0.01" class="form-control" id="discount" name="discount"
+                    value="<?= $inventoryItem['discount'] ?>">
+            </div>
+
+
+
             <div class="mb-3">
                 <label for="quantityOnHand" class="form-label">Quantity:</label>
                 <input type="number" class="form-control" id="quantityOnHand" name="quantityOnHand"
@@ -134,9 +143,13 @@ if (is_array($skuArray)) {
                 <label for="image" class="form-label">Images:</label>
                 <?php foreach ($imagePaths as $imagePath): ?>
                     <div>
-                        <img src="../products/product-<?= $inventoryItem['productItemID'] ?>/inventory-<?= $inventoryItem['productItemID'] ?>-<?= $inventoryItemId ?>/resized/<?= $imagePath ?>"
-                            alt="Inventory Item Image" class="inventory-item-image" style="max-width:100px;">
-                        <input type="checkbox" name="images_to_delete[]" value="<?= $imagePath ?>"> Delete
+                        <?php
+                        $correctedPath = str_replace("../products/product-", "products/product-", $imagePath);
+                        $correctedPath = preg_replace('/\.\.\//', '../', $correctedPath); //Remove redundant ../
+                        ?>
+                        <img src="../<?= $correctedPath ?>" alt="Inventory Item Image" class="inventory-item-image"
+                            style="max-width:150px;">
+                        <input type="checkbox" name="images_to_delete[]" value="<?= $correctedPath ?>"> Delete
                     </div>
                 <?php endforeach; ?>
             </div>

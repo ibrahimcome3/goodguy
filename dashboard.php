@@ -1,6 +1,6 @@
 <?php require_once "includes.php";
 if (!isset($_SESSION['uid'])) {
-	header("Location: login-page.php");
+	header("Location: login.php");
 	exit();
 }
 
@@ -173,7 +173,7 @@ $user__ = $user_->get_user_records();
 															phone-id="<?= $row['CustomerID'] ?> ">Make Default</a></p>
 												</li>
 											</ul>
-										<?php
+											<?php
 
 										}
 

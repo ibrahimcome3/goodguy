@@ -81,5 +81,17 @@ class Seller
         return $result;
     }
 
+    public function updateSeller($mysqli, $userId, $businessName, $description)
+    {
+        echo $businessName;
+        echo $description;
+        echo $userId;
+        $sql = "UPDATE seller SET seller_business_name = ?, seller_description = ? WHERE seller_description = ?";
+        $stmt = $mysqli->prepare($sql);
+        $stmt->bind_param("ssi", $businessName, $description, $userId);
+        return $stmt->execute();
+    }
+
+
 }
 ?>

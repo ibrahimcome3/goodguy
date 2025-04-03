@@ -48,6 +48,7 @@ $inventoryItems = $inventory->getInventoryItemsByProductId($productId);
 </head>
 
 <body>
+    <?php include "navbar.php"; ?>
     <div class="container mt-5">
         <h2>Inventory Items</h2>
         <a href="seller-dashboard.php" class="btn btn-primary">Back to Dashboard</a>
