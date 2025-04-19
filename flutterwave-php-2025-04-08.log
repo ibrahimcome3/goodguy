@@ -1,0 +1,8 @@
+[2025-04-08T21:28:38.465437+00:00] Flutterwave/PHP.NOTICE: Card Service::Initiating Card Payment... [] []
+[2025-04-08T21:28:38.592114+00:00] Flutterwave/PHP.NOTICE: Charge Group::Verifying Payload  ... [] []
+[2025-04-08T21:28:38.592756+00:00] Flutterwave/PHP.NOTICE: Card Service::Payload Confirmed... [] []
+[2025-04-08T21:28:38.592992+00:00] Flutterwave/PHP.NOTICE: Card Service::Started Charging Card tx_ref:(TEST-67f59505a21f01744147717)... [] []
+[2025-04-08T21:28:44.656257+00:00] Flutterwave/PHP.NOTICE: Card Service::Initiating Card Payment... [] []
+[2025-04-08T21:28:44.658324+00:00] Flutterwave/PHP.NOTICE: Charge Group::Verifying Payload  ... [] []
+[2025-04-08T21:28:44.658847+00:00] Flutterwave/PHP.NOTICE: Card Service::Payload Confirmed... [] []
+[2025-04-08T21:28:44.659040+00:00] Flutterwave/PHP.NOTICE: Card Service::Started Charging Card tx_ref:(TEST-67f5950c9f0ed1744147724)... [] []

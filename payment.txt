@@ -1,21 +1,25 @@
 <?php
 
 // payment.php
-require_once "includes.php";
-require_once 'vendor/autoload.php'; // Include SDK autoloaders
+require_once "includes.php"; // Ensure this DOES NOT include .env.php
+require_once 'vendor/autoload.php'; // Include the Flutterwave SDK
 
 // Load environment variables ONLY from .env file
 try {
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
     $dotenv->load();
 } catch (Exception $e) {
+    // Handle error if .env file is missing or unreadable
     error_log("Error loading .env file: " . $e->getMessage());
-    die("Configuration error. Please contact support.");
+    die("Configuration error. Please contact support."); // Or handle more gracefully
 }
 
-// Use Paystack SDK Namespace
-use Yabacon\Paystack;
-use Yabacon\Paystack\Exception\ApiException;
+
+use Flutterwave\Controller\PaymentController;
+// use Flutterwave\EventHandlers\ModalEventHandler as PaymentHandler; // Not needed for this flow
+// use Flutterwave\Flutterwave; // Not needed for PaymentController
+// use Flutterwave\Library\Modal; // Not needed for this flow
+// use \Flutterwave\Helper\Config; // Not needed if relying on environment variables
 
 session_start();
 
@@ -25,7 +29,7 @@ if (!isset($_GET['order_id']) || !is_numeric($_GET['order_id'])) {
     exit();
 }
 $orderId = $_GET['order_id'];
-$order = new Order($pdo); // Assuming Order class handles DB interaction
+$order = new Order($pdo);
 $orderDetails = $order->getOrderDetails($orderId);
 if (!$orderDetails) {
     header("Location: index.php");
@@ -39,92 +43,75 @@ $shippingAddress = $order->getOrderShippingAddress($orderDetails['order_shipping
 // Handle payment processing (if form is submitted)
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
-    $paymentMethod = $orderDetails['payment_method']; // Get from order
+    // Use the payment method stored in the order details from the previous step
+    $paymentMethod = $orderDetails['payment_method']; // Get from order, not POST
 
     if ($paymentMethod == 'card') {
 
-        // --- Prepare Data for Paystack ---
-        $paystackSecretKey = getenv('PAYSTACK_SECRET_KEY');
-        if (!$paystackSecretKey) {
-            error_log("Paystack Secret Key not found in environment variables.");
-            $_SESSION['payment_error'] = "Payment gateway configuration error. Please contact support.";
-            header("Location: payment.php?order_id=" . $orderId);
-            exit();
-        }
-
-        // Paystack expects amount in the lowest currency unit (kobo for NGN, cents for USD)
-        $amountInKobo = $orderDetails['order_total'] * 100;
-        $txRef = "GG-" . $orderId . "-" . time(); // Unique transaction reference
-        // Construct full callback URL dynamically
-        $callbackUrl = 'http://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . '/paystack-callback.php'; // Note: Different callback script
+        // --- Prepare Data for Flutterwave ---
+        $txRef = "GG-" . $orderId . "-" . time(); // More robust transaction reference
+        $redirectUrl = 'http://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . '/flutterwave-callback.php?order_id=' . $orderId; // Construct full URL
 
         // Fetch customer details (replace with actual logic)
         $customerEmail = "ibrahimcome3@gmail.com"; // Get from logged-in user or order
+        $customerName = "Ibrahim Ahmad Muhammad"; // Get from logged-in user or order
+        $customerPhone = "+2348051067944"; // Optional, but recommended
+
+        $paymentData = [
+            'tx_ref' => $txRef,
+            'amount' => $orderDetails['order_total'], // Use the actual order total
+            'currency' => 'NGN', // Or get from config/order
+            'redirect_url' => $redirectUrl,
+            'payment_options' => 'card', // Specify card payment
+            'customer' => [
+                'email' => $customerEmail,
+                'name' => $customerName,
+                'phonenumber' => $customerPhone, // Use 'phonenumber' key
+            ],
+            'customizations' => [
+                'title' => 'Goodguy Store Payment',
+                'description' => 'Payment for Order #' . $orderId,
+                // 'logo' => 'URL_TO_YOUR_LOGO.png' // Optional: Add your logo URL
+            ],
+            // 'meta' => [ // Optional metadata if needed
+            //     'order_id' => $orderId,
+            // ]
+        ];
 
         try {
-            // --- Initialize Paystack ---
-            $paystack = new Paystack($paystackSecretKey);
+            // --- Use PaymentController for Standard Redirect Flow ---
+            // The SDK automatically uses keys from environment variables here
 
-            // --- Create Transaction ---
-            $tranx = $paystack->transaction->initialize([
-                'amount' => $amountInKobo,       // Amount in Kobo
-                'email' => $customerEmail,     // Customer's email
-                'reference' => $txRef,         // Unique transaction reference
-                'callback_url' => $callbackUrl, // Your callback URL
-                'metadata' => [                // Optional: Send extra data
-                    'order_id' => $orderId,
-                    'customer_name' => "Ibrahim Ahmad Muhammad", // Get from user/order
-                    'custom_fields' => [
-                        [
-                            "display_name" => "Order ID",
-                            "variable_name" => "order_id",
-                            "value" => $orderId
-                        ]
-                    ]
-                ]
-            ]);
+            $payment = PaymentController::initialize($paymentData);
 
-            // $tranx contains the response object from Paystack
 
             // --- Check Response and Redirect ---
-            // The response object structure might differ slightly, check Paystack docs or dump $tranx
-            // Typically, you look for status=true and data->authorization_url
-            if ($tranx->status && isset($tranx->data->authorization_url)) {
-                // Store reference in session temporarily if needed for callback verification (optional)
-                // $_SESSION['paystack_reference'] = $txRef;
-
-                // Redirect user to Paystack's payment page
-                header('Location: ' . $tranx->data->authorization_url);
+            if ($payment['status'] === 'success' && isset($payment['data']['link'])) {
+                // Redirect user to Flutterwave's payment page
+                header('Location: ' . $payment['data']['link']);
                 exit();
             } else {
-                // Payment initialization failed on Paystack's side
-                $errorMessage = $tranx->message ?? 'Unknown Paystack error during initialization.';
-                $_SESSION['payment_error'] = "Could not initialize payment. Reason: " . $errorMessage;
-                error_log("Paystack Init Error: " . json_encode($tranx)); // Log the full error
+                // Payment initialization failed on Flutterwave's side
+                $_SESSION['payment_error'] = "Could not initialize payment. Reason: " . ($payment['message'] ?? 'Unknown Flutterwave error');
+                error_log("Flutterwave Init Error: " . json_encode($payment)); // Log the full error
                 header("Location: payment.php?order_id=" . $orderId); // Redirect back
                 exit();
             }
 
-        } catch (ApiException $e) {
-            // Handle API errors from Paystack SDK
-            $_SESSION['payment_error'] = "Payment API error: " . $e->getMessage();
-            error_log("Paystack API Exception: " . $e->getMessage() . " | Response: " . ($e->getResponseObject() ? json_encode($e->getResponseObject()) : 'N/A'));
-            header("Location: payment.php?order_id=" . $orderId); // Redirect back
-            exit();
         } catch (Exception $e) {
-            // Handle other general exceptions
+            // Exception during SDK execution (e.g., network issue, config error)
             $_SESSION['payment_error'] = "Payment system error: " . $e->getMessage();
-            error_log("General Payment Exception: " . $e->getMessage()); // Log the exception
+            error_log("Flutterwave SDK Exception: " . $e->getMessage()); // Log the exception
             header("Location: payment.php?order_id=" . $orderId); // Redirect back
             exit();
         }
 
     } elseif ($paymentMethod == 'bank_transfer') {
-        // ... (your existing bank transfer logic - unchanged) ...
-        $paymentSuccessful = true;
+        // ... (your existing bank transfer logic) ...
+        $paymentSuccessful = true; // Simulate success for now
         if ($paymentSuccessful) {
-            $order->updateOrderStatus($orderId, 'processing');
-            unset($_SESSION['cart']);
+            $order->updateOrderStatus($orderId, 'processing'); // Or 'pending_transfer'
+            unset($_SESSION['cart']); // Consider clearing cart later
             header("Location: order-confirmation.php?order_id=" . $orderId . "&method=transfer");
             exit();
         } else {
@@ -133,54 +120,52 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             exit();
         }
     } elseif ($paymentMethod == 'pay_on_delivery') {
-        // ... (your existing pay on delivery logic - unchanged) ...
-        $paymentSuccessful = true;
+        // ... (your existing pay on delivery logic) ...
+        $paymentSuccessful = true; // Assume order placement is success
         if ($paymentSuccessful) {
-            $order->updateOrderStatus($orderId, 'processing');
-            unset($_SESSION['cart']);
+            $order->updateOrderStatus($orderId, 'processing'); // Or 'pending_delivery'
+            unset($_SESSION['cart']); // Consider clearing cart later
             header("Location: order-confirmation.php?order_id=" . $orderId . "&method=cod");
             exit();
         } else {
+            // This case likely won't happen for COD unless there's an order saving issue
             $_SESSION['payment_error'] = "Order placement failed. Please try again.";
             header("Location: payment.php?order_id=" . $orderId);
             exit();
         }
     } else {
+        // Handle invalid/unknown payment method stored in the order
         $_SESSION['payment_error'] = "Invalid payment method selected for this order.";
-        header("Location: checkout.php");
+        header("Location: checkout.php"); // Redirect back to checkout maybe
         exit();
     }
 }
 ?>
 
 <!DOCTYPE html>
-<!-- Your HTML remains largely the same -->
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Complete Payment</title>
+    <title>Complete Payment</title> <?php // Changed title ?>
     <?php include "htlm-includes.php/metadata.php"; ?>
 </head>
 
 <body>
     <?php include "header-for-other-pages.php"; ?>
     <main class="main">
-        <!-- Breadcrumbs -->
         <nav aria-label="breadcrumb" class="breadcrumb-nav border-0 mb-0">
             <div class="container d-flex align-items-center">
                 <ol class="breadcrumb">
                     <?php echo breadcrumbs(); ?>
                 </ol>
-            </div>
-        </nav>
-        <!-- Page Content -->
+            </div><!-- End .container -->
+        </nav><!-- End .breadcrumb-nav -->
         <div class="page-content">
             <div class="container">
                 <h3>Complete Your Payment</h3>
 
-                <!-- Error Message Display -->
                 <?php if (isset($_SESSION['payment_error'])): ?>
                     <div class="alert alert-danger" role="alert">
                         <?php echo htmlspecialchars($_SESSION['payment_error']); ?>
@@ -188,7 +173,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <?php unset($_SESSION['payment_error']); ?>
                 <?php endif; ?>
 
-                <!-- Order Summary & Shipping -->
                 <div class="row">
                     <div class="col-md-6">
                         <h5>Order Summary</h5>
@@ -197,6 +181,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <p>Payment Method:
                             <?= htmlspecialchars(ucwords(str_replace('_', ' ', $orderDetails['payment_method']))) ?>
                         </p>
+                        <!-- Display other order items if needed -->
                     </div>
                     <div class="col-md-6">
                         <h5>Shipping Address</h5>
@@ -215,13 +200,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <?php endif; ?>
                     </div>
                 </div>
+
+
                 <hr>
 
-                <!-- Payment Confirmation Form -->
                 <h5>Confirm Payment</h5>
+                <?php // The form now just confirms the chosen method and triggers the backend processing ?>
                 <form action="payment.php?order_id=<?= htmlspecialchars($orderId) ?>" method="post">
                     <?php if ($orderDetails['payment_method'] == 'card'): ?>
-                        <p>Click the button below to proceed to secure card payment via Paystack.</p>
+                        <p>Click the button below to proceed to secure card payment via Flutterwave.</p>
                         <button type="submit" class="btn btn-primary">Proceed to Card Payment</button>
                     <?php elseif ($orderDetails['payment_method'] == 'bank_transfer'): ?>
                         <p>Please make a bank transfer to the following account using your Order ID
@@ -231,12 +218,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <p><strong>Bank Name:</strong> Example Bank Plc</p>
                         <p>Your order status will be updated once payment is confirmed.</p>
                         <button type="submit" class="btn btn-primary">Confirm Order (Pay via Transfer)</button>
+                        <?php // Button still submits to process status ?>
                     <?php elseif ($orderDetails['payment_method'] == 'pay_on_delivery'): ?>
                         <p>Your order will be processed, and you will pay the courier upon delivery.</p>
                         <button type="submit" class="btn btn-primary">Confirm Order (Pay on Delivery)</button>
                     <?php else: ?>
                         <p class="text-danger">Invalid payment method selected. Please go back to checkout.</p>
                     <?php endif; ?>
+                    <?php // No hidden input needed as we get method from $orderDetails ?>
                 </form>
             </div>
         </div>
