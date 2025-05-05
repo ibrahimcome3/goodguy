@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once '../class/User.php';
-$u = new User();
+$u = new User($pdo);
 include "../conn.php";
 
 // Super admin check (only super admins can access this page)

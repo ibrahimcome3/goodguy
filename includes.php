@@ -26,6 +26,15 @@ $cart = new Cart($pdo, $promotion);
 
 if (isset($_SESSION['uid'])) {
      $wishlist = new WishList($pdo, $_SESSION['uid']); // Pass PDO connection
-     $user = new User(); // Pass PDO connection
+     $user = new User($pdo); // Pass PDO connection
+}
+
+if (isset($_SESSION['cart_success'])) {
+     echo '<div class="container mt-2"><div class="alert alert-success" role="alert">' . htmlspecialchars($_SESSION['cart_success']) . '</div></div>';
+     unset($_SESSION['cart_success']); // Clear the message after displaying
+}
+if (isset($_SESSION['cart_error'])) {
+     echo '<div class="container mt-2"><div class="alert alert-danger" role="alert">' . htmlspecialchars($_SESSION['cart_error']) . '</div></div>';
+     unset($_SESSION['cart_error']); // Clear the message after displaying
 }
 ?>

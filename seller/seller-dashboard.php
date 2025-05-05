@@ -13,7 +13,7 @@ if (!isset($_SESSION['uid'])) {
     exit;
 }
 
-$u = new User();
+$u = new User($pdo);
 $i = new InventoryItem($pdo);
 $userId = $_SESSION['uid'];
 $user = $u->getUserById($mysqli, $userId);

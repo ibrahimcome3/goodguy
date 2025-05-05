@@ -3,103 +3,156 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 
-require '../vendor/autoload.php'; // Adjust path as needed
-include "../conn.php"; // Consider switching to PDO for better security and consistency
+// Use Composer autoloader
+require '../vendor/autoload.php';
+// Use consistent includes providing $pdo
+require_once "../includes.php"; // Provides $pdo (still needed for DB operations)
 
-if (isset($_POST['submit']) && isset($_POST['email'])) {  // Check both POST variables
+// --- Hardcoded SMTP Configuration ---
+// !!! SECURITY RISK: Avoid hardcoding credentials in production environments !!!
+$smtpHost = 'smtp.hostinger.com';
+$smtpPort = 465; // Common port for SMTPS/SSL
+$smtpSecure = PHPMailer::ENCRYPTION_SMTPS; // Use ENCRYPTION_STARTTLS for port 587
+$smtpUsername = 'care@goodguyng.com';
+$smtpPassword = 'Password1@'; // <-- VERY SENSITIVE - HIGH RISK! Replace with your actual password.
+$fromEmail = 'care@goodguyng.com';
+$fromName = 'Goodguyng.com';
+// --- End Hardcoded Configuration ---
 
-    $email = filter_var($_POST['email'], FILTER_SANITIZE_EMAIL); // Sanitize email
 
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) { // Validate email format
-        echo "Invalid Email Address. Go back";
+if (isset($_POST['submit']) && isset($_POST['email'])) {
+
+    $email = filter_var(trim($_POST['email']), FILTER_SANITIZE_EMAIL);
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        header("Location: ../password-reset.php?error=invalid_email"); // Redirect back
         exit();
     }
 
-    // Use prepared statement to prevent SQL injection
-    $stmt = $mysqli->prepare("SELECT customer_id FROM customer WHERE customer_email = ?"); // Select only needed data
+    try {
+        // Ensure $pdo is available from includes.php
+        if (!isset($pdo) || !$pdo instanceof PDO) {
+            throw new Exception("Database connection is not available.");
+        }
 
-    if ($stmt) {
-        $stmt->bind_param("s", $email);
-        $stmt->execute();
-        $result = $stmt->get_result();
+        // 1. Check if email exists using PDO prepared statement
+        // *** IMPORTANT: Verify table ('customer') and column names ('customer_email', 'customer_id') ***
+        $stmt = $pdo->prepare("SELECT customer_id FROM customer WHERE customer_email = :email LIMIT 1");
+        $stmt->execute(['email' => $email]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($result->num_rows > 0) {
-            $row = $result->fetch_assoc(); // fetch the user id
-            $user_id = $row["customer_id"];
-            $token = bin2hex(random_bytes(32)); // Generate a more secure token (cryptographically secure)
-            $expiry_time = date('Y-m-d H:i:s', strtotime('+1 hour')); // Simpler expiry time calculation
+        if ($user) {
 
-            // Update database with prepared statement
-            $update_stmt = $mysqli->prepare("UPDATE customer SET reset_link_token=?, expiry_date=? WHERE customer_id=?");
-            if ($update_stmt) {
-                $update_stmt->bind_param("ssi", $token, $expiry_time, $user_id);
-                $update_stmt->execute();
-                $update_stmt->close();
+            $user_id = $user["customer_id"];
+            $token = bin2hex(random_bytes(32)); // Secure token
+            $expiry_time = date('Y-m-d H:i:s', strtotime('+1 hour')); // Expiry in 1 hour
 
-                $link = "localhost/goodguy/reset-password.php?user_id=$user_id&token=$token"; // Include token in link
+            // 2. Update database with token and expiry using PDO prepared statement
+            // *** IMPORTANT: Verify table ('customer') and column names ('reset_link_token', 'expiry_date', 'customer_id') ***
+            $update_stmt = $pdo->prepare("UPDATE customer SET reset_link_token = :token, expiry_date = :expiry WHERE customer_id = :user_id");
+            $updateSuccess = $update_stmt->execute([
+                'token' => $token,
+                'expiry' => $expiry_time,
+                'user_id' => $user_id
+            ]);
 
-                // ... (Inside the if ($result->num_rows > 0) block, after updating the database)
+            if ($updateSuccess) {
+                // Construct the reset link
+                $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
+                $domain = $_SERVER['HTTP_HOST'];
+                $link = $protocol . $domain . "/goodguy/reset-password.php?user_id=" . urlencode((string) $user_id) . "&token=" . urlencode($token);
 
-
-                // Use HTML email format with the link embedded:
-
-
+                // 3. Send Email using PHPMailer
                 $mail = new PHPMailer(true);
 
                 try {
-                    //Server settings
-                    $mail->SMTPDebug = SMTP::DEBUG_SERVER; //Enable verbose debug output
+                    // --- Server settings ---
+                    // Use the hardcoded variables defined at the top
+                    // $mail->SMTPDebug = SMTP::DEBUG_OFF; // Use DEBUG_OFF for production
+                    $mail->SMTPDebug = SMTP::DEBUG_OFF; // Disable debug output for production/redirects
                     $mail->isSMTP();
-                    $mail->Host = 'smtp.hostinger.com'; //Replace with your host
+                    $mail->Host = $smtpHost;
                     $mail->SMTPAuth = true;
-                    $mail->Username = 'care@goodguyng.com'; //Replace with your email
-                    $mail->Password = 'Password1@'; //Replace with your password
-                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS; //Enable implicit TLS encryption
-                    $mail->Port = 465; //TCP port to connect to; use 587 if you have set `smtp_ssl=tls` in your php.ini
+                    $mail->Username = $smtpUsername;
+                    $mail->Password = $smtpPassword; // Using hardcoded password
+                    $mail->SMTPSecure = $smtpSecure;
+                    $mail->Port = (int) $smtpPort;
 
-                    //Recipients
-                    $mail->setFrom('care@goodguyng.com', 'Goodguyng.com'); //Replace with your email
-                    $mail->addAddress('ibrahimcome3@gmail.com'); //Replace with recipient email
-                    $mail->addReplyTo('care@goodguyng.com'); //Replace with your email
+                    // --- Recipients ---
+                    $mail->setFrom($fromEmail, $fromName); // Using hardcoded from details
+                    $mail->addAddress($email); // Send to the user requesting reset
+                    $mail->addReplyTo($fromEmail, $fromName);
 
-
-                    //Content
+                    // --- Content ---
                     $mail->isHTML(true);
-                    $mail->Subject = 'Password Reset Link';
-                    $icon_path = '../assets/images/logo-new.png'; // Path to your icon
-                    $icon_data = base64_encode(file_get_contents($icon_path));
-                    $icon_mime_type = mime_content_type($icon_path); // Get the MIME type
+                    $mail->Subject = 'Password Reset Request - Goodguyng.com';
 
-                    //$mail->Body = '<html><body><p>Click the icon below to reset your password:</p><a href="' . $link . '"><img src="data:' . $icon_mime_type . ';base64,' . $icon_data . '" alt="Reset Password Icon"></a></body></html>';
+                    // Prepare icon data (ensure path is correct)
+                    $icon_path = '../assets/images/logo-new.png'; // Adjust path relative to _recovery.php
+                    $icon_data = '';
+                    $icon_mime_type = '';
+                    if (file_exists($icon_path)) {
+                        $icon_data = base64_encode(file_get_contents($icon_path));
+                        $icon_mime_type = mime_content_type($icon_path);
+                    }
 
-                    // ... (rest of your PHPMailer code - no need for addEmbeddedImage)
+                    // Construct HTML Body (remains the same)
+                    $mailBody = '<html><head><style>body{font-family: sans-serif;}</style></head><body>';
+                    if ($icon_data && $icon_mime_type) {
+                        $mailBody .= '<p><img src="data:' . $icon_mime_type . ';base64,' . $icon_data . '" alt="Goodguyng.com icon" style="max-width: 150px; height: auto;"></p>';
+                    }
+                    $mailBody .= '<p>Hello,</p>';
+                    $mailBody .= '<p>We received a request to reset the password for your account. Please click the link below to proceed. This link is valid for 1 hour.</p>';
+                    $mailBody .= '<p style="margin: 20px 0;"><a href="' . htmlspecialchars($link) . '" style="background-color: #007bff; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>';
+                    $mailBody .= '<p>If the button above doesn\'t work, copy and paste this link into your browser:</p>';
+                    $mailBody .= '<p><a href="' . htmlspecialchars($link) . '">' . htmlspecialchars($link) . '</a></p>';
+                    $mailBody .= '<p>If you did not request a password reset, please ignore this email. Your password will remain unchanged.</p>';
+                    $mailBody .= '<p>Thanks,<br>The Goodguy Team</p>';
+                    $mailBody .= '</body></html>';
+                    $mail->Body = $mailBody;
 
-                    $mail->Body = '<img src="data:' . $icon_mime_type . ';base64,' . $icon_data . '" alt="Goodguyng.com icom"><br/>';
-                    $mail->Body = $link;
-                    $mail->AltBody = "$link";
+                    // Simple text version (remains the same)
+                    $mail->AltBody = "Hello,\nPlease use the following link to reset your password (valid for 1 hour):\n" . $link . "\n\nIf you did not request this, please ignore this email.";
 
                     $mail->send();
-                    header("Location: ../password-reset-email-sent.php"); // Redirect to success page
-                    exit(); // Important to prevent further execution
+
+                    // Redirect to success confirmation page
+                    header("Location: ../password-reset-email-sent.php");
+                    exit();
+
                 } catch (Exception $e) {
-                    echo "Message could not be sent. Mailer Error: {$mail->ErrorInfo}";
+                    // Log PHPMailer error and redirect with generic mail error
+                    error_log("Mailer Error sending reset email to {$email}: {$mail->ErrorInfo}");
+                    header("Location: ../password-reset.php?error=mail_failed");
+                    exit();
                 }
 
             } else {
-                // Handle update statement preparation failure
-                echo "Error preparing SQL update statement: " . $mysqli->error;
+                // Database update failed
+                throw new Exception("Failed to update reset token in database.");
             }
 
-
         } else {
-            echo "Invalid Email Address. Go back";
-
+            // Email not found
+            header("Location: ../password-reset.php?error=email_not_found");
+            exit();
         }
 
-        $stmt->close();
-    } else {
-        echo "Error preparing SQL select statement: " . $mysqli->error;
+    } catch (PDOException $e) {
+        // Catch PDO database errors
+        error_log("Database error during password recovery for {$email}: " . $e->getMessage());
+        header("Location: ../password-reset.php?error=database");
+        exit();
+    } catch (Exception $e) {
+        // Catch other general errors (DB connection, etc.)
+        error_log("General error during password recovery for {$email}: " . $e->getMessage());
+        header("Location: ../password-reset.php?error=server"); // Generic server error
+        exit();
     }
 
+} else {
+    // Redirect if accessed directly or without required POST data
+    header("Location: ../password-reset.php");
+    exit();
 }
 ?>

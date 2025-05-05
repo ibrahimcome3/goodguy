@@ -16,18 +16,6 @@ $cookie_expiration_time = $current_time + (30 * 24 * 60 * 60); // 30 days
 // Validate login from cookies (if any)
 require_once "login/authCookieSessionValidate.php";
 
-if ($isLoggedIn) {
-    // Redirect to appropriate page after successful cookie validation
-
-    var_dump($_SESSION);
-    echo "you are logged in pleace <a href='logout.php'>click</a> here to log out";
-    // if (isset($_SESSION['last_viewed_product'])) {
-    //     header("Location: product-detail.php?id=" . $_SESSION['last_viewed_product']);
-    // } else {
-    //     header("Location: index.php");
-    // }
-    exit;
-}
 
 $message = ""; // Initialize message variable
 

@@ -1106,3 +1106,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 </body>
 
 </html>
+
+
+SELECT c.*
+FROM categories c
+WHERE c.parent_id = (SELECT category_id FROM categories WHERE name = 'Electronics' LIMIT 1)
+
+UNION ALL
+
+-- Select grandchildren of 'Electronics'
+SELECT grandchild.*
+FROM categories AS grandchild
+INNER JOIN categories AS child ON grandchild.parent_id = child.category_id
+INNER JOIN categories AS grandparent ON child.parent_id = grandparent.category_id
+WHERE grandparent.name = 'Electronics';

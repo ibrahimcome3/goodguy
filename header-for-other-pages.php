@@ -139,8 +139,8 @@ $wishlistCount = isset($_SESSION['uid']) && isset($wishlist) ? $wishlist->no_of_
             </div>
             <div class="header-right">
                 <div class="dropdown cart-dropdown">
-                    <a href="cart_.php" class="dropdown-toggle" role="button" data-toggle="dropdown"
-                        aria-haspopup="true" aria-expanded="false" data-display="static">
+                    <a href="cart.php" class="dropdown-toggle" role="button" data-toggle="dropdown" aria-haspopup="true"
+                        aria-expanded="false" data-display="static">
                         <i class="icon-shopping-cart"></i>
                         <span class="cart-count"><?= count($cartItems); ?></span>
                     </a>
@@ -179,7 +179,7 @@ $wishlistCount = isset($_SESSION['uid']) && isset($wishlist) ? $wishlist->no_of_
                                 <span class="cart-total-price">&#8358;&nbsp;<?= number_format($cartTotal, 2) ?></span>
                             </div><!-- End .dropdown-cart-total -->
                             <div class="dropdown-cart-action">
-                                <a href="cart_.php" class="btn btn-primary">View Cart</a>
+                                <a href="cart.php" class="btn btn-primary">View Cart</a>
                                 <a href="checkout-process-validation.php"
                                     class="btn btn-outline-primary-2"><span>Checkout</span><i
                                         class="icon-long-arrow-right"></i></a>

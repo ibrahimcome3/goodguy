@@ -435,7 +435,103 @@ class Order
         $stmt->bind_param("i", $orderId);
         return $stmt->execute();
     }
+    public function createOrder_($userId, $shippingAddressId, $paymentMethod, $subtotal, $shippingCost, $finalTotal, $cartItems)
+    {
+        // Validate inputs (basic example)
+        if ($userId <= 0 || $shippingAddressId <= 0 || empty($paymentMethod) || $finalTotal < 0 || empty($cartItems)) {
+            error_log("Invalid parameters passed to createOrder.");
+            return false;
+        }
 
+        $this->pdo->beginTransaction(); // Start transaction
+
+        try {
+            // 1. Insert into lm_orders table
+            // *** IMPORTANT: Verify all column names match your lm_orders table ***
+            $sqlOrder = "INSERT INTO lm_orders (
+                            customer_id,
+                            order_date_created,
+                            order_status,
+                            order_shipping_address,
+                            payment_method,
+                            order_subtotal,
+                            shipping_cost, -- Added column
+                            order_total
+                            -- Add other relevant columns like discount_amount, tax_amount if they exist
+                        ) VALUES (
+                            :user_id,
+                            NOW(),
+                            'pending', -- Initial status
+                            :shipping_address_id,
+                            :payment_method,
+                            :subtotal,
+                            :shipping_cost, -- Added placeholder
+                            :total
+                            -- Add other placeholders if needed
+                        )";
+
+            $stmtOrder = $this->pdo->prepare($sqlOrder);
+
+            $stmtOrder->bindParam(':user_id', $userId, PDO::PARAM_INT);
+            $stmtOrder->bindParam(':shipping_address_id', $shippingAddressId, PDO::PARAM_INT);
+            $stmtOrder->bindParam(':payment_method', $paymentMethod, PDO::PARAM_STR);
+            // Bind monetary values as strings for precision with DECIMAL type
+            $stmtOrder->bindParam(':subtotal', $subtotal, PDO::PARAM_STR);
+            $stmtOrder->bindParam(':shipping_cost', $shippingCost, PDO::PARAM_STR); // Bind new value
+            $stmtOrder->bindParam(':total', $finalTotal, PDO::PARAM_STR);
+            // Bind others if needed
+
+            if (!$stmtOrder->execute()) {
+                throw new Exception("Failed to insert into lm_orders: " . implode(", ", $stmtOrder->errorInfo()));
+            }
+
+            $orderId = $this->pdo->lastInsertId(); // Get the newly created order ID
+
+            // 2. Insert into order_items table (or your equivalent item table)
+            // *** IMPORTANT: Verify column names (order_id, InventoryItemID, quwantitiyofitem, item_price) ***
+            $sqlItems = "INSERT INTO lm_order_line (
+                            orderID,
+                            InventoryItemID,
+                            quwantitiyofitem, -- Assuming typo exists in DB
+                            item_price
+                            -- Add other columns like product_name if you store snapshots
+                         ) VALUES (
+                            :order_id,
+                            :product_id,
+                            :quantity,
+                            :price
+                            -- Add other placeholders
+                         )";
+            $stmtItems = $this->pdo->prepare($sqlItems);
+
+            foreach ($cartItems as $item) {
+                // Ensure item structure is correct (adjust keys if needed)
+                $productId = $item['InventoryItemID'] ?? null;
+                $quantity = $item['quantity'] ?? 0;
+                // Use the final price (incl. promotion) stored in the cart item detail
+                $price = $item['cost'] ?? ($item['product']['cost'] ?? 0); // Adapt based on your cart item structure
+
+                if ($productId && $quantity > 0) {
+                    $stmtItems->bindParam(':order_id', $orderId, PDO::PARAM_INT);
+                    $stmtItems->bindParam(':product_id', $productId, PDO::PARAM_INT);
+                    $stmtItems->bindParam(':quantity', $quantity, PDO::PARAM_INT);
+                    $stmtItems->bindParam(':price', $price, PDO::PARAM_STR); // Bind price as string
+
+                    if (!$stmtItems->execute()) {
+                        throw new Exception("Failed to insert order item (Product ID: $productId): " . implode(", ", $stmtItems->errorInfo()));
+                    }
+                }
+            }
+
+            $this->pdo->commit(); // Commit transaction if all inserts were successful
+            return (int) $orderId; // Return the new order ID
+
+        } catch (Exception $e) {
+            $this->pdo->rollBack(); // Roll back changes on any error
+            error_log("Order creation failed: " . $e->getMessage());
+            return false; // Return false on failure
+        }
+    }
     public function createOrder($userId, $shippingAddressId, $paymentMethod, $total, $cartItems)
     {
         // echo $userId;
@@ -482,12 +578,26 @@ class Order
 
     public function getOrderDetails($orderId)
     {
-        $pdo = $this->pdo;
-        $stmt = $pdo->prepare("SELECT * FROM lm_orders WHERE order_id = ?");
-        $stmt->execute([$orderId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        return $row ? $row : null;
+        // *** IMPORTANT: Add 'shipping_cost' to the SELECT list ***
+        $sql = "SELECT
+                    o.order_id, o.user_id, o.order_date_created, o.order_status,
+                    o.order_shipping_address, o.payment_method,
+                    o.order_subtotal, o.shipping_cost, o.order_total, -- Added shipping_cost
+                    u.email as customer_email, -- Example join for email
+                    CONCAT(u.first_name, ' ', u.last_name) as customer_name -- Example join for name
+                    -- Add/remove columns and joins as needed
+                FROM lm_orders o
+                LEFT JOIN users u ON o.user_id = u.user_id -- Example join to users table
+                WHERE o.order_id = :order_id";
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindParam(':order_id', $orderId, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetch(PDO::FETCH_ASSOC); // Fetch the single order row
+        } catch (PDOException $e) {
+            error_log("Database error fetching order details for order ID $orderId: " . $e->getMessage());
+            return false;
+        }
     }
 
     public function updateOrderStatus($orderId, $status)
@@ -500,22 +610,179 @@ class Order
     public function getOrderShippingAddress($addressId)
     {
         $pdo = $this->pdo;
-        $stmt = $pdo->prepare("SELECT * FROM shipping_address WHERE shipping_address_no = ?");
-        $stmt->execute([$addressId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
+        // Prepare the SQL query with a LEFT JOIN
+        // Select all columns from shipping_address (aliased as 'sa')
+        // Select specific columns from the users table (aliased as 'u') to avoid name collisions
+        // *** IMPORTANT: Verify table names ('users') and column names ('user_id') below match your database schema ***
+        $sql = "SELECT
+                    sa.*,
+                    u.customer_email AS email,         -- Alias user email
+                    u.customer_fname AS first_name, -- Alias user first name
+                    u.customer_fname AS last_name   -- Alias user last name
+                    -- Add any other user fields you need here, e.g., u.username AS user_username
+                FROM
+                    shipping_address sa
+                LEFT JOIN
+                    customer u ON sa.customer_id = u.customer_id -- The JOIN condition based on the foreign key
+                WHERE
+                    sa.shipping_address_no = ?";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$addressId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC); // Fetch as an associative array
+
+        // Return the combined data or null if the address wasn't found
         return $row ? $row : null;
     }
 
-    public function getStateName($stateId)
-    {
-        $pdo = $this->pdo;
-        $stmt = $pdo->prepare("SELECT state_name FROM shipping_state WHERE state_id = ?");
-        $stmt->execute([$stateId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return $row ? $row['state_name'] : null;
+
+    public function getShippingAreaCost(int $areaId): ?float
+    {
+        if ($areaId <= 0) { // Basic validation: Don't query if ID is invalid
+            return null;
+        }
+
+        $sql = "SELECT area_cost FROM shipping_areas WHERE area_id = :area_id LIMIT 1";
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindParam(':area_id', $areaId, PDO::PARAM_INT);
+            $stmt->execute();
+            $cost = $stmt->fetchColumn(); // Fetch the single 'area_cost' value
+
+            // fetchColumn returns false if no row/column found, or the value
+            // Return the cost as a float, or null if not found/not numeric
+            return ($cost !== false && is_numeric($cost)) ? (float) $cost : null;
+
+        } catch (PDOException $e) {
+            // Log the error for debugging
+            error_log("Database error fetching shipping area cost for area ID $areaId: " . $e->getMessage());
+            return null; // Return null on database error
+        }
     }
+
+    public function getShippingAddressStateName(int $addressId): ?string
+    {
+        if ($addressId <= 0) {
+            return null; // Invalid address ID
+        }
+
+        // *** ADJUST table ('states') and column names ('state_id', 'state_name', 'shipping_address_no') as necessary ***
+        $sql = "SELECT s.state_name
+                FROM shipping_address sa
+                INNER JOIN states s ON sa.state_id = s.state_id
+                WHERE sa.shipping_address_no = :address_id
+                LIMIT 1";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindParam(':address_id', $addressId, PDO::PARAM_INT);
+            $stmt->execute();
+
+            $stateName = $stmt->fetchColumn(); // Fetch the first column of the first row
+
+            // fetchColumn returns false if no row found
+            return ($stateName !== false) ? (string) $stateName : null;
+
+        } catch (PDOException $e) {
+            error_log("Database error fetching state name for shipping address ID $addressId: " . $e->getMessage());
+            return null; // Return null on error
+        }
+    }
+
+
+    /**
+     * Retrieves the state name based on the state ID.
+     * (You might already have this or similar - keep it if needed elsewhere)
+     *
+     * @param int $stateId The ID of the state.
+     * @return string|null The name of the state, or null if not found.
+     */
+    public function getStateName(int $stateId): ?string
+    {
+        if ($stateId <= 0) {
+            return null;
+        }
+        // *** ADJUST table ('states') and column names ('state_id', 'state_name') if necessary ***
+        $sql = "SELECT state_name FROM states WHERE state_id = :state_id LIMIT 1";
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindParam(':state_id', $stateId, PDO::PARAM_INT);
+            $stmt->execute();
+            $name = $stmt->fetchColumn();
+            return ($name !== false) ? (string) $name : null;
+        } catch (PDOException $e) {
+            error_log("Database error fetching state name for state ID $stateId: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    public function getShippingAreaIdFromAddress(int $addressId): ?int
+    {
+        if ($addressId <= 0) {
+            return null; // Invalid address ID provided
+        }
+
+        // *** ADJUST table ('shipping_address') and column names ('shipping_area_id', 'shipping_address_no') if necessary ***
+        $sql = "SELECT shipping_area_id
+                FROM shipping_address
+                WHERE shipping_address_no = :address_id
+                LIMIT 1";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindParam(':address_id', $addressId, PDO::PARAM_INT);
+            $stmt->execute();
+
+            $areaId = $stmt->fetchColumn(); // Fetch the value of the first column
+
+            // fetchColumn returns false if no row found, or the value (which could be NULL in the DB)
+            // We want to return null if it's false (not found) or explicitly NULL
+            if ($areaId === false) {
+                return null; // Address not found
+            }
+            // If $areaId is NULL in the database, fetchColumn returns NULL, which is correct.
+            // If it's a number (including 0), cast to int.
+            return ($areaId !== null) ? (int) $areaId : null;
+
+        } catch (PDOException $e) {
+            error_log("Database error fetching shipping area ID for address ID $addressId: " . $e->getMessage());
+            return null; // Return null on database error
+        }
+    }
+
+    public function updateOrderCosts(int $orderId, float $subtotal, float $shippingCost, float $finalTotal): bool
+    {
+        if ($orderId <= 0) {
+            return false;
+        }
+
+        $sql = "UPDATE lm_orders
+            SET order_subtotal = :subtotal,
+                shipping_cost = :shipping_cost,
+                order_total = :total
+            WHERE order_id = :order_id";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+
+            // Bind monetary values as strings for precision
+            $stmt->bindParam(':subtotal', $subtotal, PDO::PARAM_STR);
+            $stmt->bindParam(':shipping_cost', $shippingCost, PDO::PARAM_STR);
+            $stmt->bindParam(':total', $finalTotal, PDO::PARAM_STR);
+            $stmt->bindParam(':order_id', $orderId, PDO::PARAM_INT);
+
+            $success = $stmt->execute();
+            // Optionally check rowCount, though update might succeed with 0 rows if values are the same
+            return $success;
+
+        } catch (PDOException $e) {
+            error_log("Error updating costs for order ID $orderId: " . $e->getMessage());
+            return false;
+        }
+    }
+
 
 
 

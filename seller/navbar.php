@@ -1,7 +1,12 @@
 <?php
 //Make absolutely sure this is at the very top!
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
+include "../conn.php";
 require_once '../class/User.php'; // Make sure the User class is included
-$u = new User();
+$u = new User($pdo);
+
 
 //Check if the user is connected.
 if (!isset($_SESSION['uid'])) {

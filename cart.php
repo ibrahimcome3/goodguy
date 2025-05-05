@@ -43,7 +43,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['inventory_product_id']
     }
 
     // Redirect back to the product page or cart page
-    header("Location: cart_.php"); // Redirect to the cart page
+    $_SESSION['cart_success'] = "Item added to cart!";
+    header("Location: product-detail.php?itemid=" . $inventory_product_id);
     exit();
 }
 
@@ -54,7 +55,7 @@ if (isset($_GET['remove']) && is_numeric($_GET['remove'])) {
         unset($_SESSION['cart'][$remove_index]);
         $_SESSION['cart'] = array_values($_SESSION['cart']); // Re-index the array
     }
-    header("Location: cart_.php");
+    header("Location: cart.php");
     exit();
 }
 
@@ -70,7 +71,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_cart'])) {
         }
     }
     $_SESSION['cart'] = array_values($_SESSION['cart']); // Re-index the array
-    header("Location: cart_.php");
+    header("Location: cart.php");
     exit();
 }
 ?>
@@ -197,7 +198,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_cart'])) {
                                             </tbody>
                                         </table><!-- End .table table-summary -->
 
-                                        <a href="shipping-address-selection.php"
+                                        <a href="checkout-process-validation.php"
                                             class="btn btn-outline-primary-2 btn-order btn-block">PROCEED TO CHECKOUT</a>
                                     </div><!-- End .summary -->
                                 </aside><!-- End .col-lg-3 -->

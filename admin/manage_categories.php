@@ -1,13 +1,266 @@
 <?php
+// 1. Start Session if not already started
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
 
 header("Cache-Control: no-cache, no-store, must-revalidate"); // HTTP 1.1.
 header("Pragma: no-cache"); // HTTP 1.0.
 header("Expires: 0"); // Proxies.
 
+// Includes and Class Requires
 include "../conn.php";
 require_once '../class/Conn.php';
 require_once '../class/Category.php';
 
+// --- Function Definitions ---
+
+// Function to fetch parent category name
+function getParentCategoryName($mysqli, $parentId)
+{
+    if ($parentId == 0) {
+        return 'Top-Level';
+    }
+    $parentSql = "SELECT name FROM categories WHERE category_id = ?";
+    $parentStmt = $mysqli->prepare($parentSql);
+    if (!$parentStmt) {
+        // Handle prepare error, maybe log it
+        return 'Error';
+    }
+    $parentStmt->bind_param("i", $parentId);
+    $parentStmt->execute();
+    $parentResult = $parentStmt->get_result();
+    $parentRow = $parentResult->fetch_assoc();
+    $parentStmt->close();
+    return $parentRow ? $parentRow['name'] : 'Unknown';
+}
+
+//Fetch all categories for select options.
+function getAllCategories($mysqli)
+{
+    $categories = [];
+    $sql = "SELECT category_id, name, parent_id, level FROM categories ORDER BY name ASC"; // Order for better dropdown display
+    $result = $mysqli->query($sql);
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $categories[] = $row;
+        }
+        $result->free();
+    }
+    return $categories;
+}
+
+function getCurrentUserId()
+{
+    // Replace this with your actual user authentication logic
+    // This is a placeholder - you'll need to implement this based on your session handling
+    if (isset($_SESSION['user_id'])) { // Make sure your login process sets 'user_id'
+        return $_SESSION['user_id'];
+    } else {
+        // Handle appropriately - redirect to login or return a default/error value
+        // For now, returning 0 might cause issues if owner_id is required.
+        // Consider redirecting if not logged in:
+        // header('Location: /login.php'); exit;
+        return 0; // Or handle the case where the user is not logged in
+    }
+}
+
+function addCategory($mysqli, $postData)
+{
+    $parentId = isset($postData['parent_id']) ? intval($postData['parent_id']) : 0;
+    $name = trim($postData['name']); // Trim whitespace
+    $ownerId = getCurrentUserId(); // Get the ID of the currently logged-in user
+
+    if (empty($name)) {
+        $_SESSION['message'] = ['type' => 'danger', 'text' => 'Category name cannot be empty.'];
+        return;
+    }
+
+    //Determine the level dynamically
+    $level = 0;
+    if ($parentId > 0) {
+        $parentLevelSql = "SELECT level FROM categories WHERE category_id = ?";
+        $parentLevelStmt = $mysqli->prepare($parentLevelSql);
+        $parentLevelStmt->bind_param("i", $parentId);
+        $parentLevelStmt->execute();
+        $parentLevelResult = $parentLevelStmt->get_result();
+        if ($parentLevelRow = $parentLevelResult->fetch_assoc()) {
+            $level = $parentLevelRow['level'] + 1;
+        }
+        $parentLevelStmt->close();
+
+        if ($level > 2) {
+            $_SESSION['message'] = ['type' => 'danger', 'text' => 'Maximum level exceeded (Level 2 is the maximum).'];
+            return;
+        }
+    }
+
+    $sql = "INSERT INTO categories (name, parent_id, level, owner_id) VALUES (?, ?, ?, ?)"; // Added owner_id
+    $stmt = $mysqli->prepare($sql);
+    $stmt->bind_param("siii", $name, $parentId, $level, $ownerId);
+
+    if ($stmt->execute()) {
+        $_SESSION['message'] = ['type' => 'success', 'text' => 'Category added successfully!'];
+    } else {
+        // Provide more specific error if possible (e.g., duplicate name check)
+        $_SESSION['message'] = ['type' => 'danger', 'text' => 'Error adding category: ' . $stmt->error];
+    }
+    $stmt->close();
+    // Redirect after POST to prevent re-submission
+    header("Location: manage_categories.php");
+    exit;
+}
+
+function editCategory($mysqli, $postData)
+{
+    // Ensure this function is only called via AJAX POST
+    header('Content-Type: application/json'); // Set header for JSON response
+
+    $categoryId = isset($postData['category_id']) ? intval($postData['category_id']) : 0;
+    $newName = isset($postData['name']) ? trim($postData['name']) : '';
+    $newParentId = isset($postData['parent_id']) ? intval($postData['parent_id']) : 0; // Get the new parent ID
+
+    if (empty($newName) || $categoryId <= 0) {
+        echo json_encode(['success' => false, 'message' => 'Invalid data provided.']);
+        exit;
+    }
+
+    // --- Validation ---
+    // 1. Prevent setting category as its own parent
+    if ($categoryId === $newParentId) {
+        echo json_encode(['success' => false, 'message' => 'A category cannot be its own parent.']);
+        exit;
+    }
+
+    // 2. Calculate new level and check depth
+    $newLevel = 0;
+    if ($newParentId > 0) {
+        $parentLevelSql = "SELECT level FROM categories WHERE category_id = ?";
+        $parentLevelStmt = $mysqli->prepare($parentLevelSql);
+        $parentLevelStmt->bind_param("i", $newParentId);
+        $parentLevelStmt->execute();
+        $parentLevelResult = $parentLevelStmt->get_result();
+        if ($parentLevelRow = $parentLevelResult->fetch_assoc()) {
+            $newLevel = $parentLevelRow['level'] + 1;
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Selected parent category does not exist.']);
+            exit; // Parent not found
+        }
+        $parentLevelStmt->close();
+
+        if ($newLevel > 2) {
+            echo json_encode(['success' => false, 'message' => 'Maximum category depth (Level 2) would be exceeded.']);
+            exit;
+        }
+
+        // 3. Prevent making a category a child of one of its own descendants (circular reference)
+        $tempParentId = $newParentId;
+        while ($tempParentId > 0) {
+            if ($tempParentId == $categoryId) {
+                echo json_encode(['success' => false, 'message' => 'Cannot move category under one of its own children.']);
+                exit;
+            }
+            // Fetch the next parent up the chain
+            $nextParentSql = "SELECT parent_id FROM categories WHERE category_id = ?";
+            $nextParentStmt = $mysqli->prepare($nextParentSql);
+            $nextParentStmt->bind_param("i", $tempParentId);
+            $nextParentStmt->execute();
+            $nextParentResult = $nextParentStmt->get_result();
+            $nextParentRow = $nextParentResult->fetch_assoc();
+            $nextParentStmt->close();
+            $tempParentId = $nextParentRow ? $nextParentRow['parent_id'] : 0;
+        }
+    }
+
+    // --- Update Database ---
+    $sql = "UPDATE categories SET name = ?, parent_id = ?, level = ? WHERE category_id = ?";
+    $stmt = $mysqli->prepare($sql);
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'message' => 'Database error preparing statement: ' . $mysqli->error]);
+        exit;
+    }
+    $stmt->bind_param("siii", $newName, $newParentId, $newLevel, $categoryId);
+
+    if ($stmt->execute()) {
+        $newParentName = getParentCategoryName($mysqli, $newParentId); // Get the name for the response
+        echo json_encode([
+            'success' => true,
+            'message' => 'Category updated successfully!',
+            'newName' => $newName,
+            'newParentId' => $newParentId,
+            'newParentName' => $newParentName,
+            'newLevel' => $newLevel
+        ]);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Error updating category: ' . $stmt->error]);
+    }
+    $stmt->close();
+    exit; // Important: Stop script execution after AJAX response
+}
+
+function deleteCategory($mysqli, $postData)
+{
+    // Ensure this function is only called via AJAX POST
+    header('Content-Type: application/json');
+
+    $categoryId = isset($postData['category_id']) ? intval($postData['category_id']) : 0;
+
+    if ($categoryId <= 0) {
+        echo json_encode(['success' => false, 'message' => 'Invalid category ID.']);
+        exit;
+    }
+
+    // Check for child categories first
+    $sqlCheck = "SELECT COUNT(*) as count FROM categories WHERE parent_id = ?";
+    $stmtCheck = $mysqli->prepare($sqlCheck);
+    $stmtCheck->bind_param("i", $categoryId);
+    $stmtCheck->execute();
+    $resultCheck = $stmtCheck->get_result();
+    $rowCheck = $resultCheck->fetch_assoc();
+    $stmtCheck->close();
+
+    if ($rowCheck['count'] > 0) {
+        echo json_encode(['success' => false, 'message' => 'Cannot delete category: It has child categories. Please delete or move them first.']);
+        exit;
+    }
+
+    // Proceed with deletion
+    $sqlDelete = "DELETE FROM categories WHERE category_id = ?";
+    $stmtDelete = $mysqli->prepare($sqlDelete);
+    $stmtDelete->bind_param("i", $categoryId);
+
+    if ($stmtDelete->execute()) {
+        if ($stmtDelete->affected_rows > 0) {
+            echo json_encode(['success' => true, 'message' => 'Category deleted successfully!']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Category not found or already deleted.']);
+        }
+    } else {
+        // Consider checking for foreign key constraints if products are linked
+        echo json_encode(['success' => false, 'message' => 'Error deleting category: ' . $stmtDelete->error]);
+    }
+    $stmtDelete->close();
+    exit; // Important: Stop script execution after AJAX response
+}
+
+// --- Handle POST Requests (Add, Edit, Delete) ---
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action'])) {
+    $action = $_POST['action'];
+
+    if ($action == 'add_category') {
+        addCategory($mysqli, $_POST); // This function now handles redirect/exit
+    } elseif ($action == 'edit_category') {
+        // Assumes edit is always AJAX. The function handles JSON response and exit.
+        editCategory($mysqli, $_POST);
+    } elseif ($action == 'delete_category') {
+        // Assumes delete is always AJAX. The function handles JSON response and exit.
+        deleteCategory($mysqli, $_POST);
+    }
+    // If it was a non-AJAX POST action that didn't exit/redirect, script continues.
+    // But addCategory now redirects, and edit/delete exit after JSON.
+}
+
+// --- Prepare Data for Page Display ---
 $currentPage = isset($_GET['page']) ? (int) $_GET['page'] : 1;
 $resultsPerPage = 20; // Number of categories to display per page
 $offset = ($currentPage - 1) * $resultsPerPage;
@@ -52,36 +305,10 @@ $stmt = $mysqli->prepare($sql);
 $stmt->bind_param($types, ...$params);
 $stmt->execute();
 $allCategories = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt->close(); // Close statement after fetching
+$totalCategoriesStmt->close();
 
-// Function to fetch parent category name
-function getParentCategoryName($mysqli, $parentId)
-{
-    if ($parentId == 0) {
-        return 'Top-Level';
-    }
-    $parentSql = "SELECT name FROM categories WHERE category_id = ?";
-    $parentStmt = $mysqli->prepare($parentSql);
-    $parentStmt->bind_param("i", $parentId);
-    $parentStmt->execute();
-    $parentResult = $parentStmt->get_result();
-    $parentRow = $parentResult->fetch_assoc();
-    return $parentRow ? $parentRow['name'] : 'Unknown';
-}
-
-//Fetch all categories for select options.
-function getAllCategories()
-{
-    global $mysqli;
-    $categories = [];
-    $sql = "SELECT * FROM categories";
-    $result = $mysqli->query($sql);
-    while ($row = $result->fetch_assoc()) {
-        $categories[] = $row;
-    }
-    return $categories;
-}
-
-$categories = getAllCategories();
+$categoriesForDropdown = getAllCategories($mysqli); // Fetch categories for dropdowns
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST['action'])) {
@@ -115,13 +342,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <body>
     <div class="container mt-5">
         <h1>Manage Categories</h1>
-
+        <?php include('../includes/messages.php'); // Include message display ?>
         <form method="post" action="manage_categories.php">
             <div class="mb-3">
                 <label for="parent_id" class="form-label">Parent Category:</label>
                 <select class="form-select" name="parent_id" id="parent_id" required>
                     <option value="0">Top-Level Category</option>
-                    <?php foreach ($categories as $category): ?>
+                    <?php foreach ($categoriesForDropdown as $category): ?>
                         <option value="<?php echo $category['category_id'] ?>">
                             <?php echo $category['name']; ?>
                         </option>
@@ -134,10 +361,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <input type="text" class="form-control" id="name" name="name" required>
             </div>
 
-            <div class="mb-3">
+            <!-- Level is now determined automatically based on parent -->
+            <!-- <div class="mb-3">
                 <label for="level" class="form-label">Level:</label>
                 <input type="number" class="form-control" id="level" name="level" min="0" max="2" value="1" required>
-            </div>
+            </div> -->
 
             <input type="hidden" name="action" value="add_category">
             <button type="submit" class="btn btn-primary">Add Category</button>
@@ -179,7 +407,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <td>
                             <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal"
                                 data-bs-target="#editCategoryModal" data-category-id="<?= $category['category_id'] ?>"
-                                data-category-name="<?= $category['name'] ?>">Edit</button>
+                                data-category-name="<?= htmlspecialchars($category['name']) ?>"
+                                data-parent-id="<?= $category['parent_id'] ?>"
+                                data-level="<?= $category['level'] ?>">Edit</button>
                             <button type="button" class="btn btn-danger btn-sm delete-category-button"
                                 data-category-id="<?= $category['category_id'] ?>">Delete</button>
 
@@ -255,6 +485,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                                 <label for="editCategoryName" class="form-label">Category Name:</label>
                                 <input type="text" class="form-control" id="editCategoryName" name="name" required>
                             </div>
+                            <div class="mb-3">
+                                <label for="editParentId" class="form-label">Parent Category:</label>
+                                <select class="form-select" name="parent_id" id="editParentId" required>
+                                    <option value="0">-- Top-Level Category --</option>
+                                    <?php foreach ($categoriesForDropdown as $catOption): ?>
+                                        <option value="<?php echo $catOption['category_id']; ?>">
+                                            <?php echo htmlspecialchars($catOption['name']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <!-- Level is determined by server based on parent -->
                             <button type="submit" class="btn btn-primary" id="saveChangesBtn">Save Changes</button>
                         </form>
                     </div>
@@ -275,13 +517,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $(document).ready(function () {
 
                 $('#editCategoryModal').on('show.bs.modal', function (event) {
-                    var button = $(event.relatedTarget); // Button that triggered the modal
+                    var button = $(event.relatedTarget);
                     var categoryId = button.data('category-id');
                     var categoryName = button.data('category-name');
+                    var parentId = button.data('parent-id');
+                    // var level = button.data('level'); // Level is now derived
 
                     var modal = $(this);
                     modal.find('#editCategoryId').val(categoryId);
                     modal.find('#editCategoryName').val(categoryName);
+                    modal.find('#editParentId').val(parentId);
+
+                    // Disable the category itself in the parent dropdown
+                    modal.find('#editParentId option').prop('disabled', false); // Re-enable all first
+                    modal.find('#editParentId option[value="' + categoryId + '"]').prop('disabled', true);
                 });
 
                 $("#editCategoryForm").submit(function (event) {
@@ -290,14 +539,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     // Get the category ID and the new name
                     var categoryId = $("#editCategoryId").val();
                     var newName = $("#editCategoryName").val();
+                    var newParentId = $("#editParentId").val(); // Get selected parent ID
 
                     // Send the AJAX request
                     $.ajax({
-                        url: "edit_category.php", // The same page
+                        url: "manage_categories.php", // Submit to the same page
                         type: "POST",
                         data: {
                             action: "edit_category",
                             category_id: categoryId,
+                            parent_id: newParentId, // Send parent ID
                             name: newName
                         },
                         dataType: "json", // Expect JSON response
@@ -305,6 +556,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             if (response.success) {
                                 // Update the table row with the new name
                                 $("#category-row-" + categoryId + " td:first").text(newName);
+                                // Update parent name and level
+                                $("#category-row-" + categoryId + " td:nth-child(2)").text(response.newParentName);
+                                $("#category-row-" + categoryId + " td:nth-child(3)").text(response.newLevel);
 
                                 // Display a success message
                                 alert(response.message);
@@ -367,7 +621,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     // Send the AJAX request
                     if (confirm("Are you sure you want to delete this category?")) {
                         $.ajax({
-                            url: "edit_category.php",
+                            url: "manage_categories.php", // Submit to the same page
                             type: "POST",
                             data: {
                                 action: "delete_category",
@@ -406,101 +660,4 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 </html>
 
-<?php
-
-// ... (Your database connection and other functions) ...
-
-function addCategory($mysqli, $postData)
-{
-    $parentId = isset($postData['parent_id']) ? intval($postData['parent_id']) : 0;
-    $name = $postData['name'];
-    $ownerId = getCurrentUserId(); // Get the ID of the currently logged-in user
-
-    //Determine the level dynamically
-    $level = 0;
-    if ($parentId > 0) {
-        $parentLevelSql = "SELECT level FROM categories WHERE category_id = ?";
-        $parentLevelStmt = $mysqli->prepare($parentLevelSql);
-        $parentLevelStmt->bind_param("i", $parentId);
-        $parentLevelStmt->execute();
-        $parentLevelResult = $parentLevelStmt->get_result();
-        $parentLevelRow = $parentLevelResult->fetch_assoc();
-        $level = $parentLevelRow['level'] + 1;
-        if ($level > 2) {
-            echo "<div class='alert alert-danger'>Maximum level exceeded (Level 2 is the maximum)</div>";
-            return;
-        }
-    }
-
-
-    $sql = "INSERT INTO categories (name, parent_id, level, owner_id) VALUES (?, ?, ?, ?)"; // Added owner_id
-    $stmt = $mysqli->prepare($sql);
-    $stmt->bind_param("siii", $name, $parentId, $level, $ownerId);
-
-    if ($stmt->execute()) {
-        echo "<div class='alert alert-success'>Category added successfully!</div>";
-        header("Location: manage_categories.php");
-    } else {
-        echo "<div class='alert alert-danger'>Error adding category: " . $stmt->error . "</div>";
-    }
-}
-
-function getCurrentUserId()
-{
-    // Replace this with your actual user authentication logic
-    // This is a placeholder - you'll need to implement this based on your session handling
-    if (isset($_SESSION['user_id'])) {
-        return $_SESSION['user_id'];
-    } else {
-        return 0; // Or handle the case where the user is not logged in
-    }
-}
-
-
-
-// ... (rest of your manage_categories.php code) ...
-
-
-
-function editCategory($mysqli, $postData)
-{
-    $categoryId = $postData['category_id'];
-    $newName = $postData['name'];
-
-    $sql = "UPDATE categories SET name = ? WHERE category_id = ?";
-    $stmt = $mysqli->prepare($sql);
-    $stmt->bind_param("si", $newName, $categoryId);
-
-    if ($stmt->execute()) {
-        echo "<div class='alert alert-success'>Category updated successfully!</div>";
-    } else {
-        echo "<div class='alert alert-danger'>Error updating category: " . $stmt->error . "</div>";
-    }
-}
-
-function deleteCategory($mysqli, $postData)
-{
-    $categoryId = $postData['category_id'];
-    $sql = "SELECT * FROM categories WHERE parent_id = ?";
-    $stmt = $mysqli->prepare($sql);
-    $stmt->bind_param("i", $categoryId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $children = $result->num_rows;
-    if ($children > 0) {
-        echo "<div class='alert alert-danger'>Cannot delete a category with child categories!</div>";
-    } else {
-        $sql = "DELETE FROM categories WHERE category_id = ?";
-        $stmt = $mysqli->prepare($sql);
-        $stmt->bind_param("i", $categoryId);
-        if ($stmt->execute()) {
-            echo "<div class='alert alert-success'>Category deleted successfully!</div>";
-        } else {
-            echo "<div class='alert alert-danger'>Error deleting category: " . $stmt->error . "</div>";
-        }
-    }
-
-}
-// ... (Your addCategory, editCategory, deleteCategory functions from previous response) ...
-
-?>
+<?php $mysqli->close(); // Close the database connection at the end ?>

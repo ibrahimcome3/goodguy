@@ -6,6 +6,8 @@ class User extends Connn
    public $user_email;
    public $user_address;
    public $user_role;
+
+   public $pdo;
    public const ORDER_STATUS = [
       'PENDING' => 'Pending',
       'PROCESSING' => 'Processing',
@@ -15,12 +17,15 @@ class User extends Connn
    ];
 
 
-   function __construct()
+   function __construct($pdo)
    {
       parent::__construct();
       if (isset($_SESSION['uid'])) {
          $this->user_id = $_SESSION['uid'];
       }
+      $this->pdo = $pdo; // *** CHANGE THIS: Pass PDO ***
+
+
       if (isset($this->user_id)) {
          $pdo = $this->dbc;
          $sql = "SELECT * FROM `customer` WHERE `customer_id` =  " . $this->user_id;
@@ -453,7 +458,33 @@ class User extends Connn
       $stmt->execute();
       return $stmt->affected_rows > 0;
    }
+   public function getPrimaryActivePhoneNumber(int $userId): ?string // Renamed for clarity
+   {
+      $pdo = $this->dbc;
+      // *** ADJUST table and column names if necessary ***
+      $sql = "SELECT phonenumber
+               FROM user_phones
+               WHERE CustomerID = :user_id
+                 AND default_ = 1
+                 AND is_active = 1
+               LIMIT 1";
 
+      try {
+         $stmt = $this->pdo->prepare($sql);
+         $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
+         $stmt->execute();
+
+         // FetchColumn returns the value of the first column or false if no row
+         $phoneNumber = $stmt->fetchColumn();
+
+         return ($phoneNumber !== false) ? (string) $phoneNumber : null;
+
+      } catch (PDOException $e) {
+         // Log the error is recommended
+         error_log("Database error fetching primary phone number for user $userId: " . $e->getMessage());
+         return null; // Return null on error
+      }
+   }
    public function getAllPhoneNumbers($mysqli, $customerId)
    {
       $sql = "SELECT * FROM phonenumber WHERE CustomerID = ?";

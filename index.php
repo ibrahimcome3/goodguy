@@ -1,28 +1,28 @@
 <?php
+// Ensure session is started BEFORE includes if header needs it
+session_start();
+require_once "includes.php"; // Provides $pdo, classes, functions
 
-include "includes.php";
-
-$Orvi = new Review();
-$var_obj = new Variation($pdo);
-$p = new ProductItem();
-$product_obj = new ProductItem();
-$promotion = new Promotion();
-$cat = new Category();
-
+// Instantiate necessary objects (using $pdo)
+try {
+    // Only instantiate classes needed directly on this page
+    $Orvi = new Review($pdo); // For ratings
+    $cat = new Category($pdo); // For category links/names if needed elsewhere
+    // $p, $product_obj, $promotion, $var_obj might not be needed if data is fetched via SQL JOINs
+} catch (Exception $e) {
+    error_log("Error instantiating classes in index.php: " . $e->getMessage());
+    die("A site error occurred. Please try again later.");
+}
 
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
-
-
-<!-- molla/index-13.html  22 Nov 2019 09:59:06 GMT -->
 
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>GG - GoodGuyng.com</title>
+    <title>Welcome to GoodGuyng.com</title> <?php // More descriptive title ?>
     <?php include "htlm-includes.php/metadata.php"; ?>
 
     <!-- Plugins CSS File -->
@@ -31,7 +31,7 @@ $cat = new Category();
     <link rel="stylesheet" href="assets/css/demos/demo-13.css">
 
     <style>
-        .truncate {
+        .truncate-2-lines {
             overflow: hidden;
             text-overflow: ellipsis;
             display: -webkit-box;
@@ -39,16 +39,179 @@ $cat = new Category();
             /* number of lines to show */
             line-clamp: 2;
             -webkit-box-orient: vertical;
+            min-height: 2.4em;
+            /* Approx height for 2 lines */
         }
 
-        .flexbox {
-            display: flex;
-            flex-wrap: wrap;
-            min-height: 200px;
-            flex-grow: 1;
-            flex-shrink: 0;
-            flex-basis: 220px;
+        .product-image {
+            max-width: 100%;
+            height: auto;
+            aspect-ratio: 1 / 1;
+            /* Make images square-ish, adjust as needed */
+            object-fit: contain;
+            /* Fit image within the aspect ratio box */
         }
+
+        .product-grid-item {
+            margin-bottom: 25px;
+        }
+
+        .product-title {
+            margin-bottom: 0.5rem;
+            /* Space below title */
+        }
+
+        .product-price {
+            margin-bottom: 0.5rem;
+            /* Space below price */
+        }
+
+        .ratings-container {
+            margin-bottom: 1rem;
+            /* Space below ratings */
+        }
+
+        /* Optional: Subtle hover effect */
+        .product:hover {
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+            transition: all 0.2s ease-in-out;
+        }
+
+        /* Cart update animation */
+        .cart-updated-animation {
+            transform: scale(1.2);
+            transition: transform 0.3s ease-in-out;
+        }
+
+        .btn-wishlist.added-to-wishlist {
+            color: #c96;
+        }
+
+        .intro-slide .intro-content {
+            background-color: rgba(0, 0, 0, 0.6);
+            /* Semi-transparent black background - adjust color and opacity */
+            padding: 20px 30px;
+            /* Add some padding around the text */
+            border-radius: 5px;
+            /* Optional: rounded corners */
+            display: inline-block;
+            /* Make the background only as wide as needed, or remove for full width */
+            color: #fff;
+            /* Ensure text inside is white */
+            max-width: 90%;
+            /* Prevent it getting too wide on large screens */
+        }
+
+        /* Ensure text elements inside are white */
+        .intro-slide .intro-content h1,
+        .intro-slide .intro-content h3,
+        .intro-slide .intro-content .intro-price span,
+        .intro-slide .intro-content .intro-price sup,
+        .intro-slide .intro-content a.btn {
+            color: #fff;
+            text-shadow: none;
+            /* Shadow might not be needed with a background */
+        }
+
+        /* Make primary subtitle stand out if needed */
+        .intro-slide .intro-content .intro-subtitle.text-primary {
+            color: #facc15;
+            /* Example: Yellow */
+        }
+
+        /* Adjust button style if needed */
+        .intro-slide .intro-content a.btn-primary {
+            background-color: #fff;
+            color: #333;
+            border-color: #fff;
+        }
+
+        .intro-slide .intro-content a.btn-primary:hover {
+            background-color: #eee;
+            border-color: #eee;
+            color: #333;
+        }
+
+        /* Increase size of the main promotional price */
+        .intro-slide .intro-content .intro-price .text-third {
+            font-size: 3rem;
+            /* Adjust this value */
+            font-weight: 600;
+            line-height: 1.1;
+        }
+
+        /* Increase size and add strikethrough to the regular (old) price */
+        .intro-slide .intro-content .intro-price .intro-old-price {
+            font-size: 2rem;
+            /* Adjust this value */
+            font-weight: 400;
+            vertical-align: middle;
+            margin-right: 8px;
+            line-height: 1;
+            text-decoration: line-through;
+            /* This adds the strikethrough */
+            color: #ccc;
+            /* Optional: Makes the old price lighter grey */
+        }
+
+        /* Optional: Adjust spacing around the price container if needed */
+        .intro-slide .intro-content .intro-price {
+            margin-top: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+
+        /* --- Category Block Icon Styling --- */
+        .cat-block figure {
+            display: flex;
+            /* Use flexbox to center the icon */
+            justify-content: center;
+            align-items: center;
+            width: 70px;
+            /* Adjust size of the circle */
+            height: 70px;
+            /* Adjust size of the circle */
+            border-radius: 50%;
+            /* Make it circular */
+            background-color: #f8f8f8;
+            /* Light background, adjust as needed */
+            margin: 0 auto 1.5rem;
+            /* Center the circle horizontally, add space below */
+            transition: background-color 0.3s ease, color 0.3s ease;
+            /* Smooth hover effect */
+        }
+
+        .cat-block figure i {
+            font-size: 32px;
+            /* Adjust icon size */
+            color: #c96;
+            /* Theme's primary color (adjust if different) */
+            line-height: 1;
+            /* Ensure proper vertical alignment */
+        }
+
+        /* Optional: Hover effect */
+        .cat-block:hover figure {
+            background-color: #c96;
+            /* Theme color background on hover */
+        }
+
+        .cat-block:hover figure i {
+            color: #fff;
+            /* White icon on hover */
+        }
+
+        .cat-block-title {
+            font-size: 1.4rem;
+            /* Adjust title size if needed */
+            color: #333;
+            text-align: center;
+            margin-top: 0;
+            /* Remove default margin if any */
+        }
+
+        /* --- End Category Block Icon Styling --- */
     </style>
 
 </head>
@@ -56,891 +219,520 @@ $cat = new Category();
 <body>
     <div class="page-wrapper">
 
-        <?php include 'header.php'; ?>
+        <?php include 'header_main.php'; // USE THE CONSOLIDATED HEADER ?>
 
         <main class="main">
-            <div class="intro-slider-container">
+            <!-- ========================= BANNER SLIDER ========================= -->
+            <div class="intro-slider-container mb-4">
                 <div class="intro-slider owl-carousel owl-simple owl-nav-inside" data-toggle="owl" data-owl-options='{
-                        "nav": false,
-                        "responsive": {
-                            "992": {
-                                "nav": true
-                            }
-                        }
-                    }'>
+                        "nav": false, "dots": true, "loop": true, "autoplay": true, "autoplayTimeout": 5000,
+                        "responsive": { "992": { "nav": true } } }'>
                     <?php
-                    $sql = "SELECT * FROM `promotion_message` left join promotion_items on promotion_message.`promotion_item` = promotion_items.promoitemi_d";
-                    $result = $mysqli->query($sql);
-                    if ($result) {
-                        while ($row = mysqli_fetch_assoc($result)) {
+                    try {
+                        // Fetch active banners and linked promotion item prices
+                        // Assumes 'promotion_items' table has 'promoitemi_d', 'promoPrice', 'regularPrice'
+                        // Assumes 'promotion_message' table has 'is_active' column for filtering
+                        $sql_banner = "SELECT
+                                           pm.title_message,
+                                           pm.price_explainer,
+                                           pm.banner,
+                                           pm.link,
+                                           pi.promoPrice,    -- Fetched from promotion_items
+                                           pi.regularPrice   -- Fetched from promotion_items
+                                       FROM
+                                           promotion_message pm
+                                       LEFT JOIN
+                                           promotion_items pi ON pm.promotion_item = pi.promoitemi_d -- Adjust 'promoitemi_d' if the primary key name in promotion_items is different
+                                       WHERE
+                                           pm.is_active = 1 -- Make sure 'is_active' column exists in promotion_message table
+                                       -- ORDER BY pm.display_order ASC -- Optional: Add a column for ordering banners if needed
+                                       ";
+                        $stmt_banner = $pdo->query($sql_banner); // Use query() for simple selects without user input
+                    
 
+                        while ($row_banner = $stmt_banner->fetch(PDO::FETCH_ASSOC)) {
+                            // Basic validation for essential banner fields from promotion_message
+                            if (empty($row_banner['banner']) || empty($row_banner['link'])) {
+                                error_log("Skipping banner due to missing banner image or link. Data: " . print_r($row_banner, true)); // Log skipped banners for debugging
+                                continue; // Skip this banner if essential info is missing
+                            }
                             ?>
-                            <div class="intro-slide" style="background-image: url(banner/<?= $row['banner'] ?>);">
-                                <div class="container intro-content" style=" padding: 10px;">
-                                    <div class="row justify-content-end"
-                                        style="background-color: rgba(255, 255, 255, 0.2); color: #00ff00;  padding: 15px;">
-                                        <div class="col-auto col-sm-7 col-md-6 col-lg-5">
+                            <div class="intro-slide"
+                                style="background-image: url(banner/<?= htmlspecialchars($row_banner['banner']) ?>);">
+                                <div class="container intro-content">
+                                    <?php /* Banner content using fetched data */ ?>
+                                    <h3 class="intro-subtitle text-primary">
+                                        <?= htmlspecialchars($row_banner['title_message']) ?>
+                                    </h3>
+                                    <h1 class="intro-title"><?= htmlspecialchars($row_banner['price_explainer']) ?></h1>
 
+                                    <?php // Display prices only if promoPrice is available from the JOINED table
+                                            // Add is_numeric check for robustness
+                                            if (!empty($row_banner['promoPrice']) && is_numeric($row_banner['promoPrice'])): ?>
+                                        <div class="intro-price">
+                                            <?php // Display old price only if regularPrice is also available and numeric
+                                                        if (!empty($row_banner['regularPrice']) && is_numeric($row_banner['regularPrice'])): ?>
+                                                <sup
+                                                    class="intro-old-price">N<?= number_format((float) $row_banner['regularPrice']) ?></sup>
+                                            <?php endif; ?>
+                                            <span class="text-third">
+                                                N<?= number_format((float) $row_banner['promoPrice']) ?>
+                                            </span>
+                                        </div>
 
-                                            <h3 class="intro-subtitle" style=" color: #00ff00; "><?= $row['title_message'] ?>
-                                            </h3><!-- End .h3 intro-subtitle -->
-                                            <h1 class="intro-title" style=" color: #00ff09;"><?= $row['price_explainer'] ?>
-                                                <span>
-                                                    <sup class="font-weight-light line-through"
-                                                        style="color: #FFFFFF;">N<?= number_format($row['regularPrice']) ?></sup>
-                                                    <span class=""
-                                                        style="color: #FFFFFF;"><?= number_format($row['promoPrice']) ?><sup></sup></span>
-                                                    <span class="intro-subtitle"></span>
-                                                </span>
+                                    <?php endif; ?>
 
-                                            </h1><!-- End .intro-title -->
-
-                                            <a href="<?= $row['link'] ?>" style="color: #FFFFFF;"
-                                                class="btn btn-outline-primary-2">
-                                                <span>Shop Now</span>
-                                                <i class="icon-long-arrow-right"></i>
-                                            </a>
-                                        </div><!-- End .col-auto offset-lg-3 -->
-                                    </div><!-- End .row -->
-                                </div><!-- End .container intro-content -->
+                                    <a href="<?= htmlspecialchars($row_banner['link']) ?>" class="btn btn-primary btn-round">
+                                        <span>Shop Now</span> <i class="icon-long-arrow-right"></i>
+                                    </a>
+                                </div><!-- End .intro-content -->
                             </div><!-- End .intro-slide -->
                             <?php
                         }
+                    } catch (PDOException $e) {
+                        error_log("Error fetching promotion banners: " . $e->getMessage());
+                        // Optionally display a user-friendly message if the slider fails completely
+                        // echo "<p class='text-center text-danger'>Error loading promotional banners.</p>";
                     }
                     ?>
-
-
-                </div><!-- End .owl-carousel owl-simple -->
-
-                <span class="slider-loader"></span><!-- End .slider-loader -->
+                </div><!-- End .intro-slider -->
+                <span class="slider-loader"></span>
             </div><!-- End .intro-slider-container -->
+            <!-- ========================= BANNER SLIDER END ========================= -->
 
-            <div class="mb-4"></div><!-- End .mb-2 -->
 
-            <div class="container">
-
-                <h2 class="title text-center mb-2">Explore Popular Categories</h2><!-- End .title -->
-
-                <div class="cat-blocks-container text-center">
-                    <div class="row justify-content-md-center">
-                        <div class="col-6 col-sm-4 col-lg-2">
-                            <a href="category.php?catid=DRINKS" class="cat-block">
+            <!-- ========================= POPULAR CATEGORIES ========================= -->
+            <div class="container categories pt-3 pb-3">
+                <h2 class="title-lg text-center mb-4">Shop by Category</h2>
+                <div class="row justify-content-center">
+                    <?php
+                    // Add an 'icon' key with the appropriate class name
+                    $top_categories = [
+                        ['id' => 'DRINKS', 'name' => 'Drinks', 'icon' => 'icon-coffee'], // Example icon
+                        ['id' => 'ELECTRONICS', 'name' => 'Electronics', 'icon' => 'icon-laptop'], // Example icon
+                        ['id' => 'Car Parts', 'name' => 'Car Parts', 'icon' => 'icon-cog'],    // Example icon
+                        ['id' => 'Cosmetics', 'name' => 'Skin Care', 'icon' => 'icon-leaf'],   // Example icon
+                        // Add more categories with their icons if needed
+                    ];
+                    foreach ($top_categories as $top_cat): ?>
+                        <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+                            <a href="category.php?catid=<?= urlencode($top_cat['id']) ?>" class="cat-block">
                                 <figure>
-                                    <span>
-
-                                        <img src="index_pics/drinks.jpg" alt="Category image">
-                                    </span>
+                                    <?php // Replace the <img> tag with an <i> tag for the icon ?>
+                                    <i class="<?= htmlspecialchars($top_cat['icon']) ?>"></i>
                                 </figure>
-
-                                <h3 class="cat-block-title">Drinks</h3><!-- End .cat-block-title -->
+                                <h3 class="cat-block-title"><?= htmlspecialchars($top_cat['name']) ?></h3>
                             </a>
-                        </div><!-- End .col-sm-4 col-lg-2 -->
-
-                        <div class="col-6 col-sm-4 col-lg-2">
-                            <a href="category.php?category%5B%5D=50&catid=ELECTRONICS" class="cat-block">
-                                <figure>
-                                    <span>
-                                        <img src="index_pics/iphone.jpg" alt="Category image">
-                                    </span>
-                                </figure>
-
-                                <h3 class="cat-block-title">iphone</h3><!-- End .cat-block-title -->
-                            </a>
-                        </div><!-- End .col-sm-4 col-lg-2 -->
-
-                        <div class="col-6 col-sm-4 col-lg-2">
-                            <a href="category.php?catid=Car%20Parts" class="cat-block">
-                                <figure>
-                                    <span>
-                                        <img src="index_pics/car.jpg" alt="Category image">
-                                    </span>
-                                </figure>
-
-                                <h3 class="cat-block-title">Car Parts</h3><!-- End .cat-block-title -->
-                            </a>
-                        </div><!-- End .col-sm-4 col-lg-2 -->
-
-                        <div class="col-6 col-sm-4 col-lg-2">
-                            <a href="category.php?catid=Cosmetics" class="cat-block">
-                                <figure>
-                                    <span>
-                                        <img src="index_pics/s.jpg" alt="skin care category link">
-                                    </span>
-                                </figure>
-
-                                <h3 class="cat-block-title">Skin Care</h3><!-- End .cat-block-title -->
-                            </a>
-                        </div><!-- End .col-sm-4 col-lg-2 -->
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <!-- ========================= POPULAR CATEGORIES END ========================= -->
 
 
-                    </div><!-- End .row -->
-                </div><!-- End .cat-blocks-container -->
+
+            <!-- ========================= FEATURED PRODUCTS ========================= -->
+            <div class="container featured-products pt-4 pb-2">
+                <h2 class="title-lg text-center mb-4">Featured Products</h2>
+                <div class="row">
+                    <?php
+                    try {
+                        // --- OPTIMIZED SQL QUERY ---
+                        // Fetches product details, category name, and active promotion info in one go.
+                        // Filters out products without images. Orders by date added.
+                        $limitFeatured = 12; // Number of products to show
+                        $sql_featured = "
+                        SELECT
+                            ii.InventoryItemID, ii.cost, ii.description, ii.date_added,
+                            iii.image_path,
+                            p.productID,
+                            cn.name AS cat_name, cn.category_id AS cat_id,
+                            COALESCE(po_item.promoPrice, po_prod.promoPrice) AS promoPrice,
+                            COALESCE(po_item.regularPrice, po_prod.regularPrice) AS regularPrice
+                        FROM
+                            inventoryitem ii
+                        JOIN productitem p ON ii.productItemID = p.productID
+                        JOIN categories cn ON p.category = cn.category_id
+                        LEFT JOIN inventory_item_image iii ON ii.InventoryItemID = iii.inventory_item_id AND iii.is_primary = 1
+
+                        LEFT JOIN promooffering po_item ON ii.InventoryItemID = po_item.inventory_item_id
+                                                        AND po_item.start_date <= NOW() AND po_item.end_date >= NOW()
+
+                        LEFT JOIN promooffering po_prod ON p.productID = po_prod.product_id
+                                                        AND po_prod.inventory_item_id IS NULL -- Crucial: Only match product-wide
+                                                        AND po_prod.start_date <= NOW() AND po_prod.end_date >= NOW()
+                        WHERE
+                            ii.status = 'active'
+                            AND iii.image_path IS NOT NULL AND iii.image_path != ''
+                        ORDER BY
+                            ii.date_added DESC
+                        LIMIT :limit
+                        ";
+                        $stmt_featured = $pdo->prepare($sql_featured);
+                        $stmt_featured->bindParam(':limit', $limitFeatured, PDO::PARAM_INT);
+                        $stmt_featured->execute();
+
+                        while ($row = $stmt_featured->fetch(PDO::FETCH_ASSOC)) {
+                            $itemId = $row['InventoryItemID'];
+                            $imagePath = $row['image_path']; // Directly from query
+                            $categoryName = $row['cat_name'] ?? 'Uncategorized';
+                            $categoryId = $row['cat_id'];
+                            $isPromo = !empty($row['promoPrice']); // Check if promo price exists and is valid
+                            $isNew = (strtotime($row['date_added']) > strtotime('-30 days')); // Example 'New' logic
+                    
+                            // Get ratings separately (still potential N+1, but isolated)
+                            $ratingWidth = $Orvi->get_rating_($itemId);
+                            $reviewCount = $Orvi->get_rating_review_number($itemId);
+                            ?>
+                            <div class="col-6 col-md-4 col-lg-3 product-grid-item"> <?php // Responsive Grid ?>
+                                <div class="product text-center"> <?php // Center content ?>
+                                    <figure class="product-media">
+                                        <?php if ($isPromo): ?><span class="product-label label-sale">Sale</span><?php endif; ?>
+                                        <?php if ($isNew): ?><span class="product-label label-new">New</span><?php endif; ?>
+                                        <a href="product-detail.php?itemid=<?= $itemId ?>">
+                                            <img src="<?= htmlspecialchars($imagePath) ?>"
+                                                alt="<?= htmlspecialchars($row['description']) ?>" class="product-image"
+                                                loading="lazy">
+                                        </a>
+                                        <div class="product-action-vertical">
+                                            <a href="#" data-product-id="<?= $itemId ?>"
+                                                class="btn-product-icon btn-wishlist btn-expandable"
+                                                title="Add to Wishlist"><span>add to wishlist</span></a>
+                                            <?php /* Quickview can be complex, consider removing for simplicity */ ?>
+                                            <!-- <a href="<?= htmlspecialchars($imagePath) ?>" class="btn-product-icon btn-quickview" title="Quick view"><span>Quick view</span></a> -->
+                                        </div>
+                                        <div class="product-action">
+                                            <a href="#" product-info="<?= $itemId ?>" class="submit-cart btn-product btn-cart"
+                                                title="Add to cart"><span>add to cart</span></a>
+                                        </div>
+                                    </figure>
+                                    <div class="product-body">
+                                        <div class="product-cat font-weight-normal">
+                                            <a
+                                                href="category.php?catid=<?= $categoryId ?>"><?= htmlspecialchars($categoryName) ?></a>
+                                        </div>
+                                        <h3 class="product-title truncate-2-lines">
+                                            <a
+                                                href="product-detail.php?itemid=<?= $itemId ?>"><?= htmlspecialchars($row['description']) ?></a>
+                                        </h3>
+                                        <?php if ($isPromo): ?>
+                                            <div class="product-price">
+                                                <span
+                                                    class="new-price">&#8358;<?= number_format((float) $row['promoPrice'], 2) ?></span>
+                                                <?php if (!empty($row['regularPrice'])): ?>
+                                                    <span class="old-price">Was
+                                                        &#8358;<?= number_format((float) $row['regularPrice'], 2) ?></span>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <div class="product-price">
+                                                <span class="price">N<?= number_format((float) $row['cost'], 2) ?></span>
+                                            </div>
+                                        <?php endif; ?>
+                                        <div class="ratings-container justify-content-center"> <?php // Center ratings ?>
+                                            <div class="ratings">
+                                                <div class="ratings-val" style="width: <?= $ratingWidth ?>%;"></div>
+                                            </div>
+                                            <span class="ratings-text">( <?= $reviewCount ?> Reviews )</span>
+                                        </div>
+                                    </div>
+                                </div><!-- End .product -->
+                            </div><!-- End Col -->
+                            <?php
+                        } // end while
+                    } catch (PDOException $e) {
+                        error_log("Error fetching featured products: " . $e->getMessage());
+                        echo '<div class="col-12"><p class="text-danger text-center">Could not load featured products at this time.</p></div>';
+                    }
+                    ?>
+                </div><!-- End .row -->
+                <div class="text-center mt-3">
+                    <a href="shop.php" class="btn btn-outline-primary-2"><span>View More Products</span><i
+                            class="icon-long-arrow-right"></i></a>
+                </div>
+            </div>
+            <!-- ========================= FEATURED PRODUCTS END ========================= -->
 
 
-            </div><!-- End .container -->
+            <!-- ========================= ELECTRONICS PRODUCTS ========================= -->
+            <div class="container electronics-products pt-4 pb-2"> <?php // Added class for potential styling ?>
+                <h2 class="title-lg text-center mb-4">Shop Electronics</h2>
+                <div class="row">
+                    <?php
+                    try {
+                        // --- SQL QUERY FOR ELECTRONICS ---
+                        $limitElectronics = 8; // Number of electronics products to show
+                        // $electronicsCategoryId = 'ELECTRONICS'; // No longer needed as a separate variable for binding
+                    
+                        $sql_electronics = "
+                        SELECT
+                            ii.InventoryItemID, ii.cost, ii.description, ii.date_added,
+                            iii.image_path,
+                            p.productID,
+                            cn.name AS cat_name, cn.category_id AS cat_id,
+                            COALESCE(po_item.promoPrice, po_prod.promoPrice) AS promoPrice,
+                            COALESCE(po_item.regularPrice, po_prod.regularPrice) AS regularPrice
+                        FROM
+                            inventoryitem ii
+                        JOIN productitem p ON ii.productItemID = p.productID
+                        JOIN categories cn ON p.category = cn.category_id
+                        LEFT JOIN inventory_item_image iii ON ii.InventoryItemID = iii.inventory_item_id AND iii.is_primary = 1
 
+                        LEFT JOIN promooffering po_item ON ii.InventoryItemID = po_item.inventory_item_id
+                                                        AND po_item.start_date <= NOW() AND po_item.end_date >= NOW()
 
-            <div class="mb-3"></div><!-- End .mb-3 -->
+                        LEFT JOIN promooffering po_prod ON p.productID = po_prod.product_id
+                                                        AND po_prod.inventory_item_id IS NULL
+                                                        AND po_prod.start_date <= NOW() AND po_prod.end_date >= NOW()
+                        WHERE
+                            ii.status = 'active'
+                            AND iii.image_path IS NOT NULL AND iii.image_path != ''
+                            AND cn.category_id IN (
+                                -- Subquery to get direct children and grandchildren of 'Electronics'
+                                SELECT category_id FROM (
+                                    -- Direct children
+                                    SELECT c.category_id
+                                    FROM categories c
+                                    WHERE c.parent_id = (SELECT category_id FROM categories WHERE name = 'Electronics' LIMIT 1)
 
-            <div class="bg-light pt-3 pb-5">
-                <div class="container">
-                    <div class="heading heading-flex heading-border mb-3">
-                        <div class="heading-left">
-                            <h2 class="title">Hot Deals Products</h2><!-- End .title -->
-                        </div><!-- End .heading-left -->
+                                    UNION ALL
 
-                        <div class="heading-right">
-                            <ul class="nav nav-pills nav-border-anim justify-content-center" role="tablist">
-                                <li class="nav-item">
-                                    <a class="nav-link active" id="hot-all-link" data-toggle="tab" href="#hot-all-tab"
-                                        role="tab" aria-controls="hot-all-tab" aria-selected="true">All</a>
-                                </li>
+                                    -- Grandchildren
+                                    SELECT grandchild.category_id
+                                    FROM categories AS grandchild
+                                    INNER JOIN categories AS child ON grandchild.parent_id = child.category_id
+                                    INNER JOIN categories AS grandparent ON child.parent_id = grandparent.category_id
+                                    WHERE grandparent.name = 'Electronics'
+                                ) AS electronics_subcategories
+                            )
+                        ORDER BY
+                            ii.date_added DESC -- Or RAND() if you prefer random
+                        LIMIT :limit
+                        ";
+                        $stmt_electronics = $pdo->prepare($sql_electronics);
+                        $stmt_electronics->bindParam(':limit', $limitElectronics, PDO::PARAM_INT);
+                        $stmt_electronics->execute();
 
-                            </ul>
-                        </div><!-- End .heading-right -->
-                    </div><!-- End .heading -->
+                        if ($stmt_electronics->rowCount() > 0) {
+                            while ($row_elec = $stmt_electronics->fetch(PDO::FETCH_ASSOC)) {
+                                $itemId = $row_elec['InventoryItemID'];
+                                $imagePath = $row_elec['image_path'];
+                                $categoryName = $row_elec['cat_name'] ?? 'Electronics'; // Default if name missing
+                                $categoryId = $row_elec['cat_id'];
+                                $isPromo = !empty($row_elec['promoPrice']);
+                                $isNew = (strtotime($row_elec['date_added']) > strtotime('-30 days'));
 
-                    <div class="tab-content tab-content-carousel">
-                        <div class="tab-pane p-0 fade show active" id="hot-all-tab" role="tabpanel"
-                            aria-labelledby="hot-all-link">
-                            <div class="owl-carousel owl-simple carousel-equal-height carousel-with-shadow"
-                                data-toggle="owl" data-owl-options='{
-                                    "nav": false, 
-                                    "dots": true,
-                                    "margin": 20,
-                                    "loop": false,
-                                    "responsive": {
-                                        "0": {
-                                            "items":2
-                                        },
-                                        "480": {
-                                            "items":2
-                                        },
-                                        "768": {
-                                            "items":3
-                                        },
-                                        "992": {
-                                            "items":4
-                                        },
-                                        "1280": {
-                                            "items":5,
-                                            "nav": true
-                                        }
-                                    }
-                                }'>
-                                <?php
-                                //$sql = "SELECT * from productitem left join inventoryitem on productitem.productID = inventoryitem.productItemID where productitem.productID in ( SELECT //`productID` FROM `promooffering` left join productitem on promooffering.`product_id` = productitem.`productID` ) ORDER BY RAND() LIMIT 7
-                                $sql = "SELECT * from productitem left join inventoryitem on productitem.productID = inventoryitem.productItemID limit 7";
-                                $result = $mysqli->query($sql);
-
-
+                                // Get ratings separately
+                                $ratingWidth = $Orvi->get_rating_($itemId);
+                                $reviewCount = $Orvi->get_rating_review_number($itemId);
                                 ?>
-                                <?php function getpromotionending($invitemid)
-                                {
-
-                                    include "conn.php";
-                                    $sql = "select * from inventoryitem left join (select `enddate`, `product_id`, promotionid from promooffering left join promotion on promooffering.promotionid_ = promotion.promotionid) as t on inventoryitem.productItemID = t.`product_id` left join productitem on inventoryitem.productItemID = productitem.productID where `InventoryItemID`= " . $invitemid;
-                                    $result = $mysqli->query($sql);
-                                    if ($result) {
-                                        if ($result->num_rows > 0) {
-                                            $row = mysqli_fetch_array($result);
-                                            $now = new DateTime();
-                                            $later = new DateTime($row['enddate']);
-
-                                            $difference = $now->diff($later);
-
-                                            //var_dump($now);
-                                            //var_dump($later);
-                                            //var_dump($difference);
-                                            //var_dump($compare);
-                                            // echo "<b>".$difference->h."</b>";
-                                            if ((int) $difference->y == 0 and (int) $difference->m == 0 and (int) $difference->d == 0 and (int) $difference->h < 24) {
-                                                return (int) $difference->h;
-                                            }
-                                        }
-                                    } else {
-                                        return 0;
-                                    }
-
-                                }
-
-
-
-                                ?>
-                                <?php
-                                $id_of_what_get_image = null;
-                                while ($row = mysqli_fetch_array($result)) {
-
-                                    ?>
-                                    <div class="product">
+                                <div class="col-6 col-md-4 col-lg-3 product-grid-item">
+                                    <div class="product text-center">
                                         <figure class="product-media">
-                                            <!--    <span class="product-label label-top">Top</span>    -->
-                                            <?php if ($promotion->check_if_item_is_in_promotion($product_obj->get_product_id($row['InventoryItemID'])) != null) { ?>
-                                                <span class="product-label label-sale">Sale</span>
-                                                <?php
-                                            }
-
-
-                                            if (in_array($product_obj->get_product_id($row['InventoryItemID']), $product_obj->get_all_product_items_that_are_less_than_one_month())) { ?>
-                                                <span class="product-label label-new">New</span>
-                                            <?php } ?>
-                                            <a href="product-detail.php?itemid=<?= $row['InventoryItemID'] ?>">
-                                                <img src="<?php if ($p->get_image($row['InventoryItemID']) !== null)
-                                                    echo $p->get_image($row['InventoryItemID']);
-                                                else
-                                                    echo "e.jpeg"; ?>" alt="Product image" class="product-image">
+                                            <?php if ($isPromo): ?><span class="product-label label-sale">Sale</span><?php endif; ?>
+                                            <?php if ($isNew): ?><span class="product-label label-new">New</span><?php endif; ?>
+                                            <a href="product-detail.php?itemid=<?= $itemId ?>">
+                                                <img src="<?= htmlspecialchars($imagePath) ?>"
+                                                    alt="<?= htmlspecialchars($row_elec['description']) ?>" class="product-image"
+                                                    loading="lazy">
                                             </a>
-                                            <?php if (getpromotionending($row['InventoryItemID'])) { ?>
-                                                <div class="product-countdown"
-                                                    data-until="+<?= getpromotionending($row['InventoryItemID']) ?>h"
-                                                    data-format="HMS" data-relative="true" data-labels-short="true"></div>
-                                                <!-- End .product-countdown -->
-                                            <?php } ?>
                                             <div class="product-action-vertical">
-                                                <a href="#" data-product-id="<?= $row['InventoryItemID'] ?>"
-                                                    class="btn-product-icon btn-wishlist btn-expandable"><span>add
-                                                        to wishlist</span></a>
-
-                                                <a href="<?= $p->get_image($row['InventoryItemID']) ?>"
-                                                    class="btn-product-icon btn-quickview" title="Quick view"><span>Quick
-                                                        view</span></a>
-                                            </div><!-- End .product-action-vertical -->
-
+                                                <a href="#" data-product-id="<?= $itemId ?>"
+                                                    class="btn-product-icon btn-wishlist btn-expandable"
+                                                    title="Add to Wishlist"><span>add to wishlist</span></a>
+                                                <?php /* Quickview button removed for simplicity */ ?>
+                                            </div>
                                             <div class="product-action">
-                                                <a href="#" product-info="<?= $row['InventoryItemID'] ?>"
-                                                    class="submit-cart btn-product btn-cart" title="Add to cart"><span>add
-                                                        to cart</span></a>
-                                            </div><!-- End .product-action -->
-                                        </figure><!-- End .product-media -->
-
+                                                <a href="#" product-info="<?= $itemId ?>" class="submit-cart btn-product btn-cart"
+                                                    title="Add to cart"><span>add to cart</span></a>
+                                            </div>
+                                        </figure>
                                         <div class="product-body">
-                                            <div class="product-cat">
+                                            <div class="product-cat font-weight-normal">
+                                                <?php // Link to the specific sub-category if available, else Electronics ?>
                                                 <a
-                                                    href="category.php?catid=<?= $cat->get_category_by_id($row['category']) ?>"><?= $cat->get_parent_category_name($row['InventoryItemID']) ?></a>
-                                            </div><!-- End .product-cat -->
-                                            <h3 class="product-title"><a href="product."><?= $row['description'] ?></a></h3>
-                                            <!-- End .product-title -->
-                                            <?php if ($promotion->check_if_item_is_in_inventory_promotion($row['InventoryItemID'])) { ?>
+                                                    href="category.php?catid=<?= $categoryId ?>"><?= htmlspecialchars($categoryName) ?></a>
+                                            </div>
+                                            <h3 class="product-title truncate-2-lines">
+                                                <a
+                                                    href="product-detail.php?itemid=<?= $itemId ?>"><?= htmlspecialchars($row_elec['description']) ?></a>
+                                            </h3>
+                                            <?php if ($isPromo): ?>
                                                 <div class="product-price">
                                                     <span
-                                                        class="new-price">&#8358;<?= " " . number_format($promotion->get_promoPrice_price($row['InventoryItemID']), 2) ?></span>
-                                                    <span class="old-price">Was
-                                                        &#8358;<?= " " . number_format($promotion->get_regular_price($row['InventoryItemID']), 2) ?></span>
-                                                </div><!-- End .product-price -->
-                                            <?php } else { ?>
+                                                        class="new-price">&#8358;<?= number_format((float) $row_elec['promoPrice'], 2) ?></span>
+                                                    <?php if (!empty($row_elec['regularPrice'])): ?>
+                                                        <span class="old-price">Was
+                                                            &#8358;<?= number_format((float) $row_elec['regularPrice'], 2) ?></span>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php else: ?>
                                                 <div class="product-price">
-                                                    <span class="new-price">N<?= " " . number_format($row['cost'], 2) ?></span>
-                                                </div><!-- End .product-price -->
-                                            <?php } ?>
-                                            <div class="ratings-container">
+                                                    <span class="price">N<?= number_format((float) $row_elec['cost'], 2) ?></span>
+                                                </div>
+                                            <?php endif; ?>
+                                            <div class="ratings-container justify-content-center">
                                                 <div class="ratings">
-                                                    <div class="ratings-val"
-                                                        style="width: <?= $Orvi->get_rating_($row['InventoryItemID']) ?>%">
-                                                    </div><!-- End .ratings-val -->
-                                                </div><!-- End .ratings -->
-                                                <span class="ratings-text">(
-                                                    <?= $Orvi->get_rating_review_number($row['InventoryItemID']); ?> Reviews
-                                                    )</span>
-                                            </div><!-- End .rating-container -->
-
-                                            <div class="product-nav product-nav-dots">
-
-                                                <?php
-                                                // ... other code ...
-                                            
-                                                $colorVariations = $var_obj->get_color_variations_for_product_from_sku($product_obj->get_product_id($row['InventoryItemID']));
-
-                                                if (!empty($colorVariations)) {
-                                                    ?>
-                                                    <div class="product-nav product-dots">
-                                                        <?php foreach ($colorVariations as $itemId => $color): ?>
-                                                            <a href="product-detail.php?itemid=<?= $itemId ?>"
-                                                                style="background: <?= $color ?>">
-                                                                <span class="sr-only">Color name</span>
-                                                            </a>
-                                                        <?php endforeach; ?>
-                                                    </div>
-                                                    <?php
-                                                }
-
-                                                // ... rest of your code ...
-                                                ?>
-                                            </div><!-- End .product-nav -->
-                                        </div><!-- End .product-body -->
-                                        <div class="product-image-gallery">
-                                            <?php $p_obj = new ProductItem();
-                                            $stmt = $p_obj->get_other_images_of_item_in_inventory_not_1($row['InventoryItemID']);
-                                            if ($stmt != null) {
-                                                while ($r = $stmt->fetch()) { ?>
-                                                    <a class="product-gallery-item active" href="#"
-                                                        data-image="<?= $r['image_path'] ?>"
-                                                        data-zoom-image="<?= $r['image_path'] ?>">
-                                                        <img src="<?= $r['image_path'] ?>" alt="product side">
-                                                    </a>
-                                                <?php }
-                                            }
-                                            ?>
+                                                    <div class="ratings-val" style="width: <?= $ratingWidth ?>%;"></div>
+                                                </div>
+                                                <span class="ratings-text">( <?= $reviewCount ?> Reviews )</span>
+                                            </div>
                                         </div>
                                     </div><!-- End .product -->
-
-                                <?php } ?>
-
-
-
-
-
-                            </div><!-- End .owl-carousel -->
-                        </div><!-- .End .tab-pane -->
-
-
-                    </div><!-- End .tab-content -->
-                </div><!-- End .container -->
-            </div><!-- End .bg-light pt-5 pb-5 -->
-
-
-            <div class="container electronics">
-                <div class="heading heading-flex heading-border mb-3" style="padding-bottom: 15px;">
-                    <div class="heading-left">
-                        <h2 class="title">CAR CARE</h2><!-- End .title -->
-                    </div><!-- End .heading-left -->
-
-                </div><!-- End .heading -->
-
-
-                <div class="flexbox" style="width: 100%;" id="elec-new-tab" role="tabpanel"
-                    aria-labelledby="elec-new-link">
-
-
-                    <?php
-                    $sql = "SELECT * from productitem left join inventoryitem on productitem.productID = inventoryitem.productItemID where productitem.category in (select `cat_id` from category_new  where JSON_UNQUOTE(JSON_EXTRACT(json_, '$.roots')) = 'Car Parts') ORDER BY RAND() limit 14";
-                    $result = $mysqli->query($sql);
-                    $getallproduct = 4;
-
-                    while ($row = mysqli_fetch_array($result)) { ?>
-                        <div class="product" style="max-width: 220px; margin: auto;">
-                            <figure class="product-media">
-                                <?php if ($promotion->check_if_item_is_in_promotion($product_obj->get_product_id($row['InventoryItemID'])) != null) { ?>
-                                    <span class="product-label label-sale">Sale</span>
-                                    <?php
-                                }
-                                if (in_array($product_obj->get_product_id($row['InventoryItemID']), $product_obj->get_all_product_items_that_are_less_than_one_month())) { ?>
-                                    <span class="product-label label-new">New</span>
-                                <?php } ?>
-                                <a href="product-detail.php?itemid=<?= $row['InventoryItemID'] ?>">
-                                    <?php $pid = $product_obj->get_product_id($row['InventoryItemID']);
-                                    if ($product_obj->check_dirtory_resized_600($pid, $row['InventoryItemID'])) {
-
-                                        $i = $row['InventoryItemID'];
-                                        $pi = glob("products/product-$pid/product-$pid-image/inventory-$pid-$i/resized_600/" . '*.{jpg,gif}', GLOB_BRACE);
-                                        $img = $pi[0];
-                                    } else {
-                                        $img = $p->get_image($row['InventoryItemID']);
-                                    }
-                                    ?>
-                                    <img src="<?= $img ?>" alt="Product image" class="product-image">
-                                </a>
-
-
-                                <div class="product-action-vertical">
-                                    <a href="#" data-product-id="<?= $row['InventoryItemID'] ?>"
-                                        class="btn-product-icon btn-wishlist btn-expandable"><span>add to
-                                            wishlist</span></a>
-
-                                    <a href="<?= $p->get_image($row['InventoryItemID']) ?>"
-                                        class="btn-product-icon btn-quickview" title="Quick view"><span>Quick
-                                            view</span></a>
-                                </div><!-- End .product-action-vertical -->
-
-                                <div class="product-action">
-                                    <a href="#" product-info="<?= $row['InventoryItemID'] ?>"
-                                        class="submit-cart btn-product btn-cart" title="Add to cart"><span>add to
-                                            cart</span></a>
-                                </div><!-- End .product-action -->
-                            </figure><!-- End .product-media -->
-
-                            <div class="product-body">
-                                <div class="product-cat">
-                                    <a
-                                        href="category.php?catid=<?= $cat->get_category_by_id($row['category']) ?>"><?= $cat->get_parent_category_name($row['InventoryItemID']) ?></a>
-                                </div><!-- End .product-cat -->
-                                <h3 class="product-title truncate"><a
-                                        href="product-detail.php?itemid=<?= $row['InventoryItemID'] ?>"><?= $row['description'] ?></a>
-                                </h3><!-- End .product-title -->
-                                <?php if ($promotion->check_if_item_is_in_inventory_promotion($row['InventoryItemID'])) { ?>
-                                    <div class="product-price">
-                                        <span
-                                            class="new-price">N<?= " " . number_format($promotion->get_promoPrice_price($row['InventoryItemID']), 2) ?></span>
-                                        <span class="old-price">Was
-                                            N<?= " " . number_format($promotion->get_regular_price($row['InventoryItemID']), 2) ?></span>
-                                    </div><!-- End .product-price -->
-                                <?php } else { ?>
-                                    <div class="product-price">
-                                        <span class="new-price">N<?= " " . number_format($row['cost'], 2) ?></span>
-                                    </div><!-- End .product-price -->
-                                <?php } ?>
-                                <div class="ratings-container">
-                                    <div class="ratings">
-                                        <div class="ratings-val"
-                                            style="width: <?= $Orvi->get_rating_($row['InventoryItemID']) ?>%"></div>
-                                        <!-- End .ratings-val -->
-                                    </div><!-- End .ratings -->
-                                    <span class="ratings-text">(
-                                        <?= $Orvi->get_rating_review_number($row['InventoryItemID']); ?> Reviews )</span>
-                                </div><!-- End .rating-container -->
-                            </div><!-- End .product-body -->
-                            <div class="product-image-gallery">
-                                <?php $p_obj = new ProductItem();
-                                $stmt = $p_obj->get_other_images_of_item_in_inventory_not_1($row['InventoryItemID']);
-
-                                if ($stmt != null) {
-                                    $c = 1;
-                                    $i = $row['InventoryItemID'];
-                                    while ($r = $stmt->fetch()) {
-                                        if ($c == 4)
-                                            break;
-                                        $c++; ?>
-
-                                        <a class="product-gallery-item" href="#" data-image="<?= $r['image_path'] ?>"
-                                            data-zoom-image="<?= $r['image_path'] ?>">
-                                            <?php $img = "products/product-$pid/product-$pid-image/inventory-$pid-$i/resized/" . $r['image_name']; ?>
-                                            <img src="<?= $img ?>" alt="product side" />
-
-                                        </a>
-                                    <?php }
-                                }
-                                ?>
-
-                            </div>
-                        </div><!-- End .product -->
-
-                    <?php } ?>
-
-
-
-
-                </div><!-- .End .tab-pane -->
-
-
-            </div><!-- End .owl-carousel -->
-
-            <div class="mb-3"></div><!-- End .mb-3 -->
-
-            <div class="container electronics">
-                <div class="heading heading-flex heading-border mb-3" style="padding-bottom: 15px;">
-                    <div class="heading-left">
-                        <h2 class="title">Electronics</h2><!-- End .title -->
-                    </div><!-- End .heading-left -->
-
-                </div><!-- End .heading -->
-
-
-                <div class="flexbox" style="width: 100%;" id="elec-new-tab" role="tabpanel"
-                    aria-labelledby="elec-new-link">
-
-
-                    <?php
-                    $sql = "SELECT * from productitem left join inventoryitem on productitem.productID = inventoryitem.productItemID where productitem.category in (select `cat_id` from category_new  where JSON_UNQUOTE(JSON_EXTRACT(json_, '$.roots')) = 'ELECTRONICS') ORDER BY RAND() limit 14";
-                    $result = $mysqli->query($sql);
-                    $getallproduct = 4;
-
-                    while ($row = mysqli_fetch_array($result)) { ?>
-                        <div class="product" style="max-width: 220px; margin: auto;">
-                            <figure class="product-media">
-                                <?php if ($promotion->check_if_item_is_in_promotion($product_obj->get_product_id($row['InventoryItemID'])) != null) { ?>
-                                    <span class="product-label label-sale">Sale</span>
-                                    <?php
-                                }
-                                if (in_array($product_obj->get_product_id($row['InventoryItemID']), $product_obj->get_all_product_items_that_are_less_than_one_month())) { ?>
-                                    <span class="product-label label-new">New</span>
-                                <?php } ?>
-                                <a href="product-detail.php?itemid=<?= $row['InventoryItemID'] ?>">
-                                    <?php $pid = $product_obj->get_product_id($row['InventoryItemID']);
-                                    if ($product_obj->check_dirtory_resized_600($pid, $row['InventoryItemID'])) {
-
-                                        $i = $row['InventoryItemID'];
-                                        $pi = glob("products/product-$pid/product-$pid-image/inventory-$pid-$i/resized_600/" . '*.{jpg,gif}', GLOB_BRACE);
-                                        $img = $pi[0];
-                                    } else {
-                                        $img = $p->get_image($row['InventoryItemID']);
-                                    }
-                                    ?>
-                                    <img src="<?= $img ?>" alt="Product image" class="product-image">
-                                </a>
-
-
-                                <div class="product-action-vertical">
-                                    <a href="#" data-product-id="<?= $row['InventoryItemID'] ?>"
-                                        class="btn-product-icon btn-wishlist btn-expandable"><span>add to
-                                            wishlist</span></a>
-
-                                    <a href="<?= $p->get_image($row['InventoryItemID']) ?>"
-                                        class="btn-product-icon btn-quickview" title="Quick view"><span>Quick
-                                            view</span></a>
-                                </div><!-- End .product-action-vertical -->
-
-                                <div class="product-action">
-                                    <a href="#" product-info="<?= $row['InventoryItemID'] ?>"
-                                        class="submit-cart btn-product btn-cart" title="Add to cart"><span>add to
-                                            cart</span></a>
-                                </div><!-- End .product-action -->
-                            </figure><!-- End .product-media -->
-
-                            <div class="product-body">
-                                <div class="product-cat">
-                                    <a
-                                        href="category.php?catid=<?= $cat->get_category_by_id($row['category']) ?>"><?= $cat->get_parent_category_name($row['InventoryItemID']) ?></a>
-                                </div><!-- End .product-cat -->
-                                <h3 class="product-title truncate"><a
-                                        href="product-detail.php?itemid=<?= $row['InventoryItemID'] ?>"><?= $row['description'] ?></a>
-                                </h3><!-- End .product-title -->
-                                <?php if ($promotion->check_if_item_is_in_inventory_promotion($row['InventoryItemID'])) { ?>
-                                    <div class="product-price">
-                                        <span
-                                            class="new-price">N<?= " " . number_format($promotion->get_promoPrice_price($row['InventoryItemID']), 2) ?></span>
-                                        <span class="old-price">Was
-                                            N<?= " " . number_format($promotion->get_regular_price($row['InventoryItemID']), 2) ?></span>
-                                    </div><!-- End .product-price -->
-                                <?php } else { ?>
-                                    <div class="product-price">
-                                        <span class="new-price">N<?= " " . number_format($row['cost'], 2) ?></span>
-                                    </div><!-- End .product-price -->
-                                <?php } ?>
-                                <div class="ratings-container">
-                                    <div class="ratings">
-                                        <div class="ratings-val"
-                                            style="width: <?= $Orvi->get_rating_($row['InventoryItemID']) ?>%"></div>
-                                        <!-- End .ratings-val -->
-                                    </div><!-- End .ratings -->
-                                    <span class="ratings-text">(
-                                        <?= $Orvi->get_rating_review_number($row['InventoryItemID']); ?> Reviews )</span>
-                                </div><!-- End .rating-container -->
-                            </div><!-- End .product-body -->
-                            <div class="product-image-gallery">
-                                <?php $p_obj = new ProductItem();
-                                $stmt = $p_obj->get_other_images_of_item_in_inventory_not_1($row['InventoryItemID']);
-
-                                if ($stmt != null) {
-                                    $c = 1;
-                                    $i = $row['InventoryItemID'];
-                                    while ($r = $stmt->fetch()) {
-                                        if ($c == 4)
-                                            break;
-                                        $c++; ?>
-
-                                        <a class="product-gallery-item" href="#" data-image="<?= $r['image_path'] ?>"
-                                            data-zoom-image="<?= $r['image_path'] ?>">
-                                            <?php $img = "products/product-$pid/product-$pid-image/inventory-$pid-$i/resized/" . $r['image_name']; ?>
-                                            <img src="<?= $img ?>" alt="product side" />
-
-                                        </a>
-                                    <?php }
-                                }
-                                ?>
-
-                            </div>
-                        </div><!-- End .product -->
-
-                    <?php } ?>
-
-
-
-
-                </div><!-- .End .tab-pane -->
-
-
-            </div><!-- End .owl-carousel -->
-
-            <div class="mb-3"></div><!-- End .mb-3 -->
-
-
-
-            <div class="mb-1"></div><!-- End .mb-1 -->
-
-
-
-
-
-            <div class="container clothing ">
-
-                <div class="container electronics">
-                    <div class="heading heading-flex heading-border mb-3">
-                        <div class="heading-left">
-                            <h2 class="title">Drinks</h2><!-- End .title -->
-                        </div><!-- End .heading-left -->
-                        <div class="heading-right">
-                            <ul class="nav nav-pills nav-border-anim justify-content-center" role="tablist">
-                                <li class="nav-item">
-                                    <a class="nav-link active" id="clot-new-link" data-toggle="tab" href="#clot-new-tab"
-                                        role="tab" aria-controls="clot-new-tab" aria-selected="true">ALL</a>
-                                </li>
-
-                            </ul>
-                        </div><!-- End .heading-right -->
-                    </div><!-- End .heading -->
-
-
-                    <div class="flexbox" style="width: 100%;" id="elec-new-tab" role="tabpanel"
-                        aria-labelledby="elec-new-link">
-
-
-                        <?php
-                        $sql = "SELECT * from productitem left join inventoryitem on productitem.productID = inventoryitem.productItemID where productitem.category in (select `cat_id` from category_new where JSON_UNQUOTE(JSON_EXTRACT(json_, '$.roots')) = 'DRINKS') ORDER BY RAND() limit 14;";
-                        $result = $mysqli->query($sql);
-                        $getallproduct = 4;
-
-                        while ($row = mysqli_fetch_array($result)) { ?>
-                            <div class="product" style="max-width: 220px; margin: auto;">
-                                <figure class="product-media">
-                                    <?php if ($promotion->check_if_item_is_in_promotion($product_obj->get_product_id($row['InventoryItemID'])) != null) { ?>
-                                        <span class="product-label label-sale">Sale</span>
-                                        <?php
-                                    }
-                                    if (in_array($product_obj->get_product_id($row['InventoryItemID']), $product_obj->get_all_product_items_that_are_less_than_one_month())) { ?>
-                                        <span class="product-label label-new">New</span>
-                                    <?php } ?>
-                                    <a href="product-detail.php?itemid=<?= $row['InventoryItemID'] ?>">
-                                        <?php $pid = $product_obj->get_product_id($row['InventoryItemID']);
-                                        if ($product_obj->check_dirtory_resized_600($pid, $row['InventoryItemID'])) {
-
-                                            $i = $row['InventoryItemID'];
-                                            $pi = glob("products/product-$pid/product-$pid-image/inventory-$pid-$i/resized_600/" . '*.{jpg,gif}', GLOB_BRACE);
-                                            $img = $pi[0];
-                                        } else {
-                                            $img = $p->get_image($row['InventoryItemID']);
-                                        }
-                                        ?>
-                                        <img src="<?= $img ?>" alt="Product image" class="product-image">
-                                    </a>
-
-
-                                    <div class="product-action-vertical">
-                                        <a href="#" data-product-id="<?= $row['InventoryItemID'] ?>"
-                                            class="btn-product-icon btn-wishlist btn-expandable"><span>add to
-                                                wishlist</span></a>
-
-                                        <a href="<?= $p->get_image($row['InventoryItemID']) ?>"
-                                            class="btn-product-icon btn-quickview" title="Quick view"><span>Quick
-                                                view</span></a>
-                                    </div><!-- End .product-action-vertical -->
-
-                                    <div class="product-action">
-                                        <a href="#" product-info="<?= $row['InventoryItemID'] ?>"
-                                            class="submit-cart btn-product btn-cart" title="Add to cart"><span>add to
-                                                cart</span></a>
-                                    </div><!-- End .product-action -->
-                                </figure><!-- End .product-media -->
-
-                                <div class="product-body">
-                                    <div class="product-cat">
-                                        <a
-                                            href="category.php?catid=<?= $cat->get_category_by_id($row['category']) ?>"><?= $cat->get_parent_category_name($row['InventoryItemID']) ?></a>
-                                    </div><!-- End .product-cat -->
-                                    <h3 class="product-title truncate"><a
-                                            href="product-detail.php?itemid=<?= $row['InventoryItemID'] ?>"><?= $row['description'] ?></a>
-                                    </h3><!-- End .product-title -->
-                                    <?php if ($promotion->check_if_item_is_in_inventory_promotion($row['InventoryItemID'])) { ?>
-                                        <div class="product-price">
-                                            <span
-                                                class="new-price">N<?= " " . number_format($promotion->get_promoPrice_price($row['InventoryItemID']), 2) ?></span>
-                                            <span class="old-price">Was
-                                                N<?= " " . number_format($promotion->get_regular_price($row['InventoryItemID']), 2) ?></span>
-                                        </div><!-- End .product-price -->
-                                    <?php } else { ?>
-                                        <div class="product-price">
-                                            <span class="new-price">N<?= " " . number_format($row['cost'], 2) ?></span>
-                                        </div><!-- End .product-price -->
-                                    <?php } ?>
-                                    <div class="ratings-container">
-                                        <div class="ratings">
-                                            <div class="ratings-val"
-                                                style="width: <?= $Orvi->get_rating_($row['InventoryItemID']) ?>%"></div>
-                                            <!-- End .ratings-val -->
-                                        </div><!-- End .ratings -->
-                                        <span class="ratings-text">(
-                                            <?= $Orvi->get_rating_review_number($row['InventoryItemID']); ?> Reviews
-                                            )</span>
-                                    </div><!-- End .rating-container -->
-                                </div><!-- End .product-body -->
-                                <div class="product-image-gallery">
-                                    <?php $p_obj = new ProductItem();
-                                    $stmt = $p_obj->get_other_images_of_item_in_inventory_not_1($row['InventoryItemID']);
-
-                                    if ($stmt != null) {
-                                        $c = 1;
-                                        $i = $row['InventoryItemID'];
-                                        while ($r = $stmt->fetch()) {
-                                            if ($c == 4)
-                                                break;
-                                            $c++; ?>
-
-                                            <a class="product-gallery-item" href="#" data-image="<?= $r['image_path'] ?>"
-                                                data-zoom-image="<?= $r['image_path'] ?>">
-                                                <?php $img = "products/product-$pid/product-$pid-image/inventory-$pid-$i/resized/" . $r['image_name']; ?>
-                                                <img src="<?= $img ?>" alt="product side" />
-
-                                            </a>
-                                        <?php }
-                                    }
-                                    ?>
-
-                                </div>
-                            </div><!-- End .product -->
-
-                        <?php } ?>
-
-
-
-
-                    </div><!-- .End .tab-pane -->
-
-
-                </div><!-- End .owl-carousel -->
-            </div><!-- End .container -->
-
-            <div class="mb-3"></div><!-- End .mb-3 -->
-
-            <div class="container">
-                <h2 class="title title-border mb-5">Shop by Brands</h2><!-- End .title -->
-                <div class="owl-carousel mb-5 owl-simple" data-toggle="owl" data-owl-options='{
-                        "nav": false, 
-                        "dots": true,
-                        "margin": 30,
-                        "loop": false,
-                        "responsive": {
-                            "0": {
-                                "items":2
-                            },
-                            "420": {
-                                "items":3
-                            },
-                            "600": {
-                                "items":4
-                            },
-                            "900": {
-                                "items":5
-                            },
-                            "1024": {
-                                "items":6
-                            },
-                            "1280": {
-                                "items":6,
-                                "nav": true,
-                                "dots": false
-                            }
+                                </div><!-- End Col -->
+                                <?php
+                            } // end while
+                        } else {
+                            echo '<div class="col-12"><p class="text-info text-center">No electronics products found matching the criteria.</p></div>';
                         }
-                    }'>
+                    } catch (PDOException $e) {
+                        error_log("Error fetching electronics products: " . $e->getMessage());
+                        echo '<div class="col-12"><p class="text-danger text-center">Could not load electronics products at this time.</p></div>';
+                    }
+                    ?>
+                </div><!-- End .row -->
+                <div class="text-center mt-3">
+                    <?php // Link to the main Electronics category page ?>
+                    <a href="category.php?catid=ELECTRONICS" <?php // Link still goes to the top-level Electronics category ?>
+                        class="btn btn-outline-primary-2"><span>View More Electronics</span><i
+                            class="icon-long-arrow-right"></i></a>
+                </div>
+            </div>
+            <!-- ========================= ELECTRONICS PRODUCTS END ========================= -->
 
-                    <?php
-                    $sql = "SELECT * FROM `brand` WHERE CHAR_LENGTH(`brand_logo`) > 0;";
-                    $result = $pdo->query($sql); // Use $pdo here
-                    while ($row = $result->fetch(PDO::FETCH_ASSOC)) { // Corrected line: Use fetch(PDO::FETCH_ASSOC)
-                        ?>
-                        <a href="#" class="brand">
-                            <img src="brand/<?= $row['brand_logo'] ?>" alt="<?= $row['Name'] ?>">
-                        </a>
-                    <?php } ?>
-                </div><!-- End .owl-carousel -->
-            </div><!-- End .container -->
 
-            <div class="cta cta-horizontal cta-horizontal-box bg-primary">
-                <div class="container">
-                    <div class="row align-items-center">
-                        <div class="col-2xl-5col">
-                            <h3 class="cta-title text-white">Join Our Newsletter</h3><!-- End .cta-title -->
-                            <p class="cta-desc text-white">Subcribe to get information about products and coupons</p>
-                            <!-- End .cta-desc -->
-                        </div><!-- End .col-lg-5 -->
-
-                        <div class="col-3xl-5col">
-                            <form action="newslatter.php" method="POST">
-                                <div class="input-group">
-                                    <input type="email" name="newsletter" class="form-control form-control-white"
-                                        placeholder="Enter your Email Address" aria-label="Email Adress" required>
-                                    <div class="input-group-append">
-                                        <button class="btn btn-outline-white-2" type="submit"><span>Subscribe</span><i
-                                                class="icon-long-arrow-right"></i></button>
-                                    </div><!-- .End .input-group-append -->
-                                </div><!-- .End .input-group -->
-                            </form>
-                        </div><!-- End .col-lg-7 -->
-                    </div><!-- End .row -->
-                </div><!-- End .container -->
-            </div><!-- End .cta -->
 
 
         </main><!-- End .main -->
 
         <footer class="footer footer-2">
+            <?php /* Icon boxes can be kept if desired, ensure 4 for alignment */ ?>
             <div class="icon-boxes-container">
                 <div class="container">
                     <div class="row">
                         <div class="col-sm-6 col-lg-3">
-                            <div class="icon-box icon-box-side">
-                                <span class="icon-box-icon">
-                                    <i class="icon-rocket"></i>
-                                </span>
-
+                            <div class="icon-box icon-box-side"> <span class="icon-box-icon"><i
+                                        class="icon-rocket"></i></span>
                                 <div class="icon-box-content">
-                                    <h3 class="icon-box-title">Free Shipping</h3><!-- End .icon-box-title -->
-                                    <p>Orders 100K or more</p>
-                                </div><!-- End .icon-box-content -->
-                            </div><!-- End .icon-box -->
-                        </div><!-- End .col-sm-6 col-lg-3 -->
-
+                                    <h3 class="icon-box-title">Free Shipping</h3>
+                                    <p>Orders 100K+</p>
+                                </div>
+                            </div>
+                        </div>
                         <div class="col-sm-6 col-lg-3">
-                            <div class="icon-box icon-box-side">
-                                <span class="icon-box-icon">
-                                    <i class="icon-rotate-left"></i>
-                                </span>
-
+                            <div class="icon-box icon-box-side"> <span class="icon-box-icon"><i
+                                        class="icon-rotate-left"></i></span>
                                 <div class="icon-box-content">
-                                    <h3 class="icon-box-title">Free Returns</h3><!-- End .icon-box-title -->
+                                    <h3 class="icon-box-title">Free Returns</h3>
                                     <p>Within 10 days</p>
-                                </div><!-- End .icon-box-content -->
-                            </div><!-- End .icon-box -->
-                        </div><!-- End .col-sm-6 col-lg-3 -->
-
-
-
+                                </div>
+                            </div>
+                        </div>
                         <div class="col-sm-6 col-lg-3">
-                            <div class="icon-box icon-box-side">
-                                <span class="icon-box-icon">
-                                    <i class="icon-life-ring"></i>
-                                </span>
-
+                            <div class="icon-box icon-box-side"> <span class="icon-box-icon"><i
+                                        class="icon-life-ring"></i></span>
                                 <div class="icon-box-content">
-                                    <h3 class="icon-box-title">We Support</h3><!-- End .icon-box-title -->
-                                    <p>24/7 amazing services</p>
-                                </div><!-- End .icon-box-content -->
-                            </div><!-- End .icon-box -->
-                        </div><!-- End .col-sm-6 col-lg-3 -->
-                    </div><!-- End .row -->
-                </div><!-- End .container -->
-            </div><!-- End .icon-boxes-container -->
-
+                                    <h3 class="icon-box-title">We Support</h3>
+                                    <p>24/7 services</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="icon-box icon-box-side"> <span class="icon-box-icon"><i
+                                        class="icon-secure-payment"></i></span>
+                                <div class="icon-box-content">
+                                    <h3 class="icon-box-title">Secure Payment</h3>
+                                    <p>100% secure</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <?php include "footer.php"; ?>
-
-
         </footer><!-- End .footer -->
     </div><!-- End .page-wrapper -->
     <button id="scroll-top" title="Back to Top"><i class="icon-arrow-up"></i></button>
 
     <!-- Mobile Menu -->
-    <div class="mobile-menu-overlay"></div><!-- End .mobil-menu-overlay -->
-
-    <?php include "mobile-menue-index-page.php"; ?>
+    <div class="mobile-menu-overlay"></div>
+    <?php include "mobile-menue-index-page.php"; // Or the standard mobile-menue.php ?>
     <!-- Sign in / Register Modal -->
     <?php include "login-modal.php"; ?>
 
+    <?php include "jsfile.php"; ?>
 
+    <!-- Add to Cart / Wishlist AJAX Script -->
+    <script>
+        $(document).ready(function () {
+            // Add to Cart Button Handler
+            $('.page-wrapper').on('click', '.submit-cart', function (e) {
+                e.preventDefault();
+                var $button = $(this);
+                var inventoryItemId = $button.attr('product-info');
+                if (!inventoryItemId || $button.prop('disabled')) return;
 
+                $button.prop('disabled', true).find('span').text('Adding...');
+                $.ajax({
+                    type: "POST", url: 'cart.php',
+                    data: { inventory_product_id: inventoryItemId, qty: 1 },
+                    dataType: 'json',
+                    success: function (response) {
+                        if (response && response.success) {
+                            if (typeof response.cartCount !== 'undefined') {
+                                $('.cart-count').text(response.cartCount);
+                                $('.cart-dropdown > a').addClass('cart-updated-animation');
+                                setTimeout(function () { $('.cart-dropdown > a').removeClass('cart-updated-animation'); }, 1000);
+                            }
+                            $button.find('span').text('Added!');
+                            setTimeout(function () { $button.prop('disabled', false).find('span').text('add to cart'); }, 1500);
+                        } else {
+                            alert(response.message || "Could not add item.");
+                            $button.prop('disabled', false).find('span').text('add to cart');
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        console.error("Add to Cart AJAX Error:", status, error, xhr.responseText);
+                        alert("Error adding item. Please try again.");
+                        $button.prop('disabled', false).find('span').text('add to cart');
+                    }
+                });
+            });
 
+            // Wishlist Button Handler
+            $('.page-wrapper').on('click', '.btn-wishlist', function (e) {
+                e.preventDefault();
+                var $button = $(this);
+                var productId = $button.data('product-id');
+                if (!productId || $button.prop('disabled') || $button.hasClass('added-to-wishlist')) return;
 
-
+                $button.prop('disabled', true).addClass('load-more-loading').find('span').text('Adding...');
+                $.ajax({
+                    type: 'POST', url: 'add_to_wishlist.php',
+                    data: { product_id: productId }, // Ensure backend expects 'product_id'
+                    dataType: 'json',
+                    success: function (response) {
+                        if (response && response.success) {
+                            if (typeof response.wishlistCount !== 'undefined') {
+                                $('.wishlist-count').text(response.wishlistCount);
+                            }
+                            $button.removeClass('load-more-loading').addClass('added-to-wishlist')
+                                .prop('disabled', false).attr('title', 'In Wishlist').find('span').text('In Wishlist');
+                        } else {
+                            alert(response.message || 'Could not add item.');
+                            $button.removeClass('load-more-loading').prop('disabled', false).find('span').text('add to wishlist');
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        console.error("Wishlist AJAX Error:", status, error);
+                        alert('Error adding to wishlist.');
+                        $button.removeClass('load-more-loading').prop('disabled', false).find('span').text('add to wishlist');
+                    }
+                });
+            });
+        });
+    </script>
 
 </body>
-<?php include "jsfile.php"; ?>
-
-<!-- molla/index-13.html  22 Nov 2019 09:59:31 GMT -->
 
 </html>

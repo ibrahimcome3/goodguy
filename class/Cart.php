@@ -115,14 +115,85 @@ class Cart extends Promotion
     return $cartData;
   }
 
-  public function calculateCartTotal($cartItems)
+
+  public function getCartDetails(): array
   {
-    $total = 0;
-    foreach ($cartItems as $cartItem) {
-      $total += $cartItem['quantity'] * $cartItem['cost'];
+    if (!isset($_SESSION['cart']) || empty($_SESSION['cart'])) {
+      return [];
+    }
+
+    // 1. Create lookup map for quantities and collect unique IDs
+    $itemQuantities = [];
+    $inventoryItemIds = [];
+    foreach ($_SESSION['cart'] as $item) {
+      if (!isset($item['inventory_product_id']) || !isset($item['quantity']))
+        continue;
+      $id = (int) $item['inventory_product_id'];
+      $qty = (int) $item['quantity'];
+      if ($id > 0 && $qty > 0) {
+        $itemQuantities[$id] = ($itemQuantities[$id] ?? 0) + $qty;
+        $inventoryItemIds[$id] = $id; // Use ID as key for uniqueness
+      }
+    }
+
+    if (empty($inventoryItemIds))
+      return [];
+
+    // 2. Fetch product data efficiently
+    // *** SELECT ONLY NEEDED COLUMNS, including image path if available ***
+    // *** Adjust 'image_path' column name if different ***
+    $columns = "InventoryItemID, description, cost, image_path"; // Add other needed columns
+    $placeholders = implode(',', array_fill(0, count($inventoryItemIds), '?'));
+    $sql = "SELECT {$columns} FROM inventoryitem WHERE InventoryItemID IN ($placeholders)";
+
+    try {
+      $stmt = $this->pdo->prepare($sql);
+      $stmt->execute(array_values($inventoryItemIds));
+      $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+      error_log("Database error fetching cart item details: " . $e->getMessage());
+      return [];
+    }
+
+    // 3. Combine data, apply promotions, calculate totals
+    $cartData = [];
+    foreach ($products as $product) {
+      $id = $product['InventoryItemID'];
+      $quantity = $itemQuantities[$id] ?? 0;
+
+      if ($quantity > 0) {
+        $unitCost = $product['cost'];
+        // Apply promotion if applicable
+        if ($this->promotion->check_if_item_is_in_inventory_promotion($id)) {
+          $unitCost = $this->promotion->get_promoPrice_price($id);
+        }
+
+        $cartData[$id] = [
+          'product' => $product, // Contains ID, description, original cost, image_path, etc.
+          'quantity' => $quantity,
+          'cost' => $unitCost, // Unit cost after potential promotion
+          'line_total' => $unitCost * $quantity
+        ];
+      }
+    }
+    return $cartData;
+  }
+
+  /**
+   * Calculates the total value of items in the cart.
+   *
+   * @param array $cartDetails The array returned by getCartDetails().
+   * @return float The total cart value.
+   */
+  public function calculateCartTotal(array $cartDetails): float
+  {
+    $total = 0.0;
+    foreach ($cartDetails as $item) {
+      $total += $item['line_total'];
     }
     return $total;
   }
+
 
 }
 

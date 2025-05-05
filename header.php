@@ -79,7 +79,7 @@ session_start();
 
                     <div class="dropdown cart-dropdown">
                         <!--<a href="cart_.php" class="dropdown-toggle" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-display="static">-->
-                        <a href="cart_.php" class="dropdown-toggle" role="button" data-display="static">
+                        <a href="cart.php" class="dropdown-toggle" role="button" data-display="static">
                             <i class="icon-shopping-cart"></i>
                             <span class="cart-count">0</span>
                             <span class="cart-txt">Cart</span>
