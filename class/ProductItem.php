@@ -1,20 +1,19 @@
 <?php
-require_once "Connn.php";
-class ProductItem extends Connn
+
+class ProductItem
 {
     private $timestamp;
-    public $dbc;
+    protected $pdo; // Property to hold the PDO connection
 
 
-    function __construct()
+    function __construct(PDO $pdo) // Accept PDO connection in constructor
     {
-        parent::__construct();
+        $this->pdo = $pdo; // Assign the passed PDO connection
         $defaultTimeZone = 'UTC';
         date_default_timezone_set($defaultTimeZone);
         $this->timestamp = date('Y-m-d');
-        $this->dbc = $this->getConnection();
-
     }
+
 
     function get_image_600_199($ivid)
     {
@@ -31,17 +30,17 @@ class ProductItem extends Connn
 
     function add_product()
     {
-        $pdo = $this->dbc;
+
+        // $pdo = $this->pdo; // Not strictly necessary if using $this->pdo directly
         $data = ['description_' => 'Heinz', 'date_added_' => $this->timestamp, 'vendor_' => 'lm', 'Brand_' => 'Heinz',];
         $sql = "INSERT INTO `productitem`(`description`, `date_added`, `vendor`, `Brand`) VALUES (:description_, :date_added_, :vendor_, :Brand_)";
-        $stmt = $pdo->prepare($sql);
+        $stmt = $this->pdo->prepare($sql);
         $stmt->execute($data);
     }
 
     function get_products()
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->query("select * from productitem");
+        $stmt = $this->pdo->query("select * from productitem");
         while ($row = $stmt->fetch()) {
             echo $row['description'] . "<br />\n";
         }
@@ -100,8 +99,7 @@ class ProductItem extends Connn
 
     function get_product_id($inventory_item_id)
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->prepare("select productItemID from inventoryitem where `InventoryItemID`  = ?");
+        $stmt = $this->pdo->prepare("select productItemID from inventoryitem where `InventoryItemID`  = ?");
         $stmt->execute([$inventory_item_id]);
         $row = $stmt->fetch();
         if ($stmt->rowCount() > 0)
@@ -182,8 +180,7 @@ class ProductItem extends Connn
 
     function get_image($inventory_item_id)
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->prepare("select * from inventory_item_image where inventory_item_id = ? and `is_primary` = 1");
+        $stmt = $this->pdo->prepare("select * from inventory_item_image where inventory_item_id = ? and `is_primary` = 1");
         $stmt->execute([$inventory_item_id]);
         $row = $stmt->fetch();
         if ($stmt->rowCount() > 0)
@@ -195,16 +192,14 @@ class ProductItem extends Connn
     }
     function getbrand()
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->query("SELECT brandID, Name FROM brand");
+        $stmt = $this->pdo->query("SELECT brandID, Name FROM brand");
         return $stmt;
     }
 
     function get_other_images_of_item_in_inventory($inventory_item_id)
     {
 
-        $pdo = $this->dbc;
-        $stmt = $pdo->prepare("select * from inventory_item_image where inventory_item_id = ? order by `is_primary` desc");
+        $stmt = $this->pdo->prepare("select * from inventory_item_image where inventory_item_id = ? order by `is_primary` desc");
         $stmt->execute([$inventory_item_id]);
         if ($stmt->rowCount() > 0)
             return $stmt;
@@ -215,8 +210,7 @@ class ProductItem extends Connn
     function get_other_images_of_item_in_inventory_not_1($inventory_item_id)
     {
 
-        $pdo = $this->dbc;
-        $stmt = $pdo->prepare("select * from inventory_item_image where inventory_item_id = ? order by `is_primary` desc LIMIT 18446744073709551615 OFFSET 1;");
+        $stmt = $this->pdo->prepare("select * from inventory_item_image where inventory_item_id = ? order by `is_primary` desc LIMIT 18446744073709551615 OFFSET 1;");
         $stmt->execute([$inventory_item_id]);
         if ($stmt->rowCount() > 0)
             return $stmt;
@@ -227,9 +221,8 @@ class ProductItem extends Connn
     function get_all_product_items_that_are_less_than_one_month()
     {
         $ar = array();
-        $pdo = $this->dbc;
         //$stmt = $pdo->prepare("SELECT * FROM productitem WHERE `date_added` > DATE_SUB(NOW(), INTERVAL 1 MONTH)");
-        $stmt = $pdo->prepare("SELECT * FROM inventoryitem WHERE `date_added` BETWEEN NOW() - INTERVAL 30 DAY AND NOW()");
+        $stmt = $this->pdo->prepare("SELECT * FROM inventoryitem WHERE `date_added` BETWEEN NOW() - INTERVAL 30 DAY AND NOW()");
         $stmt->execute();
         if ($stmt->rowCount() > 0) {
             while ($row = $stmt->fetch()) {
@@ -273,8 +266,7 @@ class ProductItem extends Connn
 
     function shipping_and_re_trun_rule($id)
     {
-        $pdo = $this->dbc;
-        $stmt = $pdo->prepare("SELECT * FROM `shipping_policy` WHERE `shipping_policy_id` = ?");
+        $stmt = $this->pdo->prepare("SELECT * FROM `shipping_policy` WHERE `shipping_policy_id` = ?");
         $stmt->execute([$id]);
         if ($stmt->rowCount() > 0) {
             $row = $stmt->fetch();
@@ -370,13 +362,12 @@ class ProductItem extends Connn
 
     function moveImageforProduct($target_file_name, $file, $last_id)
     {
-        $pdo = $this->dbc;
         if (move_uploaded_file($file["tmp_name"][0], $$target_file_name)) {
             convertImage1($$target_file_name, $$target_file_name, 100);
             $file_name = time();
             $sql = "INSERT INTO `product_images` (`p_imgeid`, `image`, `product_id`) VALUES (NULL, '$file_name', '$last_id');";
 
-            $result = $pdo->query($sql);
+            $result = $this->pdo->query($sql);
         }
 
 
@@ -411,7 +402,7 @@ class ProductItem extends Connn
                     $this->convertImage1($targetFile, $targetFile, 100);
 
                     $sql = "INSERT INTO `product_images` (`p_imgeid`, `image`, `product_id`) VALUES (NULL, ?, ?)";
-                    $stmt = $this->dbc->prepare($sql);
+                    $stmt = $this->pdo->prepare($sql);
 
                     if ($stmt->execute([$newFilename, $productId])) {
                         $uploadedImages[] = ["name" => $name, "path" => $targetFile];
@@ -534,7 +525,6 @@ class ProductItem extends Connn
     }
     function imageprocessorforproductInInventory($product_id, $inventory_item_id, $files)
     {
-        $pdo = $this->dbc;
 
         //Correct and simpler path construction
         $basePath = "../products/product-{$product_id}/inventory-{$product_id}-{$inventory_item_id}/";
@@ -580,7 +570,7 @@ class ProductItem extends Connn
     {
         $sql = "INSERT INTO `inventory_item_image` (`inventory_item_image_id`, `image_name`, `image_path`, `is_primary`, `inventory_item_id`) 
                 VALUES (NULL, ?, ?, ?, ?)";
-        $stmt = $this->dbc->prepare($sql);
+        $stmt = $this->pdo->prepare($sql);
         $isPrimary = ($isPrimary === 0) ? 0 : 1; //Ensure is_primary is 0 or 1
         $stmt->execute([$newFilename, $imagePath, $isPrimary, $inventoryItemId]);
         if (!$stmt) {
@@ -654,7 +644,6 @@ class ProductItem extends Connn
 
     function imageprocessorforproductInInventory1($product_item, $file, $i, $c = 0)
     {
-        $pdo = $this->dbc;
         $target_dir = "../products/product-" . $product_item . "/" . "product-" . $product_item . "-image/" . "inventory-" . $product_item . "-" . $last_id . "/";
         $target_dir_second = "../products/product-" . $product_item . "/" . "product-" . $product_item . "-image/" . "inventory-" . $product_item . "-" . $last_id . "/resized/";
         $target_dir_second_600 = "../products/product-" . $product_item . "/" . "product-" . $product_item . "-image/" . "inventory-" . $product_item . "-" . $last_id . "/resized_600/";
@@ -685,7 +674,7 @@ class ProductItem extends Connn
             } else {
                 $sql = "INSERT INTO `inventory_item_image` (`inventory_item_image_id`, `image_name`, `image_path`, `is_primary`, `inventory_item_id`) VALUES (NULL, '$inserted_file_name', '$new_out', '0', '$last_id');";
             }
-            $result = $pdo->query($sql);
+            $result = $this->pdo->query($sql);
             if ($result) {
                 // echo "The file " . htmlspecialchars(basename($file["name"][$i])) . " has been uploaded.<br>";
 
@@ -851,24 +840,23 @@ class ProductItem extends Connn
 
     function get_cover_image($inventory_item_id)
     {
-        $pdo = $this->dbc;
 
         // 1. Try to get the primary image (is_primary = 1)
-        $stmt = $pdo->prepare("SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ? AND is_primary = 1 LIMIT 1");
+        $stmt = $this->pdo->prepare("SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ? AND is_primary = 1 LIMIT 1");
         $stmt->execute([$inventory_item_id]);
         $row = $stmt->fetch();
 
         if ($row) {
-            return $row['image_path']; // Return the primary image path
+            return ltrim($row['image_path'], '.'); // Return the primary image path, remove leading dot if present
         }
 
         // 2. If no primary image, get the first image (any image)
-        $stmt = $pdo->prepare("SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ? LIMIT 1");
+        $stmt = $this->pdo->prepare("SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ? LIMIT 1");
         $stmt->execute([$inventory_item_id]);
         $row = $stmt->fetch();
 
         if ($row) {
-            return $row['image_path']; // Return the first image path
+            return ltrim($row['image_path'], '.'); // Return the first image path, remove leading dot if present
         }
 
         // 3. If no images found, return the default image path

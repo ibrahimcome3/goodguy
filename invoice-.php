@@ -4,7 +4,7 @@ require_once "class/invoice.php";
 require_once "class/Order.php";
 $invoice = new Invoice(82);
 $order = new Order(82);
-$p = new ProductItem();
+$p = new ProductItem($pdo);
 
 ?>
 <!DOCTYPE html>

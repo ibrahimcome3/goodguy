@@ -1,18 +1,22 @@
 <?php
+include "includes.php";
+// Ensure Composer's autoloader is included
+require_once __DIR__ . '/../vendor/autoload.php';
 
-require_once 'Connn.php';
-require_once "invoice.php";
-require_once "Order.php";
+// require_once "Order.php"; // Self-inclusion, likely not needed here
 require_once "ProductItem.php";
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
+use PHPMailer\PHPMailer\Exception;
 
 //$invoice = new Invoice(orderId: 78);
-$p = new ProductItem();
+$p = new ProductItem($pdo);
 class Order
 {
     public $user_id;
     private $order_id;
     private $order_date;
-    private $pdo; // Store the PDO connection here
+    public $pdo; // Store the PDO connection here
     public function __construct($pdo)
     {
 
@@ -286,7 +290,7 @@ class Order
     {
         $html = <<<HTML
     <div style="display: flex; align-items: center; justify-content: center; margin-top: 20px;">
-        <span><img src="assets/images/goodguy.svg" alt="goodguyng.com logo" style="width: 20px; margin-right: 5px;"></span> 
+        <span><img src="assets/images/payments.png" alt="goodguyng.com logo" style="width: 20px; margin-right: 5px;"></span> 
         <span style="font-size:0.8rem; color: #777;">Invoice powered by goodguy</span>
         
         
@@ -437,6 +441,31 @@ class Order
     }
     public function createOrder_($userId, $shippingAddressId, $paymentMethod, $subtotal, $shippingCost, $finalTotal, $cartItems)
     {
+        // Let's var_dump all the parameters here!
+        // echo "<pre>--- Dumping parameters for createOrder_ ---</pre>";
+        // echo "<pre>User ID: ";
+        // var_dump($userId);
+        // echo "</pre>";
+        // echo "<pre>Shipping Address ID: ";
+        // var_dump($shippingAddressId);
+        // echo "</pre>";
+        // echo "<pre>Payment Method: ";
+        // var_dump($paymentMethod);
+        // echo "</pre>";
+        // echo "<pre>Subtotal: ";
+        // var_dump($subtotal);
+        // echo "</pre>";
+        // echo "<pre>Shipping Cost: ";
+        // var_dump($shippingCost);
+        // echo "</pre>";
+        // echo "<pre>Final Total: ";
+        // var_dump($finalTotal);
+        // echo "</pre>";
+        // echo "<pre>Cart Items: ";
+        // var_dump($cartItems);
+        // echo "</pre>";
+        // echo "<pre>--- End of parameter dump ---</pre>";
+
         // Validate inputs (basic example)
         if ($userId <= 0 || $shippingAddressId <= 0 || empty($paymentMethod) || $finalTotal < 0 || empty($cartItems)) {
             error_log("Invalid parameters passed to createOrder.");
@@ -503,10 +532,12 @@ class Order
                             -- Add other placeholders
                          )";
             $stmtItems = $this->pdo->prepare($sqlItems);
-
+            // The var_dump and exit below were for debugging the statement preparation.
+            // They need to be removed for the loop to execute and insert items.
             foreach ($cartItems as $item) {
+
                 // Ensure item structure is correct (adjust keys if needed)
-                $productId = $item['InventoryItemID'] ?? null;
+                $productId = $item['product']['InventoryItemID'] ?? null;
                 $quantity = $item['quantity'] ?? 0;
                 // Use the final price (incl. promotion) stored in the cart item detail
                 $price = $item['cost'] ?? ($item['product']['cost'] ?? 0); // Adapt based on your cart item structure
@@ -579,15 +610,14 @@ class Order
     public function getOrderDetails($orderId)
     {
         // *** IMPORTANT: Add 'shipping_cost' to the SELECT list ***
-        $sql = "SELECT
-                    o.order_id, o.user_id, o.order_date_created, o.order_status,
+        $sql = "SELECT   o.order_id, o.`customer_id`, o.order_date_created, o.order_status,
                     o.order_shipping_address, o.payment_method,
                     o.order_subtotal, o.shipping_cost, o.order_total, -- Added shipping_cost
-                    u.email as customer_email, -- Example join for email
-                    CONCAT(u.first_name, ' ', u.last_name) as customer_name -- Example join for name
+                    u.`customer_email` as customer_email, -- Example join for email
+                    CONCAT(u.`customer_fname`, ' ', u.`customer_lname`) as customer_name -- Example join for name
                     -- Add/remove columns and joins as needed
                 FROM lm_orders o
-                LEFT JOIN users u ON o.user_id = u.user_id -- Example join to users table
+                LEFT JOIN customer u ON o.`customer_id` = u.`customer_id`-- Example join to users table
                 WHERE o.order_id = :order_id";
         try {
             $stmt = $this->pdo->prepare($sql);
@@ -600,12 +630,6 @@ class Order
         }
     }
 
-    public function updateOrderStatus($orderId, $status)
-    {
-        $pdo = $this->pdo;
-        $stmt = $pdo->prepare("UPDATE lm_orders SET lm_orders.order_status = ? WHERE order_id = ?");
-        return $stmt->execute([$status, $orderId]);
-    }
 
     public function getOrderShippingAddress($addressId)
     {
@@ -783,7 +807,317 @@ class Order
         }
     }
 
+    public function sendInvoiceEmail($orderId)
+    {
+        // 1. Fetch order details
+        $orderDetails = $this->getOrderDetails($orderId); // Assumes this method exists and returns comprehensive order data
+        if (!$orderDetails) {
+            error_log("sendInvoiceEmail: Could not fetch order details for order ID $orderId");
+            return false;
+        }
 
+        // 2. Fetch order items
+        $orderItems = $this->getOrderItems($orderId); // Assumes this method exists
+        if ($orderItems === false) {
+            error_log("sendInvoiceEmail: Could not fetch order items for order ID $orderId");
+            $orderItems = []; // Proceed with empty items or return false based on preference
+        }
+
+        // 3. Fetch customer details
+        // Ensure User class is available and $this->pdo is set in Order constructor
+        $userInstance = new User($this->pdo); // Or however you access User methods
+        $customerDetails = $userInstance->getUserById($orderDetails['customer_id']); // Assumes user_id is in orderDetails and User::getUserById exists
+
+        if (!$customerDetails || empty($customerDetails['customer_email'])) {
+            error_log("sendInvoiceEmail: Could not fetch customer email for user ID {$orderDetails['customer_id']}");
+            return false;
+        }
+        $customerEmail = $customerDetails['customer_email'];
+        $customerName = trim(($customerDetails['customer_fname'] ?? '') . ' ' . ($customerDetails['customer_lname'] ?? 'Customer'));
+        if (empty($customerName))
+            $customerName = 'Valued Customer';
+
+
+        // 4. Fetch shipping address details
+        $shippingAddress = null;
+        if (!empty($orderDetails['order_shipping_address'])) {
+            $shippingAddress = $this->getOrderShippingAddress($orderDetails['order_shipping_address']); // Assumes this method exists
+        }
+        $stateName = '';
+        if ($shippingAddress && !empty($orderDetails['order_shipping_address'])) {
+            // Assuming getShippingAddressStateName takes the address ID
+            $stateName = $this->getShippingAddressStateName((int) $orderDetails['order_shipping_address']);
+        }
+
+
+        // 5. Construct HTML Email
+        $subject = "Your Goodguy Order Confirmation - #" . $orderId;
+
+        // Basic inline styles are generally better for email compatibility
+        $body = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'></head><body style='font-family: Arial, sans-serif; line-height: 1.6; font-size: 16px; color: #333;'>";
+        $body .= "<div style='max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ddd;'>";
+        // Mobile-friendly stacked logo and site name
+        $body .= "<div style='text-align: center; margin-bottom: 20px;'>";
+        $body .= "<img src='cid:goodguyLogo' alt='Goodguy Logo' style='max-width: 50px; height: auto; display: block; margin-left: auto; margin-right: auto; margin-bottom: 5px;'>";
+        $body .= "<span style='font-size: 1.5em; font-weight: bold; color: #333; display: block; text-align: center;'>goodguyng.com</span>";
+        $body .= "</div>";
+        $body .= "<h2 style='color: #333;'>Thank you for your order, " . htmlspecialchars($customerName) . "!</h2>";
+        $body .= "<p>Your order #<strong>" . htmlspecialchars($orderId) . "</strong> has been successfully placed.</p>";
+        $body .= "<hr style='border: 0; border-top: 1px solid #eee;'>";
+
+        $body .= "<h3 style='color: #555;'>Order Summary:</h3>";
+        $body .= "<p><strong>Order Date:</strong> " . htmlspecialchars(date("F j, Y, g:i a", strtotime($orderDetails['order_date_created']))) . "</p>";
+        $body .= "<p><strong>Payment Method:</strong> " . htmlspecialchars(ucwords(str_replace('_', ' ', $orderDetails['payment_method']))) . "</p>";
+
+        if ($shippingAddress) {
+            $body .= "<h3 style='color: #555;'>Shipping Address:</h3>";
+            $body .= "<p style='margin:0;'>" . htmlspecialchars($shippingAddress['first_name'] . ' ' . $shippingAddress['last_name']) . "</p>";
+            $body .= "<p style='margin:0;'>" . htmlspecialchars($shippingAddress['address1']) . "</p>";
+            if (!empty($shippingAddress['address2'])) {
+                $body .= "<p style='margin:0;'>" . htmlspecialchars($shippingAddress['address2']) . "</p>";
+            }
+            $body .= "<p style='margin:0;'>" . htmlspecialchars($shippingAddress['city']) . ", " . htmlspecialchars($stateName) . " " . htmlspecialchars($shippingAddress['zip'] ?? '') . "</p>";
+            $body .= "<p style='margin:0;'>" . htmlspecialchars($shippingAddress['country']) . "</p>";
+        }
+        $body .= "<hr style='border: 0; border-top: 1px solid #eee; margin-top: 20px;'>";
+
+        $body .= "<h3 style='color: #555;'>Order Items:</h3>";
+        $body .= "<table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'><thead><tr>";
+        $body .= "<th style='border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f9f9f9;'>Product</th>";
+        $body .= "<th style='border: 1px solid #ddd; padding: 8px; text-align: center; background-color: #f9f9f9;'>Quantity</th>";
+        $body .= "<th style='border: 1px solid #ddd; padding: 8px; text-align: right; background-color: #f9f9f9;'>Price</th>";
+        $body .= "<th style='border: 1px solid #ddd; padding: 8px; text-align: right; background-color: #f9f9f9;'>Total</th>";
+        $body .= "</tr></thead><tbody>";
+
+        foreach ($orderItems as $item) {
+            // Ensure keys match what getOrderItems returns. Using 'quwantitiyofitem' due to its presence in context.
+            $quantity = (int) ($item['quwantitiyofitem'] ?? $item['quantity'] ?? 0); // Try to be flexible with quantity key
+            $price = (float) ($item['item_price'] ?? $item['cost'] ?? 0); // Try to be flexible with price key
+            $lineTotal = $price * $quantity;
+
+            $body .= "<tr>";
+            $body .= "<td style='border: 1px solid #ddd; padding: 8px;'>" . htmlspecialchars($item['description']) . "</td>";
+            $body .= "<td style='border: 1px solid #ddd; padding: 8px; text-align: center;'>" . htmlspecialchars($quantity) . "</td>";
+            $body .= "<td style='border: 1px solid #ddd; padding: 8px; text-align: right;'>&#8358;" . number_format($price, 2) . "</td>";
+            $body .= "<td style='border: 1px solid #ddd; padding: 8px; text-align: right;'>&#8358;" . number_format($lineTotal, 2) . "</td>";
+            $body .= "</tr>";
+        }
+        $body .= "</tbody></table>";
+
+        $body .= "<h3 style='color: #555;'>Order Totals:</h3>";
+        $body .= "<table style='width: 100%; max-width: 300px; margin-left: auto; border-collapse: collapse;'>";
+        $body .= "<tr><td style='padding: 8px; text-align: right;'>Subtotal:</td><td style='padding: 8px; text-align: right; font-weight: bold;'>&#8358;" . number_format($orderDetails['order_subtotal'], 2) . "</td></tr>";
+        $body .= "<tr><td style='padding: 8px; text-align: right;'>Shipping:</td><td style='padding: 8px; text-align: right; font-weight: bold;'>&#8358;" . number_format($orderDetails['shipping_cost'], 2) . "</td></tr>";
+        $body .= "<tr><td style='padding: 8px; text-align: right; font-weight: bold; border-top: 1px solid #ddd;'>Total:</td><td style='padding: 8px; text-align: right; font-weight: bold; border-top: 1px solid #ddd;'>&#8358;" . number_format($orderDetails['order_total'], 2) . "</td></tr>";
+        $body .= "</table>";
+
+        $body .= "<hr style='border: 0; border-top: 1px solid #eee; margin-top: 20px;'>";
+        $body .= "<p style='text-align: center; font-size: 0.9em; color: #777;'>Thank you for shopping with Goodguy!</p>";
+        $body .= "<p style='text-align: center; font-size: 0.9em; color: #777;'>If you have any questions, please contact our support.</p>";
+        $body .= "</div></body></html>";
+
+        // 6. Set Headers
+        $headers = "MIME-Version: 1.0" . "\r\n";
+        $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
+        // Replace with your actual "From" address and name
+        $headers .= 'From: Goodguy Store <noreply@yourdomain.com>' . "\r\n";
+        // Optional: Add Reply-To, Bcc, etc.
+        // $headers .= 'Reply-To: support@yourdomain.com' . "\r\n";
+
+        // 7. Send Email
+        if ($this->sendConfiguredEmail($customerEmail, $subject, $body)) {
+            error_log("Invoice email sent successfully for order ID $orderId to $customerEmail.");
+            return true;
+        } else {
+            $error = error_get_last();
+            $errorMessage = $error ? $error['message'] : 'Unknown mail error';
+            error_log("Failed to send invoice email for order ID $orderId to $customerEmail. Mailer error: " . $errorMessage);
+            return false;
+        }
+    }
+    private function sendConfiguredEmail(string $to, string $subject, string $htmlBody): bool
+    {
+        $mail = new PHPMailer(true);
+
+        try {
+            // Server settings
+            // $mail->SMTPDebug = SMTP::DEBUG_SERVER; // Enable verbose debug output for testing
+            $mail->isSMTP();
+            $mail->Host = 'smtp.hostinger.com';       // Your SMTP host
+            $mail->SMTPAuth = true;
+            $mail->Username = 'care@goodguyng.com';   // Your SMTP username
+            $mail->Password = 'Password1@';           // Your SMTP password
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS; // Enable implicit TLS encryption
+            $mail->Port = 465;                        // TCP port to connect to
+
+            // Use a local file path for embedding the logo
+            // This ensures it works correctly in production environments
+            $logoPath = __DIR__ . '/../assets/images/logo.png'; // Path to your local SVG logo
+            if (file_exists($logoPath)) {
+                $mail->addEmbeddedImage($logoPath, 'goodguyLogo', 'logo.png'); // Embed the SVG
+            }
+
+            // Recipients
+            $mail->setFrom('care@goodguyng.com', 'Goodguyng.com'); // Sender
+            $mail->addAddress($to); // Add a recipient
+
+            // Content
+            $mail->isHTML(true); // Set email format to HTML
+            $mail->Subject = $subject;
+            $mail->Body = $htmlBody;
+            // $mail->AltBody = 'This is the body in plain text for non-HTML mail clients'; // Optional
+
+            if ($mail->send()) {
+                return true;
+            } else {
+                // This branch is unlikely to be hit when exceptions are enabled in PHPMailer,
+                // as send() would typically throw an exception on failure.
+                // Added for explicit handling if send() were to return false without throwing.
+                error_log("Message could not be sent. Mailer Error: {$mail->ErrorInfo}. (send() returned false)");
+                return false;
+            }
+        } catch (Exception $e) {
+            // Log the detailed PHPMailer error
+            error_log("Message could not be sent. Mailer Error (exception): {$mail->ErrorInfo}. Exception: {$e->getMessage()}");
+            return false;
+        }
+    }
+
+
+    public function sendPaymentReceiptEmail($orderId)
+    {
+        // 1. Fetch order details
+        $orderDetails = $this->getOrderDetails($orderId);
+        if (!$orderDetails) {
+            error_log("sendPaymentReceiptEmail: Could not fetch order details for order ID $orderId");
+            return false;
+        }
+
+        // 2. Fetch order items
+        $orderItems = $this->getOrderItems($orderId);
+        if ($orderItems === false) {
+            error_log("sendPaymentReceiptEmail: Could not fetch order items for order ID $orderId");
+            $orderItems = [];
+        }
+
+        // 3. Fetch customer details
+        $userInstance = new User($this->pdo);
+        $customerDetails = $userInstance->getUserById($orderDetails['customer_id']);
+
+        if (!$customerDetails || empty($customerDetails['customer_email'])) { // Assuming email is customer_email from your User::getUserById
+            error_log("sendPaymentReceiptEmail: Could not fetch customer email for user ID {$orderDetails['customer_id']}");
+            return false;
+        }
+        $customerEmail = $customerDetails['customer_email'];
+        $customerName = trim(($customerDetails['customer_fname'] ?? '') . ' ' . ($customerDetails['customer_lname'] ?? 'Customer'));
+        if (empty($customerName))
+            $customerName = 'Valued Customer';
+
+        // 4. Fetch shipping address details (optional for receipt, but good for consistency)
+        $shippingAddress = null;
+        if (!empty($orderDetails['order_shipping_address'])) {
+            $shippingAddress = $this->getOrderShippingAddress($orderDetails['order_shipping_address']);
+        }
+        $stateName = '';
+        if ($shippingAddress && !empty($orderDetails['order_shipping_address'])) {
+            $stateName = $this->getShippingAddressStateName((int) $orderDetails['order_shipping_address']);
+        }
+
+        // 5. Construct HTML Email
+        $subject = "Your Goodguy Payment Receipt - Order #" . $orderId;
+
+        $body = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'></head><body style='font-family: Arial, sans-serif; line-height: 1.6; font-size: 16px; color: #333;'>";
+        $body .= "<div style='max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ddd;'>";
+        // Mobile-friendly stacked logo and site name
+        $body .= "<div style='text-align: center; margin-bottom: 20px;'>";
+        $body .= "<img src='cid:goodguyLogo' alt='Goodguy Logo' style='max-width: 50px; height: auto; display: block; margin-left: auto; margin-right: auto; margin-bottom: 5px;'>";
+        $body .= "<span style='font-size: 1.5em; font-weight: bold; color: #333; display: block; text-align: center;'>goodguyng.com</span>";
+        $body .= "</div>";
+        $body .= "<h2 style='color: #333;'>Thank you for your payment, " . htmlspecialchars($customerName) . "!</h2>";
+        $body .= "<p>Your payment for order #<strong>" . htmlspecialchars($orderId) . "</strong> has been successfully processed. Here is your receipt:</p>";
+        $body .= "<hr style='border: 0; border-top: 1px solid #eee;'>";
+
+        $body .= "<h3 style='color: #555;'>Order & Payment Details:</h3>";
+        $body .= "<p><strong>Order Date:</strong> " . htmlspecialchars(date("F j, Y, g:i a", strtotime($orderDetails['order_date_created']))) . "</p>";
+        $body .= "<p><strong>Payment Method:</strong> " . htmlspecialchars(ucwords(str_replace('_', ' ', $orderDetails['payment_method']))) . "</p>";
+        $body .= "<p><strong>Payment Status:</strong> Paid</p>"; // Assuming this is sent after successful payment
+
+        if ($shippingAddress) {
+            $body .= "<h3 style='color: #555;'>Shipping Address:</h3>";
+            $body .= "<p style='margin:0;'>" . htmlspecialchars($shippingAddress['first_name'] . ' ' . $shippingAddress['last_name']) . "</p>";
+            $body .= "<p style='margin:0;'>" . htmlspecialchars($shippingAddress['address1']) . "</p>";
+            if (!empty($shippingAddress['address2'])) {
+                $body .= "<p style='margin:0;'>" . htmlspecialchars($shippingAddress['address2']) . "</p>";
+            }
+            $body .= "<p style='margin:0;'>" . htmlspecialchars($shippingAddress['city']) . ", " . htmlspecialchars($stateName) . " " . htmlspecialchars($shippingAddress['zip'] ?? '') . "</p>";
+            $body .= "<p style='margin:0;'>" . htmlspecialchars($shippingAddress['country']) . "</p>";
+        }
+        $body .= "<hr style='border: 0; border-top: 1px solid #eee; margin-top: 20px;'>";
+
+        $body .= "<h3 style='color: #555;'>Items Purchased:</h3>";
+        $body .= "<table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'><thead><tr>";
+        $body .= "<th style='border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f9f9f9;'>Product</th>";
+        $body .= "<th style='border: 1px solid #ddd; padding: 8px; text-align: center; background-color: #f9f9f9;'>Quantity</th>";
+        $body .= "<th style='border: 1px solid #ddd; padding: 8px; text-align: right; background-color: #f9f9f9;'>Price</th>";
+        $body .= "<th style='border: 1px solid #ddd; padding: 8px; text-align: right; background-color: #f9f9f9;'>Total</th>";
+        $body .= "</tr></thead><tbody>";
+
+        foreach ($orderItems as $item) {
+            $quantity = (int) ($item['quwantitiyofitem'] ?? $item['quantity'] ?? 0);
+            $price = (float) ($item['item_price'] ?? $item['cost'] ?? 0);
+            $lineTotal = $price * $quantity;
+            $body .= "<tr>";
+            $body .= "<td style='border: 1px solid #ddd; padding: 8px;'>" . htmlspecialchars($item['description']) . "</td>";
+            $body .= "<td style='border: 1px solid #ddd; padding: 8px; text-align: center;'>" . htmlspecialchars($quantity) . "</td>";
+            $body .= "<td style='border: 1px solid #ddd; padding: 8px; text-align: right;'>&#8358;" . number_format($price, 2) . "</td>";
+            $body .= "<td style='border: 1px solid #ddd; padding: 8px; text-align: right;'>&#8358;" . number_format($lineTotal, 2) . "</td>";
+            $body .= "</tr>";
+        }
+        $body .= "</tbody></table>";
+
+        $body .= "<h3 style='color: #555;'>Payment Summary:</h3>";
+        $body .= "<table style='width: 100%; max-width: 300px; margin-left: auto; border-collapse: collapse;'>";
+        $body .= "<tr><td style='padding: 8px; text-align: right;'>Subtotal:</td><td style='padding: 8px; text-align: right; font-weight: bold;'>&#8358;" . number_format($orderDetails['order_subtotal'], 2) . "</td></tr>";
+        $body .= "<tr><td style='padding: 8px; text-align: right;'>Shipping:</td><td style='padding: 8px; text-align: right; font-weight: bold;'>&#8358;" . number_format($orderDetails['shipping_cost'], 2) . "</td></tr>";
+        $body .= "<tr><td style='padding: 8px; text-align: right; font-weight: bold; border-top: 1px solid #ddd;'>Total Paid:</td><td style='padding: 8px; text-align: right; font-weight: bold; border-top: 1px solid #ddd;'>&#8358;" . number_format($orderDetails['order_total'], 2) . "</td></tr>";
+        $body .= "</table>";
+
+        $body .= "<hr style='border: 0; border-top: 1px solid #eee; margin-top: 20px;'>";
+        $body .= "<p style='text-align: center; font-size: 0.9em; color: #777;'>Thank you for shopping with Goodguy!</p>";
+        $body .= "<p style='text-align: center; font-size: 0.9em; color: #777;'>If you have any questions, please contact our support.</p>";
+        $body .= "</div></body></html>";
+
+        // 6. Send Email using the configured helper
+        if ($this->sendConfiguredEmail($customerEmail, $subject, $body)) {
+            error_log("Payment receipt email sent successfully for order ID $orderId to $customerEmail.");
+            return true;
+        } else {
+            // Error already logged by sendConfiguredEmail
+            error_log("Failed to send payment receipt email for order ID $orderId to $customerEmail. (Called from sendPaymentReceiptEmail)");
+            return false;
+        }
+    }
+
+    public function updateOrderStatus($orderId, $newStatus)
+    {
+        // It's good practice to validate $newStatus against a list of allowed statuses
+        $allowedStatuses = ['pending', 'paid', 'on-hold', 'processing', 'shipped', 'completed', 'cancelled', 'failed'];
+        if (!in_array(strtolower($newStatus), $allowedStatuses)) {
+            error_log("updateOrderStatus: Invalid status '{$newStatus}' for order ID {$orderId}.");
+            return false;
+        }
+
+        $sql = "UPDATE lm_orders SET lm_orders.order_status = :status, order_date_updated = NOW() WHERE order_id = :order_id";
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindParam(':status', $newStatus, PDO::PARAM_STR);
+            $stmt->bindParam(':order_id', $orderId, PDO::PARAM_INT);
+            return $stmt->execute();
+        } catch (PDOException $e) {
+            error_log("Error updating order status for order ID {$orderId}: " . $e->getMessage());
+            return false;
+        }
+    }
 
 
 

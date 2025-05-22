@@ -1,60 +1,134 @@
 <?php
 // File: header_main.php
 
-// Ensure includes.php (with $pdo, class definitions etc.) is included *before* this file in your main page scripts.
-// Ensure session_start() is called *before* this file in your main page scripts.
+// This file should be included by pages that have already included "includes.php"
+// "includes.php" is expected to:
+// 1. Start the session
+// 2. Establish the $pdo connection
+// 3. Define or autoload classes (Category, Cart, Wishlist, Promotion, InventoryItem, User)
+
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
 
 // --- Data Fetching ---
-// Instantiate necessary objects (assuming they are defined in includes.php)
+// Default values
+$cartDetails = [];
+$cartCount = 0;
+$cartTotal = 0.0;
+$wishlistCount = 0;
+$categoriesWithSubcategories = [];
+$storeName = "Goodguy"; // Define store name
+
 try {
+    // Ensure $pdo is available from includes.php
+    if (!isset($pdo)) {
+        if (file_exists(__DIR__ . '/includes.php')) {
+            require_once __DIR__ . '/includes.php';
+            if (!isset($pdo)) {
+                throw new Exception("PDO connection is not available even after including includes.php.");
+            }
+        } else {
+            throw new Exception("PDO connection is not available and includes.php not found.");
+        }
+    }
+
+    // Instantiate necessary objects
+    // Note: $user and $invt might already be instantiated in includes.php.
+    // If so, you can remove their instantiation here if they are globally available.
+    // For this rewrite, I'll assume they need to be instantiated here if not already global.
+    if (!isset($user) || !($user instanceof User)) {
+        $user = new User($pdo);
+    }
+    if (!isset($invt) || !($invt instanceof InventoryItem)) {
+        $invt = new InventoryItem($pdo);
+    }
+    if (!isset($promotion) || !($promotion instanceof Promotion)) {
+        $promotion = new Promotion($pdo);
+    }
+
     $cart = new Cart($pdo, $promotion);
-    $wishlist = new Wishlist($pdo, 42); // Assuming Wishlist class exists and needs PDO
-    $invt = new InventoryItem($pdo); // Assuming InventoryItem class exists and needs PDO
-    $category = new Category(); // Assuming Category class exists and needs PDO
+    $category = new Category($pdo);
+
+    $loggedInUserId = $_SESSION['uid'] ?? null;
+    if ($loggedInUserId) {
+        $wishlist = new Wishlist($pdo, $loggedInUserId);
+        $wishlistCount = $wishlist->no_of_wish_list_item;
+    } else {
+        $wishlistCount = 0;
+    }
+
+    // Get Cart Details
+    $cartDetails = $cart->getCartDetails();
+    $cartCount = $cart->getCartItemCount();
+    $cartTotal = $cart->calculateCartTotal($cartDetails); // Pass $cartDetails
+
+    // Get 3-Level Categories
+    $topLevelStmt = $category->getTopLevelParentCategories();
+    if ($topLevelStmt) {
+        $parentCategoriesData = $topLevelStmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($parentCategoriesData as $parentCat) {
+            $subCategoryStmt = $category->getDirectSubcategoriesByParentId($parentCat['category_id'] ?? 0);
+            if ($subCategoryStmt) {
+                $subCategoriesData = $subCategoryStmt->fetchAll(PDO::FETCH_ASSOC);
+                $processedSubcategories = [];
+                foreach ($subCategoriesData as $subCat) {
+                    $subSubCategoryStmt = $category->getDirectSubcategoriesByParentId($subCat['category_id'] ?? 0);
+                    if ($subSubCategoryStmt) {
+                        $subCat['subsubcategories'] = $subSubCategoryStmt->fetchAll(PDO::FETCH_ASSOC);
+                    } else {
+                        $subCat['subsubcategories'] = [];
+                    }
+                    $processedSubcategories[] = $subCat;
+                }
+                $parentCat['subcategories'] = $processedSubcategories;
+            } else {
+                $parentCat['subcategories'] = [];
+            }
+            $categoriesWithSubcategories[] = $parentCat;
+        }
+    }
+
 } catch (Exception $e) {
-    error_log("Error instantiating classes in header_main.php: " . $e->getMessage());
-    // Handle error gracefully - maybe set defaults?
+    error_log("Error in header_main.php setup: " . $e->getMessage());
+    // Set defaults again in case of partial failure
     $cartDetails = [];
     $cartCount = 0;
     $cartTotal = 0.0;
     $wishlistCount = 0;
-    $categories = [];
-    // Optionally: die("Header setup failed.");
+    $categoriesWithSubcategories = [];
+    // Optionally: echo "<p style='text-align:center; color:red;'>Header data could not be loaded. Please try again later.</p>";
 }
-
-
-// Get Cart Details using the optimized method (handle potential errors from constructor)
-if (isset($cart)) {
-    $cartDetails = $cart->getCartDetails();
-    $cartCount = count($cartDetails);
-    $cartTotal = $cart->calculateCartTotal($cartDetails);
-} else {
-    $cartDetails = [];
-    $cartCount = 0;
-    $cartTotal = 0.0;
-}
-
-
-// Get Wishlist Count (dynamic) - handle potential errors from constructor
-$wishlistCount = (isset($_SESSION['uid']) && isset($wishlist)) ? $wishlist->no_of_wish_list_item : 0; // Assuming method exists
-
-// Get Categories (Consider Caching Later if needed) - handle potential errors from constructor
-if (isset($category)) {
-    try {
-        $categoryStmt = $category->get_parent_category(); // Assuming this method returns a PDOStatement
-        $categories = $categoryStmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
-        error_log("Error fetching categories: " . $e->getMessage());
-        $categories = []; // Prevent errors if fetch fails
-    }
-} else {
-    $categories = [];
-}
-
-
-$storeName = "Goodguy"; // Define store name
-
 ?>
+<style>
+    /* Styles from header-for-other-pages.php for cart dropdown text */
+    .cart-dropdown .product-title a {
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 150px;
+        /* Adjust as needed */
+        line-height: 1.3em;
+        max-height: 3.9em;
+        /* 1.3em * 3 lines */
+    }
+
+    .cart-dropdown .product-title {
+        overflow: hidden;
+    }
+
+
+    .header-10 .header-bottom .menu>li:not(:hover):not(.active):not(.show)>a {
+        color: black;
+    }
+
+    .header.header-10.header-intro-clearance .header-bottom .header-right p {
+        font-weight: 600;
+        letter-spacing: -.01em;
+        color: black;
+    }
+</style>
 <header class="header header-10 header-intro-clearance">
     <div class="header-top">
         <div class="container">
@@ -94,7 +168,7 @@ $storeName = "Goodguy"; // Define store name
     </div><!-- End .header-top -->
 
     <div class="header-middle">
-        <div class="container">
+        <div class="container d-flex align-items-center justify-content-between">
             <div class="header-left h-100 d-flex align-items-center justify-content-center">
                 <button class="mobile-menu-toggler">
                     <span class="sr-only">Toggle mobile menu</span>
@@ -152,15 +226,15 @@ $storeName = "Goodguy"; // Define store name
                                         if (!isset($cartItem['product']) || !isset($cartItem['quantity']) || !isset($cartItem['cost']))
                                             continue;
 
-                                        $product = $cartItem['product'];
-                                        $quantity = $cartItem['quantity'];
-                                        $cost = $cartItem['cost']; // Unit cost (potentially promotional)
+                                        $productDetailsInCart = $cartItem['product']; // Renamed for clarity
+                                        $quantityInCart = $cartItem['quantity'];
+                                        $costInCart = $cartItem['cost']; // Unit cost (potentially promotional)
                                 
-                                        // --- Optimized Image Handling ---
-                                        // Assumes 'image_path' is fetched by getCartDetails()
-                                        // *** Adjust 'image_path' key if different in your $product array ***
-                                        $imageSrc = (!empty($product['image_path']) && file_exists($product['image_path'])) // Optional: Check if file exists
-                                            ? htmlspecialchars($product['image_path'])
+                                        // Image path from $productDetailsInCart (fetched by Cart::getCartDetails)
+                                        // Ensure 'image_path' key exists and file_exists checks the correct local path
+                                        $imagePathFromCart = $productDetailsInCart['image_path'] ?? '';
+                                        $imageSrc = (!empty($imagePathFromCart) && file_exists(ltrim($imagePathFromCart, './')))
+                                            ? htmlspecialchars(ltrim($imagePathFromCart, './'))
                                             : 'assets/images/products/default-product.jpg'; // Default image
                                 
                                         ?>
@@ -168,23 +242,22 @@ $storeName = "Goodguy"; // Define store name
                                             <div class="product-cart-details">
                                                 <h4 class="product-title">
                                                     <a href="product-detail.php?itemid=<?= (int) $itemId ?>">
-                                                        <?= htmlspecialchars($product['description'] ?? 'Product') ?>
+                                                        <?= htmlspecialchars($productDetailsInCart['description'] ?? 'Product') ?>
                                                     </a>
                                                 </h4>
                                                 <span class="cart-product-info">
-                                                    <span class="cart-product-qty"><?= (int) $quantity ?></span>
-                                                    &nbsp;x &#8358;&nbsp;<?= number_format($cost, 2) ?>
+                                                    <span class="cart-product-qty"><?= (int) $quantityInCart ?></span>
+                                                    &nbsp;x &#8358;&nbsp;<?= number_format($costInCart, 2) ?>
                                                 </span>
                                             </div><!-- End .product-cart-details -->
                                             <figure class="product-image-container">
                                                 <a href="product-detail.php?itemid=<?= (int) $itemId ?>" class="product-image">
                                                     <img src="<?= $imageSrc ?>"
-                                                        alt="<?= htmlspecialchars($product['description'] ?? 'Product Image') ?>">
+                                                        alt="<?= htmlspecialchars($productDetailsInCart['description'] ?? 'Product Image') ?>">
                                                 </a>
                                             </figure>
-                                            <?php // --- OPTIMIZED Removal Link --- ?>
-                                            <a href="cart.php?remove_item=<?= (int) $itemId ?>" class="btn-remove"
-                                                title="Remove Product"><i class="icon-close"></i></a>
+                                            <a href="cart.php?remove=<?= (int) $itemId ?>" class="btn-remove" <?php // Assuming 'remove' is the GET param your cart.php expects ?> title="Remove Product"><i
+                                                    class="icon-close"></i></a>
                                         </div><!-- End .product -->
                                     <?php endforeach; ?>
                                 </div><!-- End .cart-product -->
@@ -194,7 +267,8 @@ $storeName = "Goodguy"; // Define store name
                                 </div><!-- End .dropdown-cart-total -->
                                 <div class="dropdown-cart-action">
                                     <a href="cart.php" class="btn btn-primary">View Cart</a>
-                                    <a href="checkout.php" class="btn btn-outline-primary-2"><span>Checkout</span><i
+                                    <a href="checkout-process-validation.php"
+                                        class="btn btn-outline-primary-2"><span>Checkout</span><i
                                             class="icon-long-arrow-right"></i></a>
                                 </div><!-- End .dropdown-cart-total -->
                             </div><!-- End .dropdown-menu -->
@@ -210,26 +284,47 @@ $storeName = "Goodguy"; // Define store name
     </div><!-- End .header-middle -->
 
     <div class="sticky-wrapper">
-        <div class="header-bottom sticky-header">
-            <div class="container">
+        <div class="header-bottom sticky-header" style="background-color: #f8f9fa; color: black;">
+            <div class="container d-flex align-items-center justify-content-between">
                 <div class="header-left">
                     <div class="dropdown category-dropdown">
                         <a href="#" class="dropdown-toggle" role="button" data-toggle="dropdown" aria-haspopup="true"
                             aria-expanded="false" data-display="static" title="Browse Categories">
                             Browse Categories <i class="icon-angle-down"></i>
                         </a>
-
                         <div class="dropdown-menu">
                             <nav class="side-nav">
                                 <ul class="menu-vertical sf-arrows">
-                                    <?php if (!empty($categories)): ?>
-                                        <?php foreach ($categories as $row): ?>
+                                    <?php if (!empty($categoriesWithSubcategories)): ?>
+                                        <?php foreach ($categoriesWithSubcategories as $parentCategory): ?>
                                             <li class="megamenu-container">
                                                 <?php // Ensure 'cat' and 'catid' are the correct keys from your DB ?>
                                                 <a class="sf-with-ul"
-                                                    href="category.php?catid=<?= htmlspecialchars($row['catid'] ?? '') ?>">
-                                                    <?= htmlspecialchars(ucfirst(strtolower($row['cat'] ?? 'Category'))) ?>
+                                                    href="category.php?catid=<?= htmlspecialchars($parentCategory['category_id'] ?? '') ?>">
+                                                    <?= htmlspecialchars(ucfirst(strtolower($parentCategory['name'] ?? 'Category'))) ?>
                                                 </a>
+                                                <?php if (!empty($parentCategory['subcategories'])): ?>
+                                                    <ul>
+                                                        <?php foreach ($parentCategory['subcategories'] as $subCategory): ?>
+                                                            <li class="megamenu-container"> <!-- Apply class if sub-subs exist -->
+                                                                <a
+                                                                    href="category.php?catid=<?= htmlspecialchars($subCategory['category_id'] ?? '') ?>">
+                                                                    <?= htmlspecialchars(ucfirst(strtolower($subCategory['name'] ?? 'Subcategory'))) ?>
+                                                                </a>
+                                                                <?php if (!empty($subCategory['subsubcategories'])): ?>
+                                                                    <ul>
+                                                                        <?php foreach ($subCategory['subsubcategories'] as $subSubCategory): ?>
+                                                                            <li><a
+                                                                                    href="category.php?catid=<?= htmlspecialchars($subSubCategory['category_id'] ?? '') ?>">
+                                                                                    <?= htmlspecialchars(ucfirst(strtolower($subSubCategory['name'] ?? 'Sub-Subcategory'))) ?>
+                                                                                </a></li>
+                                                                        <?php endforeach; ?>
+                                                                    </ul>
+                                                                <?php endif; ?>
+                                                            </li>
+                                                        <?php endforeach; ?>
+                                                    </ul>
+                                                <?php endif; ?>
                                             </li>
                                         <?php endforeach; ?>
                                     <?php else: ?>

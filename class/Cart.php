@@ -2,7 +2,7 @@
 
 class Cart extends Promotion
 {
-  private $pdo;
+  public $pdo;
   private $promotion;
 
   public function __construct($pdo, $promotion)
@@ -11,34 +11,7 @@ class Cart extends Promotion
     $this->promotion = $promotion;
   }
 
-  function get_cart_item()
-  {
-    if (isset($_SESSION['cart'])) {
-      if (count($_SESSION['cart']) > 0) {
-        if (isset($_SESSION['cart_final']) && is_array($_SESSION['cart_final'])) {
-          //echo "yes";
-          if (array_key_exists($product_id_cost, $_SESSION['cart_final'])) {
 
-            // Product exists in cart so just update the quanity
-            if ($this->check_if_item_is_in_inventory_promotion($product_id_cost)) {
-              $_SESSION['cart_final'][$product_id_cost] = $this->get_promoPrice_price($row['InventoryItemID']) * $products_in_cart[$row['InventoryItemID']];
-            } else {
-              $_SESSION['cart_final'][$product_id_cost] = $row['cost'] * $products_in_cart[$row['InventoryItemID']];
-            }
-          } else {
-            // Product is not in cart so add it
-            if ($this->check_if_item_is_in_inventory_promotion($product_id_cost)) {
-              $_SESSION['cart_final'][$product_id_cost] = $this->get_promoPrice_price($row['InventoryItemID']) * $products_in_cart[$row['InventoryItemID']];
-            } else {
-              $_SESSION['cart_final'][$product_id_cost] = $row['cost'] * $products_in_cart[$row['InventoryItemID']];
-            }
-          }
-        }
-      }
-
-    }
-
-  }
 
 
   function get_reviews_by_inventory_item($id)
@@ -76,7 +49,13 @@ class Cart extends Promotion
   }
 
 
-
+  public function getCartItemCount()
+  {
+    // Assuming your getCartDetails() method returns an array of all cart items
+    // where each element represents a unique product line.
+    $cartItems = $this->getCartDetails();
+    return count($cartItems);
+  }
 
 
 
@@ -185,12 +164,22 @@ class Cart extends Promotion
    * @param array $cartDetails The array returned by getCartDetails().
    * @return float The total cart value.
    */
-  public function calculateCartTotal(array $cartDetails): float
+
+  public function calculateCartTotal(array $cartItems): float
   {
     $total = 0.0;
-    foreach ($cartDetails as $item) {
-      $total += $item['line_total'];
+    if (empty($cartItems)) {
+      return $total;
     }
+    foreach ($cartItems as $item) {
+
+      // Ensure 'cost' and 'quantity' keys exist and are numeric
+      $cost = isset($item['cost']) && is_numeric($item['cost']) ? (float) $item['cost'] : 0.0;
+
+      $quantity = isset($item['quantity']) && is_numeric($item['quantity']) ? (int) $item['quantity'] : 0;
+      $total += $cost * $quantity;
+    }
+
     return $total;
   }
 

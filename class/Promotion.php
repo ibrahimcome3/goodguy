@@ -1,11 +1,13 @@
 <?php
-class Promotion extends Connn
+class Promotion
 {
    public $promotion_items = array();
+   protected $pdo; // Property to hold the PDO connection
+   private $timestamp;
 
-   function __construct()
+   function __construct(PDO $pdo) // Accept PDO connection in constructor
    {
-      parent::__construct();
+      $this->pdo = $pdo; // Assign the passed PDO connection
       $defaultTimeZone = 'UTC';
       date_default_timezone_set($defaultTimeZone);
       $this->timestamp = date('Y-m-d');
@@ -17,8 +19,7 @@ class Promotion extends Connn
 
    function check_if_item_is_in_promotion($id)
    {
-      $pdo = $this->dbc;
-      $stmt = $pdo->query("select * from promooffering where `product_id` = $id");
+      $stmt = $this->pdo->query("select * from promooffering where `product_id` = $id");
       $row_count = $stmt->rowCount();
       if ($row_count > 0)
          return true;
@@ -31,8 +32,7 @@ class Promotion extends Connn
    {
       $data = array();
       $a = 0;
-      $pdo = $this->dbc;
-      $stmt = $pdo->query("SELECT * FROM `promotion_items`");
+      $stmt = $this->pdo->query("SELECT * FROM `promotion_items`");
       $row_count = $stmt->rowCount();
       while ($row = $stmt->fetch()) {
          $parent_key = $row['InventoryItemID'];
@@ -44,8 +44,7 @@ class Promotion extends Connn
    function check_if_item_is_in_inventory_promotion($id)
    {
       if (isset($id)) {
-         $pdo = $this->dbc;
-         $stmt = $pdo->query("SELECT * FROM `promotion_items` WHERE `InventoryItemID` =  $id");
+         $stmt = $this->pdo->query("SELECT * FROM `promotion_items` WHERE `InventoryItemID` =  $id");
          $row_count = $stmt->rowCount();
          if ($row_count > 0)
             return true;
@@ -59,9 +58,8 @@ class Promotion extends Connn
 
    function get_regular_price($id)
    {
-      $pdo = $this->dbc;
       $sql = "SELECT * FROM inventoryitem WHERE InventoryItemID = $id";
-      $stmt = $pdo->query($sql);
+      $stmt = $this->pdo->query($sql);
       $row_count = $stmt->rowCount();
       if ($row_count > 0) {
          $row = $stmt->fetch();
@@ -73,8 +71,7 @@ class Promotion extends Connn
    }
    function get_promoPrice_price($id)
    {
-      $pdo = $this->dbc;
-      $stmt = $pdo->query("SELECT * FROM `promotion_items` WHERE `InventoryItemID` =  $id");
+      $stmt = $this->pdo->query("SELECT * FROM `promotion_items` WHERE `InventoryItemID` =  $id");
       $row_count = $stmt->rowCount();
       if ($row_count > 0) {
          $row = $stmt->fetch();

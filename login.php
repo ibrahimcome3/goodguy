@@ -12,6 +12,7 @@ $util = new Util();
 
 $current_time = time();
 $cookie_expiration_time = $current_time + (30 * 24 * 60 * 60); // 30 days
+$redirect_url = isset($_SESSION['return_to']) ? $_SESSION['return_to'] : null;
 
 // Validate login from cookies (if any)
 require_once "login/authCookieSessionValidate.php";
@@ -56,9 +57,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["login"])) {
             } else {
                 $util->clearAuthCookie();
             }
-
+            if ($redirect_url !== null) {
+                header("Location: " . $redirect_url);
+            }
             // Redirect to appropriate page after successful login
-            if (isset($_SESSION['last_viewed_product'])) {
+            elseif (isset($_SESSION['last_viewed_product'])) {
                 header("Location: product-detail.php?id=" . $_SESSION['last_viewed_product']);
             } else {
                 header("Location: index.php");

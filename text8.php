@@ -11,7 +11,7 @@ include "class/Promotion.php";
 include 'breadcrumps.php';
 $product_obj = new ProductItem();
 $promotion = new Promotion();
-$Orvi = new Review();
+$Orvi = new Review($pdo);
 
 $records_per_page = 6;
 $page = '';

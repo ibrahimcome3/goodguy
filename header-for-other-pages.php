@@ -1,87 +1,148 @@
 <?php
-include "includes.php";
+// File: header-for-other-pages.php
 
-// Ensure includes.php is included before this file
-// require_once "includes.php"; // Assuming this file includes the necessary classes and database connection
-
-// Function to get cart items (consider moving this to a Cart class)
-function getCartItems($pdo, $promotion)
-{
-    if (!isset($_SESSION['cart']) || count($_SESSION['cart']) == 0) {
-        return [];
-    }
-
-    $cartItems = $_SESSION['cart'];
-    $inventoryItemIds = array_column($cartItems, 'inventory_product_id');
-    $placeholders = implode(',', array_fill(0, count($inventoryItemIds), '?'));
-
-    $sql = "SELECT * FROM inventoryitem WHERE InventoryItemID IN ($placeholders)";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($inventoryItemIds);
-    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    $cartData = [];
-    foreach ($products as $product) {
-        $cartData[$product['InventoryItemID']] = [
-            'product' => $product,
-            'quantity' => 0,
-            'cost' => $product['cost'],
-        ];
-        foreach ($cartItems as $item) {
-            if ($item['inventory_product_id'] == $product['InventoryItemID']) {
-                $cartData[$product['InventoryItemID']]['quantity'] += $item['quantity'];
-            }
-        }
-        if ($promotion->check_if_item_is_in_inventory_promotion($product['InventoryItemID'])) {
-            $cartData[$product['InventoryItemID']]['cost'] = $promotion->get_promoPrice_price($product['InventoryItemID']);
-        }
-    }
-
-    return $cartData;
+// Ensure session is started if not already (usually done in includes.php or at the very top of page scripts)
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
 }
 
-// Get cart items
-$cartItems = getCartItems($pdo, $promotion);
-$cart = new Cart($pdo, $promotion);
-$cartTotal = $cart->calculateCartTotal($cartItems);
-// Get wishlist count (if user is logged in)
-$wishlistCount = isset($_SESSION['uid']) && isset($wishlist) ? $wishlist->no_of_wish_list_item : 0;
+// This file should be included by pages that have already included "includes.php"
+// "includes.php" is expected to:
+// 1. Start the session (if not done above)
+// 2. Establish the $pdo connection
+// 3. Define or autoload classes (Category, Cart, Wishlist, Promotion, InventoryItem)
+
+// --- Data Fetching ---
+// Default values
+$cartDetails = [];
+$cartCount = 0;
+$cartTotal = 0.0;
+$wishlistCount = 0;
+$categoriesWithSubcategories = [];
+$storeName = "Goodguy"; // Define store name
+
+try {
+    // Ensure $pdo is available from includes.php
+    if (!isset($pdo)) {
+        // If includes.php is not setting $pdo, try to include it here.
+        // However, it's better practice for includes.php to be loaded first by the calling script.
+        if (file_exists(__DIR__ . '/includes.php')) {
+            require_once __DIR__ . '/includes.php';
+            if (!isset($pdo)) {
+                throw new Exception("PDO connection is not available even after including includes.php.");
+            }
+        } else {
+            throw new Exception("PDO connection is not available and includes.php not found.");
+        }
+    }
+
+    // Instantiate necessary objects
+    $promotion = new Promotion($pdo);
+    $cart = new Cart($pdo, $promotion); // Cart constructor might need $promotion
+
+    $loggedInUserId = $_SESSION['uid'] ?? null;
+    if ($loggedInUserId) {
+        $wishlist = new Wishlist($pdo, $loggedInUserId);
+        $wishlistCount = $wishlist->no_of_wish_list_item;
+    } else {
+        $wishlistCount = 0;
+    }
+
+    $category = new Category($pdo);
+
+    // Get Cart Details
+    // Assumes $cart->getCartDetails() returns an array where each item has 'product', 'quantity', 'cost'
+    // and 'product' itself is an array with 'description', 'image_path', etc.
+    $cartDetails = $cart->getCartDetails();
+    $cartCount = $cart->getCartItemCount();
+    $cartTotal = $cart->calculateCartTotal($cartDetails); // Pass $cartDetails here
+
+    // Get Categories
+    $topLevelStmt = $category->getTopLevelParentCategories();
+
+    if ($topLevelStmt) {
+        $parentCategoriesData = $topLevelStmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($parentCategoriesData as $parentCat) {
+            $subCategoryStmt = $category->getDirectSubcategoriesByParentId($parentCat['category_id'] ?? 0);
+            if ($subCategoryStmt) {
+                $subCategoriesData = $subCategoryStmt->fetchAll(PDO::FETCH_ASSOC);
+                $processedSubcategories = [];
+                foreach ($subCategoriesData as $subCat) {
+                    $subSubCategoryStmt = $category->getDirectSubcategoriesByParentId($subCat['category_id'] ?? 0);
+                    if ($subSubCategoryStmt) {
+                        $subCat['subsubcategories'] = $subSubCategoryStmt->fetchAll(PDO::FETCH_ASSOC);
+                    } else {
+                        $subCat['subsubcategories'] = [];
+                    }
+                    $processedSubcategories[] = $subCat;
+                }
+                $parentCat['subcategories'] = $processedSubcategories;
+            } else {
+                $parentCat['subcategories'] = [];
+            }
+            $categoriesWithSubcategories[] = $parentCat;
+        }
+    }
+
+} catch (Exception $e) {
+    error_log("Error in header-for-other-pages.php setup: " . $e->getMessage());
+    // Set defaults again in case of partial failure
+    $cartDetails = [];
+    $cartCount = 0;
+    $cartTotal = 0.0;
+    $wishlistCount = 0;
+    $categoriesWithSubcategories = [];
+    // Optionally: echo "<p style='text-align:center; color:red;'>Header data could not be loaded. Please try again later.</p>";
+}
 ?>
 
-<header class="header">
+<style>
+    .cart-dropdown .product-title a {
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 150px;
+        line-height: 1.3em;
+        max-height: 3.9em;
+    }
+
+    .cart-dropdown .product-title {
+        overflow: hidden;
+    }
+</style>
+
+<header class="header header-10 header-intro-clearance">
     <div class="header-top">
         <div class="container">
-            <div class="header-left" style="margin: 20px;">
-                <!-- Left content (if any) -->
+            <div class="header-left">
+                <a href="tel:+2348051067944"><i class="icon-phone"></i>Call: +2348051067944</a>
             </div><!-- End .header-left -->
+
             <div class="header-right">
                 <ul class="top-menu">
                     <li>
                         <a href="#">Links</a>
                         <ul>
-                            <li><a href="tel:#"><i class="icon-phone"></i>Call: +2348051067944</a></li>
-                            <?php if (isset($_SESSION["uid"])) { ?>
-                                <li>
-                                    <a href="wishlist.php"><i class="icon-heart-o"></i>Wishlist
-                                        <span class="wishlist-count">(<?= $wishlistCount ?>)</span>
-                                    </a>
-                                </li>
-                            <?php } else { ?>
-                                <li>
-                                    <a href="wishlist.php"><i class="icon-heart-o"></i>Wishlist
-                                        <span>(0)</span>
-                                    </a>
-                                </li>
-                            <?php } ?>
                             <li><a href="about.php">About Us</a></li>
                             <li><a href="contact.php">Contact Us</a></li>
-                            <li><a href="vendor.php" style="color: orange">Be a vendor</a></li>
-                            <?php if (isset($_SESSION["uid"])) { ?>
-                                <li><a href="logout.php"><i class="icon-user"></i>Log Out</a></li>
+                            <li><a href="vendor.php" style="color: orange;">Be a vendor</a></li>
+                            <?php if (isset($_SESSION["uid"])): ?>
+                                <li>
+                                    <a href="wishlist.php"><i class="icon-heart-o"></i>Wishlist
+                                        <span class="wishlist-count">(<?= (int) $wishlistCount ?>)</span>
+                                    </a>
+                                </li>
                                 <li><a href="dashboard.php"><i class="icon-user"></i>Dashboard</a></li>
-                            <?php } else { ?>
-                                <li><a href="login.php"><i class="icon-user"></i>Login</a></li>
-                            <?php } ?>
+                                <li><a href="logout.php"><i class="icon-log-out"></i>Log Out</a></li>
+                            <?php else: ?>
+                                <li>
+                                    <a href="wishlist.php"><i class="icon-heart-o"></i>Wishlist
+                                        <span>(0)</span> <?php // Show 0 if not logged in ?>
+                                    </a>
+                                </li>
+                                <li class="login"><a href="login.php"><i class="icon-user"></i>Sign in / Sign up</a></li>
+                            <?php endif; ?>
                         </ul>
                     </li>
                 </ul><!-- End .top-menu -->
@@ -89,40 +150,26 @@ $wishlistCount = isset($_SESSION['uid']) && isset($wishlist) ? $wishlist->no_of_
         </div><!-- End .container -->
     </div><!-- End .header-top -->
 
-    <div class="header-middle sticky-header">
+    <div class="header-middle">
         <div class="container">
-            <div class="header-left">
+            <div class="header-left h-100 d-flex align-items-center justify-content-center">
                 <button class="mobile-menu-toggler">
                     <span class="sr-only">Toggle mobile menu</span>
                     <i class="icon-bars"></i>
                 </button>
 
                 <a href="index.php" class="logo">
-                    <svg width="40px" viewBox="0 -1 12 12" version="1.1" xmlns="http://www.w3.org/2000/svg"
-                        xmlns:xlink="http://www.w3.org/1999/xlink">
-                        <title>emoji_happy_simple [#454]</title>
-                        <desc>Created with Sketch.</desc>
-                        <defs></defs>
-                        <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
-                            <g id="Dribbble-Light-Preview" transform="translate(-224.000000, -6165.000000)"
-                                fill="#000000">
-                                <g id="icons" transform="translate(56.000000, 160.000000)">
-                                    <path
-                                        d="M176,6009.21053 L180,6009.21053 L180,6005 L176,6005 L176,6009.21053 Z M168,6008.15789 L172,6008.15789 L172,6006.05263 L168,6006.05263 L168,6008.15789 Z M177,6010.26316 L179,6010.26316 C179,6016.57895 169,6016.57895 169,6010.26316 L171,6010.26316 C171,6014.47368 177,6014.47368 177,6010.26316 L177,6010.26316 Z"
-                                        id="emoji_happy_simple-[#454]"></path>
-                                    <?php $storeName = "Goodguy"; ?>
-                                    <text x="2" y="10" font-family="sans-serif" font-size="4"
-                                        fill="black"><?php echo $storeName; ?></text>
-                                </g>
-                            </g>
-                        </g>
-                    </svg>
+                    <div class="h-100 d-flex align-items-center justify-content-center">
+                        <div style="color: red"><img src="assets/images/goodguy.svg" alt="goodguyng.com logo"
+                                width="30"></div>
+                        <div
+                            style="margin-left: 10px; font-size: 20px; color: black; margin-top:-8px; font-weight: bold;">
+                            <?= htmlspecialchars($storeName) ?>.com
+                        </div>
+                    </div>
                 </a>
-
-                <nav class="main-nav">
-                    <!-- Main navigation links (if any) -->
-                </nav><!-- End .main-nav -->
             </div><!-- End .header-left -->
+
             <div class="header-center">
                 <div
                     class="header-search header-search-extended header-search-visible header-search-no-radius d-none d-lg-block">
@@ -131,63 +178,158 @@ $wishlistCount = isset($_SESSION['uid']) && isset($wishlist) ? $wishlist->no_of_
                         <div class="header-search-wrapper search-wrapper-wide">
                             <label for="q" class="sr-only">Search</label>
                             <input type="search" class="form-control" name="q" id="q" placeholder="Search product ..."
-                                required="">
+                                required>
                             <button class="btn btn-primary" type="submit"><i class="icon-search"></i></button>
                         </div><!-- End .header-search-wrapper -->
                     </form>
                 </div><!-- End .header-search -->
             </div>
+
             <div class="header-right">
-                <div class="dropdown cart-dropdown">
-                    <a href="cart.php" class="dropdown-toggle" role="button" data-toggle="dropdown" aria-haspopup="true"
-                        aria-expanded="false" data-display="static">
-                        <i class="icon-shopping-cart"></i>
-                        <span class="cart-count"><?= count($cartItems); ?></span>
+                <div class="header-dropdown-link" style="display: flex; align-items: center;">
+                    <a href="wishlist.php" class="wishlist-link">
+                        <i class="icon-heart-o"></i>
+                        <span class="wishlist-count"><?= (int) $wishlistCount ?></span>
+                        <span class="wishlist-txt">Wishlist</span>
                     </a>
-                    <?php if (count($cartItems) > 0) { ?>
-                        <div class="dropdown-menu dropdown-menu-right">
-                            <div class="dropdown-cart-products">
-                                <?php foreach ($cartItems as $itemId => $cartItem) {
-                                    $product = $cartItem['product'];
-                                    $quantity = $cartItem['quantity'];
-                                    $cost = $cartItem['cost'];
-                                    ?>
-                                    <div class="product">
-                                        <div class="product-cart-details">
-                                            <h4 class="product-title">
-                                                <a href="product.html"><?= $product['description'] ?></a>
-                                            </h4>
-                                            <span class="cart-product-info">
-                                                <span class="cart-product-qty"><?= $quantity ?></span>
-                                                &nbsp;x &#8358;&nbsp;<?= number_format($cost, 2) ?>
-                                            </span>
-                                        </div><!-- End .product-cart-details -->
-                                        <figure class="product-image-container">
-                                            <a href="product-detail?itemid=<?= $product['InventoryItemID'] ?>"
-                                                class="product-image">
-                                                <img src="<?= $invt->get_product_image($pdo, $product['InventoryItemID']); ?>"
-                                                    alt="product">
-                                            </a>
-                                        </figure>
-                                        <a href="cart.php?remove=<?= array_search($product['InventoryItemID'], array_column($_SESSION['cart'], 'inventory_product_id')) ?>"
-                                            class="btn-remove" title="Remove Product"><i class="icon-close"></i></a>
-                                    </div><!-- End .product -->
-                                <?php } ?>
-                            </div><!-- End .cart-product -->
-                            <div class="dropdown-cart-total">
-                                <span>Total</span>
-                                <span class="cart-total-price">&#8358;&nbsp;<?= number_format($cartTotal, 2) ?></span>
-                            </div><!-- End .dropdown-cart-total -->
-                            <div class="dropdown-cart-action">
-                                <a href="cart.php" class="btn btn-primary">View Cart</a>
-                                <a href="checkout-process-validation.php"
-                                    class="btn btn-outline-primary-2"><span>Checkout</span><i
-                                        class="icon-long-arrow-right"></i></a>
-                            </div><!-- End .dropdown-cart-total -->
-                        </div><!-- End .dropdown-menu -->
-                    <?php } ?>
-                </div><!-- End .cart-dropdown -->
+
+                    <div class="dropdown cart-dropdown">
+                        <a href="cart.php" class="dropdown-toggle" role="button" data-toggle="dropdown"
+                            aria-haspopup="true" aria-expanded="false" data-display="static">
+                            <i class="icon-shopping-cart"></i>
+                            <span class="cart-count"><?= (int) $cartCount ?></span>
+                            <span class="cart-txt">Cart</span>
+                        </a>
+
+                        <?php if ($cartCount > 0 && !empty($cartDetails)): ?>
+                            <div class="dropdown-menu dropdown-menu-right">
+                                <div class="dropdown-cart-products">
+                                    <?php foreach ($cartDetails as $itemId => $cartItem):
+                                        // Add checks for expected array structure
+                                        if (!isset($cartItem['product']) || !isset($cartItem['quantity']) || !isset($cartItem['cost']))
+                                            continue;
+
+                                        $product = $cartItem['product'];
+                                        $quantity = $cartItem['quantity'];
+                                        $cost = $cartItem['cost'];
+
+                                        $imageSrc = (!empty($product['image_path']) && file_exists(ltrim($product['image_path'], './'))) // Check local path
+                                            ? htmlspecialchars(ltrim($product['image_path'], './')) // Use local path
+                                            : 'assets/images/products/default-product.jpg'; // Default image
+                                
+                                        ?>
+                                        <div class="product">
+                                            <div class="product-cart-details">
+                                                <h4 class="product-title">
+                                                    <a href="product-detail.php?itemid=<?= (int) $itemId ?>">
+                                                        <?= htmlspecialchars($product['description'] ?? 'Product') ?>
+                                                    </a>
+                                                </h4>
+                                                <span class="cart-product-info">
+                                                    <span class="cart-product-qty"><?= (int) $quantity ?></span>
+                                                    &nbsp;x &#8358;&nbsp;<?= number_format($cost, 2) ?>
+                                                </span>
+                                            </div><!-- End .product-cart-details -->
+                                            <figure class="product-image-container">
+                                                <a href="product-detail.php?itemid=<?= (int) $itemId ?>" class="product-image">
+                                                    <img src="<?= $imageSrc ?>"
+                                                        alt="<?= htmlspecialchars($product['description'] ?? 'Product Image') ?>">
+                                                </a>
+                                            </figure>
+                                            <a href="cart.php?remove_item=<?= (int) $itemId ?>" class="btn-remove"
+                                                title="Remove Product"><i class="icon-close"></i></a>
+                                        </div><!-- End .product -->
+                                    <?php endforeach; ?>
+                                </div><!-- End .cart-product -->
+                                <div class="dropdown-cart-total">
+                                    <span>Total</span>
+                                    <span class="cart-total-price">&#8358;&nbsp;<?= number_format($cartTotal, 2) ?></span>
+                                </div><!-- End .dropdown-cart-total -->
+                                <div class="dropdown-cart-action">
+                                    <a href="cart.php" class="btn btn-primary">View Cart</a>
+                                    <a href="checkout-process-validation.php"
+                                        class="btn btn-outline-primary-2"><span>Checkout</span><i
+                                            class="icon-long-arrow-right"></i></a>
+                                </div><!-- End .dropdown-cart-total -->
+                            </div><!-- End .dropdown-menu -->
+                        <?php else: ?>
+                            <div class="dropdown-menu dropdown-menu-right">
+                                <p class="text-center p-3">Your cart is empty.</p>
+                            </div>
+                        <?php endif; ?>
+                    </div><!-- End .cart-dropdown -->
+                </div>
             </div><!-- End .header-right -->
         </div><!-- End .container -->
     </div><!-- End .header-middle -->
+
+    <div class="sticky-wrapper">
+        <div class="header-bottom sticky-header" style="background-color: #f8f9fa;">
+            <div class="container d-flex align-items-center justify-content-between">
+                <div class="header-left">
+                    <div class="dropdown category-dropdown">
+                        <a href="#" class="dropdown-toggle" role="button" data-toggle="dropdown" aria-haspopup="true"
+                            aria-expanded="false" data-display="static" title="Browse Categories">
+                            Browse Categories <i class="icon-angle-down"></i>
+                        </a>
+
+                        <div class="dropdown-menu dropdown-menu-right">
+                            <nav class="side-nav">
+                                <ul class="menu-vertical sf-arrows">
+                                    <?php if (!empty($categoriesWithSubcategories)): ?>
+                                        <?php foreach ($categoriesWithSubcategories as $parentCategory): ?>
+                                            <li class="megamenu-container">
+                                                <a class="sf-with-ul"
+                                                    href="category.php?catid=<?= htmlspecialchars($parentCategory['category_id'] ?? '') ?>">
+                                                    <?= htmlspecialchars(ucfirst(strtolower($parentCategory['name'] ?? 'Category'))) ?>
+                                                </a>
+                                                <?php if (!empty($parentCategory['subcategories'])): ?>
+                                                    <ul>
+                                                        <?php foreach ($parentCategory['subcategories'] as $subCategory): ?>
+                                                            <li class="megamenu-container"> <!-- Apply class if sub-subs exist -->
+                                                                <a
+                                                                    href="category.php?catid=<?= htmlspecialchars($subCategory['category_id'] ?? '') ?>">
+                                                                    <?= htmlspecialchars(ucfirst(strtolower($subCategory['name'] ?? 'Subcategory'))) ?>
+                                                                </a>
+                                                                <?php if (!empty($subCategory['subsubcategories'])): ?>
+                                                                    <ul>
+                                                                        <?php foreach ($subCategory['subsubcategories'] as $subSubCategory): ?>
+                                                                            <li><a
+                                                                                    href="category.php?catid=<?= htmlspecialchars($subSubCategory['category_id'] ?? '') ?>">
+                                                                                    <?= htmlspecialchars(ucfirst(strtolower($subSubCategory['name'] ?? 'Sub-Subcategory'))) ?>
+                                                                                </a></li>
+                                                                        <?php endforeach; ?>
+                                                                    </ul>
+                                                                <?php endif; ?>
+                                                            </li>
+                                                        <?php endforeach; ?>
+                                                    </ul>
+                                                <?php endif; ?>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <li><a href="#">No Categories Found</a></li>
+                                    <?php endif; ?>
+                                </ul><!-- End .menu-vertical -->
+                            </nav><!-- End .side-nav -->
+                        </div><!-- End .dropdown-menu -->
+                    </div><!-- End .category-dropdown -->
+                </div><!-- End .header-left -->
+
+                <nav class="main-nav">
+                    <ul class="menu sf-arrows">
+                        <li class="active"><a href="index.php">Home</a></li>
+                        <li><a href="shop.php">Shop</a></li>
+                        <li><a href="contact.php">Contact</a></li>
+                        <?php // Add other main navigation links here ?>
+                    </ul><!-- End .menu -->
+                </nav><!-- End .main-nav -->
+
+                <div class="header-right">
+                    <i class="la la-lightbulb-o"></i>
+                    <p><span>Sale on selected items Up to 30% Off</span></p> <?php // Consider making this dynamic ?>
+                </div>
+            </div><!-- End .container -->
+        </div><!-- End .header-bottom -->
+    </div><!-- End .sticky-wrapper -->
 </header><!-- End .header -->

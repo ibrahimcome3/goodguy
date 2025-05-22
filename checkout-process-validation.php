@@ -30,7 +30,7 @@ $shippingCost = 0; // You'll need to implement logic to calculate shipping cost
 
 // Calculate total
 $total = $subtotal + $shippingCost;
-
+$order = new Order($pdo);
 // Handle form submission (if any)
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Handle shipping address selection
@@ -41,6 +41,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $_SESSION['checkout_error'] = "Please select a shipping address.";
         header("Location: checkout-process-validation.php");
         exit();
+    }
+
+    if ($shippingAddressId) {
+        $shippingAreaId = $order->getShippingAreaIdFromAddress($shippingAddressId);
+        $shippingCost = $order->getShippingAreaCost($shippingAreaId);
+        $total = $subtotal + $shippingCost;
     }
 
     // Handle payment method selection
@@ -54,11 +60,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 
     // Create order
-    $order = new Order($pdo);
-    $orderId = $order->createOrder($_SESSION['uid'], $shippingAddressId, $paymentMethod, $total, $cartItems);
-    //var_dump($orderId);
+
+    $orderId = $order->createOrder_($_SESSION['uid'], $shippingAddressId, $paymentMethod, $subtotal, $shippingCost, $total, $cartItems);
 
     if ($orderId) {
+
+        // Order created successfully, now attempt to send invoice email
+        // The Order class instance ($order) should already be available
+        if ($order->sendInvoiceEmail($orderId)) {
+            // Email sent successfully (optional: log or set a success flash message for admin/logs)
+            // For the user, a general success message for order placement is usually enough here.
+            // You might set a session variable if you want to display a specific "invoice sent" message on the next page.
+            $_SESSION['order_success_message'] = "Your order #{$orderId} has been placed successfully! An invoice has been sent to your email.";
+        } else {
+            // Email sending failed (optional: log this failure for admin attention)
+            // The order is still placed, so this is not a critical failure for the order itself.
+            // You might inform the user that the order is placed but to check their order history if email isn't received.
+            $_SESSION['order_success_message'] = "Your order #{$orderId} has been placed successfully! If you don't receive an invoice email shortly, please check your order history or contact support.";
+            error_log("Failed to send invoice email for order ID: $orderId after successful creation.");
+        }
+
         // Redirect to payment page
         header("Location:  payment.php?order_id=" . $orderId);
         exit();
@@ -147,35 +168,64 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <div class="row  mt-5">
                     <div class="col">
                         <h4>Order Summary</h4>
-                        <table class="table">
+                        <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th>Product</th>
-                                    <th>Quantity</th>
-                                    <th>Price</th>
-                                    <th>Total</th>
+                                    <th style="width: 100px; padding: 8px;">Image</th>
+                                    <th style="padding: 8px;">Product Name</th>
+                                    <th style="width: 80px; text-align: center; padding: 8px;">Quantity</th>
+                                    <th style="width: 120px; text-align: right; padding: 8px;">Price</th>
+                                    <th style="width: 120px; text-align: right; padding: 8px;">Total</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($cartItems as $item) { ?>
                                     <tr>
-                                        <td><?= $item['product']['description'] ?></td>
-                                        <td><?= $item['quantity'] ?></td>
-                                        <td>&#8358;<?= number_format($item['cost'], 2) ?></td>
-                                        <td>&#8358;<?= number_format($item['cost'] * $item['quantity'], 2) ?></td>
+                                        <td>
+                                            <?php if (!empty($invt->get_product_image($pdo, $item['product']['InventoryItemID']))): ?>
+                                                <img src="<?= $invt->get_product_image($pdo, $item['product']['InventoryItemID']) ?>"
+                                                    alt="<?= htmlspecialchars($item['product']['description']) ?>"
+                                                    style="width: 60px; height: 60px; object-fit: cover; display: block;">
+                                                <!-- Added display: block for better centering if padding is on td -->
+                                            <?php else: ?>
+                                                <img src="assets/images/no-image-placeholder.png" alt="No image available"
+                                                    style="width: 60px; height: 60px; object-fit: cover; display: block;">
+                                                <!-- Optional: Placeholder image -->
+                                            <?php endif; ?>
+                                        </td>
+                                        <td style="padding: 8px; vertical-align: middle;">
+                                            <?= htmlspecialchars($item['product']['description']) ?>
+                                        </td>
+                                        <td style="text-align: center; padding: 8px; vertical-align: middle;">
+                                            <?= htmlspecialchars($item['quantity']) ?>
+                                        </td>
+                                        <td style="text-align: right; padding: 8px; vertical-align: middle;">
+                                            &#8358;<?= number_format($item['cost'], 2) ?></td>
+                                        <td style="text-align: right; padding: 8px; vertical-align: middle;">
+                                            &#8358;<?= number_format($item['cost'] * $item['quantity'], 2) ?></td>
                                     </tr>
                                 <?php } ?>
                                 <tr>
-                                    <td colspan="3">Subtotal:</td>
-                                    <td>&#8358;<?= number_format($subtotal, 2) ?></td>
+                                    <td colspan="4" class="text-right" style="padding: 8px; vertical-align: middle;">
+                                        <strong>Subtotal:</strong>
+                                    </td>
+                                    <td style="text-align: right; padding: 8px; vertical-align: middle;">
+                                        &#8358;<?= number_format($subtotal, 2) ?></td>
                                 </tr>
                                 <tr>
-                                    <td colspan="3">Shipping:</td>
-                                    <td>&#8358;<?= number_format($shippingCost, 2) ?></td>
+                                    <td colspan="4" class="text-right" style="padding: 8px; vertical-align: middle;">
+                                        <strong>Shipping:</strong>
+                                    </td>
+                                    <td style="text-align: right; padding: 8px; vertical-align: middle;">
+                                        &#8358;<?= number_format($shippingCost, 2) ?></td>
                                 </tr>
                                 <tr>
-                                    <td colspan="3">Total:</td>
-                                    <td>&#8358;<?= number_format($total, 2) ?></td>
+                                    <td colspan="4" class="text-right" style="padding: 8px; vertical-align: middle;">
+                                        <strong>Total:</strong>
+                                    </td>
+                                    <td style="text-align: right; padding: 8px; vertical-align: middle;">
+                                        <strong>&#8358;<?= number_format($total, 2) ?></strong>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>

@@ -1,5 +1,5 @@
 <?php
-class Variation extends Connn
+class Variation
 {
   private $timestamp;
   private $parentIDS;

@@ -1,39 +1,26 @@
 <?php
-// order-confirmation.php
-require_once "includes.php";
-session_start();
-
-// Check if the order ID is set
-if (!isset($_GET['order_id']) || !is_numeric($_GET['order_id'])) {
-    header("Location: index.php"); // Redirect to home page if order ID is invalid
-    exit();
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
 }
+require_once "includes.php"; // Your main include file
 
-$orderId = $_GET['order_id'];
+$orderId = $_GET['order_id'] ?? null;
+$status = $_GET['status'] ?? 'unknown';
 
-// Get order details (you'll need to implement this method in the Order class)
-$order = new Order();
-$orderDetails = $order->getOrderDetails($orderId);
-
-// Check if the order exists
-if (!$orderDetails) {
-    header("Location: index.php"); // Redirect to home page if order doesn't exist
-    exit();
-}
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Confirmation</title>
+    <title>Order Confirmation - Goodguy</title>
     <?php include "htlm-includes.php/metadata.php"; ?>
 </head>
 
 <body>
     <?php include "header-for-other-pages.php"; ?>
+
     <main class="main">
         <nav aria-label="breadcrumb" class="breadcrumb-nav border-0 mb-0">
             <div class="container d-flex align-items-center">
@@ -42,13 +29,30 @@ if (!$orderDetails) {
                 </ol>
             </div><!-- End .container -->
         </nav><!-- End .breadcrumb-nav -->
+
         <div class="page-content">
             <div class="container">
-                <h1>Order Confirmation</h1>
-
-                <p>Thank you for your order! Your order has been placed successfully.</p>
-                <p>Your Order ID is: <?= $orderId ?></p>
-                <!-- Display other order details here -->
+                <?php if ($status == 'success' && isset($_SESSION['order_confirmation_message'])): ?>
+                    <div class="alert alert-success text-center" role="alert">
+                        <h4 class="alert-heading">Thank You!</h4>
+                        <p><?= htmlspecialchars($_SESSION['order_confirmation_message']); ?></p>
+                        <?php if ($orderId): ?>
+                            <p>Your Order ID is: <strong><?= htmlspecialchars($orderId); ?></strong></p>
+                        <?php endif; ?>
+                        <hr>
+                        <p class="mb-0">You can view your order details in your <a href="my-account.php?view=orders">account
+                                dashboard</a>.</p>
+                    </div>
+                    <?php unset($_SESSION['order_confirmation_message']); ?>
+                <?php else: ?>
+                    <div class="alert alert-info text-center" role="alert">
+                        <h4 class="alert-heading">Order Status</h4>
+                        <p>Your order status will be updated shortly. If you have any questions, please contact support.</p>
+                        <?php if ($orderId): ?>
+                            <p>Your Order ID is: <strong><?= htmlspecialchars($orderId); ?></strong></p>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </main>

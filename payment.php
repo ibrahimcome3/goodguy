@@ -46,10 +46,11 @@ try {
 
 // Fetch main order details
 $orderDetails = $order->getOrderDetails($orderId);
+
 if (!$orderDetails) {
     $_SESSION['error_message'] = "Order #{$orderId} not found.";
     header("Location: index.php"); // Or user's order history page
-    exit();
+
 }
 
 // Fetch order items for display
@@ -149,9 +150,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     // --- Paystack Card Payment Logic ---
     if ($paymentMethod == 'card') {
-
-        $paystackSecretKey = getenv('PAYSTACK_SECRET_KEY');
-        if (empty($paystackSecretKey)) {
+        $paystack = new Yabacon\Paystack('sk_test_ee47a4a7d600efa600bffa8161353e428989243d');
+        if (empty($paystack)) {
             error_log("Paystack Secret Key not found or empty in environment variables.");
             $_SESSION['payment_error'] = "Payment gateway configuration error [PSK01]. Please contact support.";
             header("Location: payment.php?order_id=" . $orderId);
@@ -191,7 +191,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 
         try {
-            $paystack = new Paystack($paystackSecretKey);
+
             $tranx = $paystack->transaction->initialize([
                 'amount' => $amountInKobo,       // Amount in Kobo
                 'email' => $customerEmail,      // Customer's email

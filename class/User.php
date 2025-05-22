@@ -1,6 +1,6 @@
 <?php
-require_once 'Connn.php';
-class User extends Connn
+
+class User
 {
    public $user_id;
    public $user_email;
@@ -19,7 +19,7 @@ class User extends Connn
 
    function __construct($pdo)
    {
-      parent::__construct();
+
       if (isset($_SESSION['uid'])) {
          $this->user_id = $_SESSION['uid'];
       }
@@ -27,7 +27,7 @@ class User extends Connn
 
 
       if (isset($this->user_id)) {
-         $pdo = $this->dbc;
+         $pdo = $this->pdo;
          $sql = "SELECT * FROM `customer` WHERE `customer_id` =  " . $this->user_id;
          $stmt = $pdo->query($sql);
          $row = $stmt->fetch();
@@ -38,7 +38,7 @@ class User extends Connn
    }
    public function getUserAddresses($userId)
    {
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $stmt = $pdo->prepare("SELECT * FROM shipping_address WHERE customer_id = ?");
       $stmt->execute([$userId]);
       $addresses = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -54,7 +54,7 @@ class User extends Connn
 
       // If not, try to get it from the user's profile
       $user_id = $order['customer_id'];
-      $user_details = $this->getUserDetails($mysqli, $user_id);
+      $user_details = $this->getCustomerById($mysqli, $user_id); // Changed to use getCustomerById
 
       if ($user_details && !empty($user_details['shipping_address'])) {
          return $user_details['shipping_address'];
@@ -65,12 +65,13 @@ class User extends Connn
    }
    function get_user_records()
    {
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $sql = "SELECT * FROM `customer` WHERE `customer_id` =  " . $this->user_id;
       $stmt = $pdo->query($sql);
       $row = $stmt->fetch();
       return $row;
    }
+
 
 
    function get_address()
@@ -86,7 +87,7 @@ class User extends Connn
    function update_user_credentials($fname, $lname, $display_name, $email_address)
    {
       $sql = "UPDATE `customer` SET `customer_fname`='$fname',`customer_lname`='$lname',`customer_email`='$email_address', `customer_display_name`='$display_name'  WHERE `customer_id` = " . $this->user_id;
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $stmt = $pdo->query($sql);
       if ($stmt) {
          return true;
@@ -98,7 +99,7 @@ class User extends Connn
    function update_user_credentials_password($fname, $lname, $display_name, $email_address, $password_)
    {
       $sql = "UPDATE `customer` SET `customer_fname`='$fname',`customer_lname`='$lname',`customer_email`='$email_address', `customer_display_name`='$display_name' , password = '$password_' WHERE `customer_id` = " . $this->user_id;
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $stmt = $pdo->query($sql);
       if ($stmt) {
          return true;
@@ -109,7 +110,7 @@ class User extends Connn
 
    function get_password()
    {
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $sql = "SELECT password FROM `customer` WHERE `customer_id` =  " . $this->user_id;
       $stmt = $pdo->query($sql);
       $row = $stmt->fetch();
@@ -118,7 +119,7 @@ class User extends Connn
 
    function get_address_()
    {
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $sql = "select * from shipping_address left join shipping_state on shipping_address.state = shipping_state.state_id where customer_id = " . $this->user_id;
       $stmt = $pdo->query($sql);
       return $stmt;
@@ -128,7 +129,7 @@ class User extends Connn
    {
 
       $sql = " UPDATE phonenumber SET `PhoneNumber`= '$phone_no' WHERE `phone_id`=$phone_id";
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $stmt = $pdo->query($sql);
       if ($stmt) {
          return true;
@@ -140,7 +141,7 @@ class User extends Connn
 
    function make_phone_number_my_default($phone_id)
    {
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $sql = "UPDATE phonenumber SET default_= '0' WHERE CustomerID =  " . $this->user_id;
       echo $sql;
       $stmt = $pdo->query($sql);
@@ -159,7 +160,7 @@ class User extends Connn
 
    function get_phone_number()
    {
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $sql = "select * from phonenumber where CustomerID =  " . $this->user_id;
       $stmt = $pdo->query($sql);
       $phoneNumbers = [];
@@ -170,7 +171,7 @@ class User extends Connn
    }
    function add_phone_number($phone_numner)
    {
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $sql = "INSERT INTO `phonenumber` (`phone_id`, `CustomerID`, `PhoneNumber`, `default_`) VALUES (NULL, '" . $this->user_id . "', '$phone_numner', '0')";
       $stmt = $pdo->query($sql);
       if ($stmt) {
@@ -183,7 +184,7 @@ class User extends Connn
 
    function get_all_phone_number($id)
    {
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $sql = "select * from phonenumber where CustomerID =  " . $id;
       $stmt = $pdo->query($sql);
       return $stmt;
@@ -191,7 +192,7 @@ class User extends Connn
    function delete_phone_number($id)
    {
 
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $sql = "DELETE FROM `phonenumber` WHERE `phone_id` = $id";
       $stmt = $pdo->query($sql);
 
@@ -205,7 +206,7 @@ class User extends Connn
 
    function count_phone_number()
    {
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       $sql = "select count(*) as c from phonenumber where CustomerID =  " . $this->user_id;
       $stmt = $pdo->query($sql);
       $row = $stmt->fetch();
@@ -232,14 +233,24 @@ class User extends Connn
       return $row['user_role'];
    }
 
-   public function getUserById($mysqli, $userId)
+   /**
+    * Fetches user details by user ID using the class's PDO instance.
+    *
+    * @param int $userId The ID of the user.
+    * @return array|false User details as an associative array, or false if not found or on error.
+    */
+   public function getUserById($userId)
    {
-      $sql = "SELECT * FROM customer WHERE customer_id = ?";
-      $stmt = $mysqli->prepare($sql);
-      $stmt->bind_param("i", $userId);
-      $stmt->execute();
-      $result = $stmt->get_result();
-      return $result->fetch_assoc();
+      $sql = "SELECT customer_id, customer_email, customer_fname AS first_name, customer_lname AS last_name, customer_address1, customer_address2, user_role FROM customer WHERE customer_id = :user_id LIMIT 1";
+      try {
+         $stmt = $this->pdo->prepare($sql);
+         $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
+         $stmt->execute();
+         return $stmt->fetch(PDO::FETCH_ASSOC);
+      } catch (PDOException $e) {
+         error_log("Error in User::getUserById: " . $e->getMessage());
+         return false;
+      }
    }
 
    public function isAdmin($mysqli, $userId)
@@ -460,7 +471,7 @@ class User extends Connn
    }
    public function getPrimaryActivePhoneNumber(int $userId): ?string // Renamed for clarity
    {
-      $pdo = $this->dbc;
+      $pdo = $this->pdo;
       // *** ADJUST table and column names if necessary ***
       $sql = "SELECT phonenumber
                FROM user_phones

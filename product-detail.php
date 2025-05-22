@@ -1,37 +1,151 @@
 <!DOCTYPE html>
 <?php
-include "includes.php";
+// SECTION 1: INITIALIZATION & SECURITY
+// -----------------------------------------------------------------------------
+if (session_status() == PHP_SESSION_NONE) {
+        session_start();
+} // Ensure session is started for flash messages
 
-$wished_list_count = 0;
-if (!$invt->check_item_in_existance($_GET['itemid'])) {
-        echo "Item does not exist <a href='index.php'>click here to go home page</a>";
+$_SESSION['return_to'] = $_SERVER['REQUEST_URI'];
+
+include "includes.php"; // Should provide $mysqli, $pdo, and class autoloading/definitions
+
+// SECTION 2: INPUT PROCESSING & VALIDATION
+// -----------------------------------------------------------------------------
+$currentInventoryItemId = isset($_GET['itemid']) ? (int) $_GET['itemid'] : 0;
+
+if ($currentInventoryItemId <= 0 || !$invt->check_item_in_existance($currentInventoryItemId)) {
+        // Consider a more user-friendly error page or a dedicated error display mechanism
+        echo "Item does not exist or has an invalid ID. <a href='index.php'>Click here to go to the home page.</a>";
         exit();
 }
-if (isset($_SESSION['uid']))
-        $wished_list_count = $wishlist->get_wished_list_item($_SESSION["uid"]);
 
-$sql = "SELECT * from productitem left join inventoryitem on productitem.productID = inventoryitem.productItemID WHERE `InventoryItemID` =" . $_GET['itemid'];
-$result = $mysqli->query($sql);
-$row = mysqli_fetch_array($result);
-$category = $row['category'];
-$icudrop = $row['productItemID'];
-$product_info = $row['product_information'];
-$product_name = $row['product_name'];
-$shipping_returns = $row['shipping_returns'];
+// SECTION 3: CORE DATA FETCHING
+// -----------------------------------------------------------------------------
+// Fetch main product and inventory details using prepared statements
+$sql_main_product = "SELECT pi.*, ii.* 
+                     FROM productitem pi 
+                     LEFT JOIN inventoryitem ii ON pi.productID = ii.productItemID 
+                     WHERE ii.InventoryItemID = ?";
+$stmt_main_product = $mysqli->prepare($sql_main_product);
 
-$id_of_what_get_image = $_GET['itemid'];
-
-
-function getrelatedproducts($category9, $_id_of_what_get_image)
-{
-        include "conn.php";
-        $sql = "SELECT * FROM `inventoryitem` WHERE `category` = " . $category9 . " and InventoryItemID != " . $_id_of_what_get_image . " limit 5";
-        $result = $mysqli->query($sql);
-        return $result;
-
+if (!$stmt_main_product) {
+        // Log error and show user-friendly message
+        error_log("Prepare failed for main product query: " . $mysqli->error);
+        echo "An error occurred while fetching product details. Please try again later. <a href='index.php'>Return to homepage.</a>";
+        exit();
 }
 
+$stmt_main_product->bind_param("i", $currentInventoryItemId);
+$stmt_main_product->execute();
+$result_main_product = $stmt_main_product->get_result();
+
+if ($result_main_product->num_rows === 0) {
+        echo "Product details not found. <a href='index.php'>Click here to go to the home page.</a>";
+        exit();
+}
+$row = $result_main_product->fetch_assoc(); // $row will contain all fetched data
+$stmt_main_product->close();
+
+// Extract key data into variables for easier use in the view (consistent with old $row usage)
+$category_id_from_inventory = $row['category']; // This is likely the category_id from inventoryitem
+$main_product_id_for_item = $row['productID'];   // This is productitem.productID (used as $pid and $icudrop previously)
+$product_info_text = $row['product_information'];
+$product_name_text = $row['product_name'];
+$shipping_returns_text = $row['shipping_returns'];
+$description_text = $row['description']; // Assuming 'description' from inventoryitem is the primary one
+$cost_price = $row['cost'];
+
+// SECTION 4: SECONDARY DATA PREPARATION
+// -----------------------------------------------------------------------------
+
+// Wishlist
+$wished_list_count = 0;
+if (isset($_SESSION['uid'])) {
+        $wished_list_count = $wishlist->get_wished_list_item((int) $_SESSION["uid"]);
+}
+
+// Reviews
+$Orvi = new Review($pdo);
+
+// Toast Messages (for cart/wishlist actions)
+$toast_message_for_js = null;
+$toast_icon_class_for_js = null;
+if (isset($_GET['toast_action'])) {
+        switch ($_GET['toast_action']) {
+                case 'cart_add_success':
+                        $toast_message_for_js = "Item successfully added to your cart!";
+                        $toast_icon_class_for_js = "fas fa-shopping-cart";
+                        break;
+                case 'wishlist_add_success':
+                        $toast_message_for_js = "Item added to your wishlist!";
+                        $toast_icon_class_for_js = "fas fa-heart";
+                        break;
+        }
+}
+
+// Cart
 $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
+
+// Promotions
+$is_on_promotion = $promotion->check_if_item_is_in_inventory_promotion($currentInventoryItemId);
+$display_price = $cost_price;
+$old_price = null;
+if ($is_on_promotion) {
+        $display_price = $promotion->get_promoPrice_price($currentInventoryItemId);
+        $old_price = $promotion->get_regular_price($currentInventoryItemId); // Original price before promo
+}
+
+// Variations
+$var_obj = new Variation($pdo);
+$colorVariations = $var_obj->get_color_variations_for_product_from_sku($main_product_id_for_item);
+$sizeVariations = $var_obj->get_size_variations_for_product_from_sku($main_product_id_for_item);
+
+// "New" Product Label
+$is_new_product = in_array($currentInventoryItemId, $product_obj->get_all_product_items_that_are_less_than_one_month());
+
+// Related Categories for Display
+$cat_obj = new Category($pdo); // Changed $pdp to $pdo
+$related_categories_stmt = $cat_obj->get_related_categories($currentInventoryItemId);
+
+// Review Permissions
+$can_add_review = false;
+$has_reviewed_message = '';
+if (isset($_SESSION['uid']) && $currentInventoryItemId > 0) {
+        if ($Orvi->hasUserReviewedProduct($currentInventoryItemId, (int) $_SESSION['uid'])) {
+                $has_reviewed_message = '<p class="text-muted small">You have already reviewed this product.</p>';
+        } else {
+                $can_add_review = true;
+        }
+} elseif ($currentInventoryItemId > 0) {
+        $review_product_id_for_link = $main_product_id_for_item;
+        $redirect_url_for_review = urlencode("product-review.php?inventory-item=$currentInventoryItemId&product_id=$review_product_id_for_link");
+        $has_reviewed_message = '<p class="text-muted small"><a href="login.php?redirect_url=' . $redirect_url_for_review . '">Login</a> to write a review.</p>';
+}
+
+// SECTION 5: HELPER FUNCTIONS (If specific to this page)
+// -----------------------------------------------------------------------------
+/**
+ * Fetches related products.
+ * Note: It's generally better to pass DB connection as a parameter.
+ * This function might be for AJAX or a different part of the site if not directly used in this page's render.
+ */
+function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
+{
+        // include "conn.php"; // Avoid include inside function
+        $sql = "SELECT * FROM `inventoryitem` WHERE `category` = ? AND InventoryItemID != ? LIMIT 5";
+        $stmt = $db_connection->prepare($sql);
+        if (!$stmt) {
+                error_log("Prepare failed for getrelatedproducts: " . $db_connection->error);
+                return null;
+        }
+        $stmt->bind_param("ii", $category_id, $exclude_item_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        // $stmt->close(); // Closing here would prevent fetching results if $result is returned directly
+        return $result; // The caller should close the statement after fetching if needed, or fetch all data here.
+}
+
 ?>
 
 <html lang="en">
@@ -43,6 +157,34 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
         <title>Product Page</title>
         <?php include "htlm-includes.php/metadata.php"; ?>
+        <!-- SweetAlert2 CSS -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+        <!-- Font Awesome for icons (if you use them in toasts) -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+        <style>
+                /* --- Theme's SweetAlert2 Toast Styles (Example) --- */
+                .themed-toast-popup {
+                        background-color: #f0f0f0 !important;
+                        border-left: 3px solid #007bff !important;
+                        border-radius: 2px !important;
+                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+                        padding: 0.55em 0.5em !important;
+                }
+
+                .themed-toast-html-icon i {
+                        font-size: 1.2em;
+                        /* Adjust icon size in toast */
+                        color: #007bff;
+                        /* Match border or use another theme color */
+                        margin-right: 8px;
+                }
+
+                .themed-toast-html-icon {
+                        font-size: 0.95em;
+                        /* Adjust text size in toast */
+                }
+        </style>
         <style>
                 .truncate {
                         overflow: hidden;
@@ -78,7 +220,7 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                         <ol class="breadcrumb">
                                                 <?php echo breadcrumbs(); ?>
                                         </ol>
-                                        <!--
+                                        <!-- Product Pager (Example, if needed)
                                         <nav class="product-pager ml-auto" aria-label="Product">
                                                 <a class="product-pager-link product-pager-prev" href="#"
                                                         aria-label="Previous" tabindex="-1">
@@ -87,13 +229,12 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                 </a>
 
                                                 <a class="product-pager-link product-pager-next"
-                                                        href="product-detail.php?itemid=<?php +1 ?>" aria-label="Next"
+                                                        href="#" aria-label="Next"
                                                         tabindex="-1">
                                                         <span>Next</span>
                                                         <i class="icon-angle-right"></i>
                                                 </a>
-                                        </nav>
-        -->
+                                        </nav> -->
                                 </div><!-- End .container -->
                         </nav><!-- End .breadcrumb-nav -->
 
@@ -104,38 +245,34 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                         <div class="product-details-top">
                                                                 <div class="row">
                                                                         <div class="col-md-6 main-product-cover"
-                                                                                product-info=<?= $_GET['itemid'] ?>
-                                                                                product-cat=<?= $row['category'] ?>>
+                                                                                product-info="<?= $currentInventoryItemId ?>"
+                                                                                product-cat="<?= $category_id_from_inventory ?>">
                                                                                 <div class="product-gallery">
                                                                                         <figure
                                                                                                 class="product-main-image">
-                                                                                                <?php $pid = $product_obj->get_product_id($_GET['itemid']); ?>
-                                                                                                <?php if ($promotion->check_if_item_is_in_promotion($product_obj->get_product_id($_GET['itemid'])) != null) { ?>
+                                                                                                <?php if ($promotion->check_if_item_is_in_promotion($main_product_id_for_item) != null) { ?>
                                                                                                         <span
                                                                                                                 class="product-label label-sale">Sale</span>
                                                                                                 <?php } ?>
 
                                                                                                 <?php
-                                                                                                //if(in_array($product_obj->get_product_id($_GET['itemid']), $product_obj->get_all_product_items_that_are_less_than_one_month())){ 
-                                                                                                if (in_array($_GET['itemid'], $product_obj->get_all_product_items_that_are_less_than_one_month())) { ?>
+                                                                                                if ($is_new_product) { ?>
                                                                                                         <span
                                                                                                                 class="product-label label-top">NEW</span>
                                                                                                 <?php } ?>
                                                                                                 <?php
-                                                                                                if ($product_obj->check_dirtory_resized_600($pid, $_GET['itemid'])) {
-                                                                                                        $i = $_GET['itemid'];
-
-                                                                                                        $pi = glob("products/product-$pid/product-$pid-image/inventory-$pid-$i/resized_600/" . '*.{jpg,gif}', GLOB_BRACE);
+                                                                                                if ($product_obj->check_dirtory_resized_600($main_product_id_for_item, $currentInventoryItemId)) {
+                                                                                                        $pi = glob("products/product-$main_product_id_for_item/product-$main_product_id_for_item-image/inventory-$main_product_id_for_item-$currentInventoryItemId/resized_600/" . '*.{jpg,gif,png,jpeg}', GLOB_BRACE);
 
                                                                                                         $p = $pi[0];
                                                                                                 } else {
-                                                                                                        $p = $product_obj->get_cover_image($id_of_what_get_image);
+                                                                                                        $p = $product_obj->get_cover_image($currentInventoryItemId);
                                                                                                 }
                                                                                                 ?>
                                                                                                 <img id="product-zoom"
                                                                                                         src="<?= $p; ?>"
                                                                                                         data-image="<?= $p ?>"
-                                                                                                        data-zoom-image="<?= $product_obj->get_cover_image($id_of_what_get_image); ?>"
+                                                                                                        data-zoom-image="<?= $product_obj->get_cover_image($currentInventoryItemId); ?>"
                                                                                                         alt="product image">
 
                                                                                                 <a href="#"
@@ -149,8 +286,8 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
 
                                                                                         <div id="product-zoom-gallery"
                                                                                                 class="product-image-gallery">
-                                                                                                <?php $p_obj = new ProductItem();
-                                                                                                $stmt = $p_obj->get_other_images_of_item_in_inventory($id_of_what_get_image);
+                                                                                                <?php $p_obj = new ProductItem($pdo); // Pass the $pdo connection
+                                                                                                $stmt = $p_obj->get_other_images_of_item_in_inventory($currentInventoryItemId);
 
                                                                                                 if ($stmt != null) {
                                                                                                         while ($r = $stmt->fetch()) { ?>
@@ -160,7 +297,7 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                                                         data-zoom-image="<?= $r['image_path'] ?>">
                                                                                                                         <?php
 
-                                                                                                                        if ($p_obj->check_dirctory_resized($pid, $_GET['itemid'])) {
+                                                                                                                        if ($p_obj->check_dirctory_resized($main_product_id_for_item, $currentInventoryItemId)) {
                                                                                                                                 $explode = explode('/', $r['image_path']);
                                                                                                                                 $exp = explode('/', $r['image_path'], -1);
                                                                                                                                 $p = "products/" . $exp[1] . "/" . $exp[2] . "/" . $exp[3] . "/resized/" . $explode[count($explode) - 1];
@@ -186,15 +323,14 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                 <div
                                                                                         class="product-details product-details-sidebar">
                                                                                         <h1 class="product-title">
-                                                                                                <?= $row['description'] ?>
+                                                                                                <?= htmlspecialchars($description_text) ?>
                                                                                         </h1><!-- End .product-title -->
 
                                                                                         <div class="ratings-container">
 
                                                                                                 <div class="ratings">
-
                                                                                                         <div class="ratings-val"
-                                                                                                                style="width: <?= $Orvi->get_rating_($_GET['itemid']) ?>%">
+                                                                                                                style="width: <?= $Orvi->get_rating_($currentInventoryItemId) ?>%">
                                                                                                         </div>
                                                                                                         <!-- End .ratings-val -->
                                                                                                 </div>
@@ -202,24 +338,24 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                                 <a class="ratings-text"
                                                                                                         href="#product-review-link"
                                                                                                         id="review-link">(
-                                                                                                        <?= $Orvi->get_rating_review_number($_GET['itemid']); ?>
+                                                                                                        <?= $Orvi->get_rating_review_number($currentInventoryItemId); ?>
                                                                                                         Reviews )</a>
                                                                                         </div>
                                                                                         <!-- End .rating-container -->
-                                                                                        <?php if ($promotion->check_if_item_is_in_inventory_promotion($row['InventoryItemID'])) { ?>
+                                                                                        <?php if ($is_on_promotion) { ?>
                                                                                                 <span class="product-price"
-                                                                                                        style="margin-bottom: 0px;">N<?= $promotion->get_promoPrice_price($row['InventoryItemID']) ?></span>
+                                                                                                        style="margin-bottom: 0px;">N<?= htmlspecialchars($display_price) ?></span>
                                                                                                 <span class="old-price">Was
-                                                                                                        N<?= $promotion->get_regular_price($row['InventoryItemID']) ?></span>
+                                                                                                        N<?= htmlspecialchars($old_price) ?></span>
                                                                                         <?php } else { ?>
                                                                                                 <div class="product-price">
                                                                                                         &#8358;
-                                                                                                        <?= $row['cost'] ?>
+                                                                                                        <?= htmlspecialchars($display_price) ?>
                                                                                                 </div>
                                                                                                 <!-- End .product-price -->
                                                                                         <?php } ?>
                                                                                         <div class="product-content">
-                                                                                                <p><?= $row['description'] ?>
+                                                                                                <p><?= htmlspecialchars($description_text) ?>
                                                                                                 </p>
                                                                                         </div>
                                                                                         <!-- End .product-content -->
@@ -229,10 +365,6 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                                 <div
                                                                                                         class="details-filter-row details-row-size">
                                                                                                         <?php
-                                                                                                        $var_obj = new Variation($pdo);
-                                                                                                        $product_obj = new ProductItem();
-                                                                                                        $colorVariations = $var_obj->get_color_variations_for_product_from_sku($product_obj->get_product_id($_GET['itemid']));
-
                                                                                                         if (!empty($colorVariations)) {
                                                                                                                 ?>
                                                                                                                 <label>Color:</label>
@@ -242,7 +374,7 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                                                         foreach ($colorVariations as $itemId => $color) {
                                                                                                                                 ?>
                                                                                                                                 <a href="product-detail.php?itemid=<?= $itemId ?>"
-                                                                                                                                        style="background: <?= $color ?>"><span
+                                                                                                                                        style="background: <?= htmlspecialchars($color) ?>"><span
                                                                                                                                                 class="sr-only">Color
                                                                                                                                                 name</span></a>
                                                                                                                                 <?php
@@ -256,7 +388,6 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
 
 
                                                                                                 <?php
-                                                                                                $sizeVariations = $var_obj->get_size_variations_for_product_from_sku($product_obj->get_product_id($_GET['itemid']));
                                                                                                 if (!empty($sizeVariations)) {
                                                                                                         ?>
                                                                                                         <div
@@ -278,7 +409,7 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                                                                 foreach ($sizeVariations as $itemId => $size) {
                                                                                                                                         ?>
                                                                                                                                         <option
-                                                                                                                                                value="<?= $size ?>">
+                                                                                                                                                value="<?= htmlspecialchars($size) ?>">
                                                                                                                                                 <?= $size ?>
                                                                                                                                         </option>
                                                                                                                                         <?php
@@ -299,13 +430,6 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                                 <div
                                                                                                         class="details-filter-row details-row-size">
                                                                                                         <?php
-                                                                                                        $invt_item = new InventoryItem($pdo);
-                                                                                                        $color = $invt_item->get_color($_GET['itemid']);
-                                                                                                        $arr_color = array();
-                                                                                                        $var_obj = new Variation($pdo);
-                                                                                                        $var_obj_size = new Variation($pdo);
-                                                                                                        $product_obj = new ProductItem();
-
                                                                                                         ?>
 
 
@@ -326,7 +450,7 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
 
                                                                                                                                 <input type="hidden"
                                                                                                                                         name="inventory_product_id"
-                                                                                                                                        value="<?= $_GET['itemid'] ?>" />
+                                                                                                                                        value="<?= $currentInventoryItemId ?>" />
                                                                                                                                 <input type="number"
                                                                                                                                         name="qty"
                                                                                                                                         id="qty"
@@ -344,8 +468,7 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
 
                                                                                                                         <input type="submit"
                                                                                                                                 class="submit ubmit-cart btn-product btn-cart submit-cart"
-                                                                                                                                value="add to cart" />
-                                                                                                                        <!--  <a href="#" product-info="//$_GET['itemid']" class="submit-cart btn-product btn-cart submit-cart"><span>add to cart</span></a> -->
+                                                                                                                                value="Add to Cart" />
 
 
                                                                                                                 </div>
@@ -353,10 +476,10 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
 
                                                                                                                 <div
                                                                                                                         class="details-action-wrapper">
-                                                                                                                        <a href="add-to-watch-list.php?itemid=<?= $_GET['itemid'] ?>"
+                                                                                                                        <a href="add-to-watch-list.php?itemid=<?= $currentInventoryItemId ?>"
                                                                                                                                 class="btn-product btn-wishlist"
                                                                                                                                 title="Wishlist"
-                                                                                                                                data-product-id="<?= $_GET['itemid'] ?>"><span>Add
+                                                                                                                                data-product-id="<?= $currentInventoryItemId ?>"><span>Add
                                                                                                                                         to
                                                                                                                                         Wishlist</span></a>
 
@@ -376,15 +499,13 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                                         class="product-cat">
                                                                                                         <span>Category:</span>
                                                                                                         <?php
-                                                                                                        $obj = new Category();
-                                                                                                        $stmt = $obj->get_related_categories($_GET['itemid']);
-                                                                                                        if ($stmt) {
+                                                                                                        if ($related_categories_stmt && $related_categories_stmt->rowCount() > 0) {
                                                                                                                 $num_count = 1;
-                                                                                                                $number_of_rows = $stmt->rowCount() ? $stmt->rowCount() : 0;
+                                                                                                                $number_of_rows = $related_categories_stmt->rowCount();
 
-                                                                                                                while ($row = $stmt->fetch()) { ?>
+                                                                                                                while ($row_cat = $related_categories_stmt->fetch(PDO::FETCH_ASSOC)) { ?>
                                                                                                                         <a
-                                                                                                                                href="#"><?= $row['categoryName'] ?></a>
+                                                                                                                                href="category.php?id=<?= htmlspecialchars($row_cat['category_id']) // Assuming you have a category page ?>"><?= htmlspecialchars($row_cat['categoryName']) ?></a>
                                                                                                                         <?php
                                                                                                                         if ($num_count < $number_of_rows) {
                                                                                                                                 echo ", ";
@@ -394,110 +515,109 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
                                                                                                                         <?php $num_count++;
                                                                                                                 }
                                                                                                         } else {
-                                                                                                                // Handle the case where there are no related categories.  You might choose to display a message like "No related categories found."
-                                                                                                                echo "No related categories found.";
+                                                                                                                // Handle the case where there are no related categories.
+                                                                                                                echo "N/A";
                                                                                                         }
                                                                                                         ?>
-
                                                                                                 </div>
                                                                                                 <!-- End .product-cat -->
 
-
-                                                                                                <a href="product-review.php?inventory-item=<?= $_GET['itemid'] ?>&product_id=<?= $icudrop ?>"
-                                                                                                        class="btn-product "
-                                                                                                        title="Compare"><span>Add
-                                                                                                                a
-                                                                                                                Review</span></a>
+                                                                                                <?php
+                                                                                                if ($can_add_review):
+                                                                                                        ?>
+                                                                                                        <a href="product-review.php?inventory-item=<?= $currentInventoryItemId ?>&product_id=<?= $main_product_id_for_item ?>"
+                                                                                                                class="btn btn-outline-primary-2 btn-sm"><span>Write
+                                                                                                                        a
+                                                                                                                        Review</span><i
+                                                                                                                        class="icon-edit"></i></a>
+                                                                                                <?php else: ?>
+                                                                                                        <?= $has_reviewed_message ?>
+                                                                                                <?php endif; ?>
 
 
                                                                                         </div>
                                                                                         <!-- End .product-details-footer -->
+
                                                                                 </div><!-- End .product-details -->
                                                                         </div><!-- End .col-md-6 -->
                                                                 </div><!-- End .row -->
                                                         </div><!-- End .product-details-top -->
 
-                                                        <div class="product-details-tab">
-                                                                <ul class="nav nav-pills justify-content-center"
-                                                                        role="tablist">
-                                                                        <li class="nav-item">
-                                                                                <a class="nav-link active"
-                                                                                        id="product-desc-link"
-                                                                                        data-toggle="tab"
-                                                                                        href="#product-desc-tab"
-                                                                                        role="tab"
-                                                                                        aria-controls="product-desc-tab"
-                                                                                        aria-selected="true">Description</a>
-                                                                        </li>
+                                                        <!-- Combined Product Info, Shipping, and Reviews Section -->
+                                                        <div class="product-additional-details mt-5">
 
-                                                                        <li class="nav-item">
-                                                                                <a class="nav-link"
-                                                                                        id="product-shipping-link"
-                                                                                        data-toggle="tab"
-                                                                                        href="#product-shipping-tab"
-                                                                                        role="tab"
-                                                                                        aria-controls="product-shipping-tab"
-                                                                                        aria-selected="false">Shipping &
-                                                                                        Returns</a>
-                                                                        </li>
-                                                                        <li class="nav-item">
-                                                                                <a class="nav-link"
-                                                                                        id="product-review-link"
-                                                                                        data-toggle="tab"
-                                                                                        href="#product-review-tab"
-                                                                                        role="tab"
-                                                                                        aria-controls="product-review-tab"
-                                                                                        aria-selected="false">Reviews
-                                                                                        (<?= $Orvi->get_rating_review_number($_GET['itemid']) ?>)</a>
-                                                                        </li>
-                                                                </ul>
-                                                                <div class="tab-content">
-                                                                        <div class="tab-pane fade show active"
-                                                                                id="product-desc-tab" role="tabpanel"
-                                                                                aria-labelledby="product-desc-link">
-                                                                                <div class="product-desc-content">
-                                                                                        <h3>Product Information</h3>
-                                                                                        <p> <?= $product_info ?> </p>
-                                                                                </div><!-- End .product-desc-content -->
-                                                                        </div><!-- .End .tab-pane -->
+                                                                <div class="product-description-section mb-4">
+                                                                        <h3 class="mb-3">Product Information</h3>
+                                                                        <div class="product-desc-content">
+                                                                                <?= nl2br($product_info_text) // Removed htmlspecialchars to allow HTML rendering ?>
+                                                                        </div>
+                                                                </div>
 
-                                                                        <div class="tab-pane fade"
-                                                                                id="product-shipping-tab"
-                                                                                role="tabpanel"
-                                                                                aria-labelledby="product-shipping-link">
-                                                                                <div class="product-desc-content">
-                                                                                        <h3>Delivery & returns</h3>
-                                                                                        <p><?= $product_obj->shipping_and_re_trun_rule($shipping_returns) ?>
-                                                                                        </p>
-                                                                                </div><!-- End .product-desc-content -->
-                                                                        </div><!-- .End .tab-pane -->
-                                                                        <div class="tab-pane fade"
-                                                                                id="product-review-tab" role="tabpanel"
-                                                                                aria-labelledby="product-review-link">
+                                                                <div class="product-shipping-section mb-4">
+                                                                        <h3 class="mb-3">Delivery & returns</h3>
+                                                                        <div class="product-desc-content">
+                                                                                <p><?= nl2br(htmlspecialchars($product_obj->shipping_and_re_trun_rule($shipping_returns_text))) ?>
+                                                                                </p>
+                                                                        </div>
+                                                                </div>
 
-                                                                                <?php
-                                                                                $obj = new Review();
-                                                                                ?>
-                                                                                <div class="reviews">
-                                                                                        <span class="slider-loader"
-                                                                                                style="visibility: hidden;"></span>
-                                                                                        <h3>Reviews
-                                                                                                (<?= $obj->get_total_review_of_product($_GET['itemid']); ?>)
-                                                                                        </h3>
-                                                                                        <div id="main-review">
+                                                                <div class="product-reviews-section" id="product-review-link"> <!-- Added id for anchor link -->
+                                                                        <?php
+                                                                        // Display flash messages (from review submission)
+                                                                        if (isset($_SESSION['flash_message'])) {
+                                                                                echo '<div class="alert alert-' . htmlspecialchars($_SESSION['flash_message']['type']) . ' alert-dismissible fade show" role="alert">';
+                                                                                echo htmlspecialchars($_SESSION['flash_message']['text']);
+                                                                                echo '<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>';
+                                                                                echo '</div>';
+                                                                                unset($_SESSION['flash_message']); // Clear the message after displaying
+                                                                        }
 
-                                                                                        </div>
-
-
-                                                                                </div><!-- End .reviews -->
-                                                                                <?php ?>
-
-                                                                        </div><!-- .End .tab-pane -->
-                                                                </div><!-- End .tab-content -->
-                                                        </div><!-- End .product-details-tab -->
-
-                                                        <!--<h2 class="title text-center mb-4">You May Also Like</h2><!-- End .title text-center -->
-                                                        <?php //include "also-like.php" ?>
+                                                                        $product_reviews = $Orvi->getReviewsByProduct($currentInventoryItemId);
+                                                                        $total_reviews_count = $Orvi->get_rating_review_number($currentInventoryItemId);
+                                                                        ?>
+                                                                        <div class="reviews">
+                                                                                <h3 class="mb-3">Reviews
+                                                                                        (<?= $total_reviews_count ?>)</h3>
+                                                                                <div>
+                                                                                        <?php if (!empty($product_reviews)): ?>
+                                                                                                <?php foreach ($product_reviews as $review_item): ?>
+                                                                                                        <div class="review">
+                                                                                                                <div class="row no-gutters">
+                                                                                                                        <div class="col-auto">
+                                                                                                                                <h4><a href="#"><?= htmlspecialchars(($review_item['customer_fname'] ?? 'User') . ' ' . ($review_item['customer_lname'] ?? '')) ?></a>
+                                                                                                                                </h4>
+                                                                                                                                <div
+                                                                                                                                        class="ratings-container">
+                                                                                                                                        <div
+                                                                                                                                                class="ratings">
+                                                                                                                                                <div class="ratings-val"
+                                                                                                                                                        style="width: <?= (($review_item['rating'] ?? 0) / 5) * 100 ?>%;">
+                                                                                                                                                </div>
+                                                                                                                                        </div>
+                                                                                                                                </div>
+                                                                                                                                <span
+                                                                                                                                        class="review-date"><?= isset($review_item['review_date']) ? date("M d, Y", strtotime($review_item['review_date'])) : 'N/A' ?></span>
+                                                                                                                        </div>
+                                                                                                                        <div class="col">
+                                                                                                                                <h4><?= htmlspecialchars($review_item['review_title'] ?? 'Review') ?>
+                                                                                                                                </h4>
+                                                                                                                                <div
+                                                                                                                                        class="review-content">
+                                                                                                                                        <p><?= nl2br(htmlspecialchars($review_item['comment'] ?? 'No comment provided.')) ?>
+                                                                                                                                        </p>
+                                                                                                                                </div>
+                                                                                                                        </div>
+                                                                                                                </div>
+                                                                                                        </div>
+                                                                                                <?php endforeach; ?>
+                                                                                        <?php else: ?>
+                                                                                                <p>Be the first to review this product!
+                                                                                                </p>
+                                                                                        <?php endif; ?>
+                                                                                </div>
+                                                                        </div><!-- End .reviews -->
+                                                                </div>
+                                                        </div>
                                                 </div><!-- End .col-lg-9 -->
 
                                                 <aside class="col-lg-3">
@@ -515,9 +635,8 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
 
 
                                                                         <?php
-
-                                                                        $obj2 = new Category();
-                                                                        $r = $obj2->get_category_by_id($_GET['itemid']);
+                                                                        // $related_products_result = getrelatedproducts($category_id_from_inventory, $currentInventoryItemId, $mysqli);
+                                                                        // Loop through $related_products_result if needed here, or handle via JS
                                                                         ?>
                                                                         <!--  
                                                                       <a href="" class="btn btn-outline-dark-3"><span>View More Products</span><i class="icon-long-arrow-right"></i></a> 
@@ -549,6 +668,40 @@ $num_items_in_cart = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
 
         <!-- Plugins JS File -->
         <?php include "jsfile.php"; ?>
+
+        <!-- SweetAlert2 JS (ensure it's loaded after jQuery if jQuery is used by other scripts, but SweetAlert2 itself is standalone) -->
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+
+        <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                        <?php
+                        // Prepare HTML content for the toast
+                        $toast_html_content = '';
+                        if (isset($toast_message_for_js) && !empty($toast_message_for_js)) {
+                                if (isset($toast_icon_class_for_js) && !empty($toast_icon_class_for_js)) {
+                                        $toast_html_content .= '<i class="' . htmlspecialchars($toast_icon_class_for_js, ENT_QUOTES) . '"></i>&nbsp;';
+                                }
+                                $toast_html_content .= htmlspecialchars($toast_message_for_js, ENT_QUOTES);
+                        }
+
+                        if (!empty($toast_html_content)):
+                                ?>
+                                Swal.fire({
+                                        toast: true,
+                                        position: 'top-end',
+                                        showConfirmButton: false,
+                                        timer: 5000, // <<< Alert will disappear after 5 seconds
+                                        timerProgressBar: true,
+                                        html: '<?= addslashes($toast_html_content) ?>',
+                                        title: false, // Set to false if 'html' provides all content
+                                        customClass: {
+                                                popup: 'themed-toast-popup',
+                                                htmlContainer: 'themed-toast-html-icon'
+                                        }
+                                });
+                        <?php endif; ?>
+                });
+        </script>
 
 
 

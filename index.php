@@ -219,7 +219,10 @@ try {
 <body>
     <div class="page-wrapper">
 
-        <?php include 'header_main.php'; // USE THE CONSOLIDATED HEADER ?>
+    <?php
+
+include "header_main.php";
+?>
 
         <main class="main">
             <!-- ========================= BANNER SLIDER ========================= -->

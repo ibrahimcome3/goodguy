@@ -17,9 +17,9 @@ require_once(__DIR__ . '/db_connection/conn.php'); // Database connection
 require_once 'breadcrumps.php';
 
 //Instantiate classes after database connection
-$product_obj = new ProductItem(); // Pass PDO connection
-$promotion = new Promotion(); // Pass PDO connection
-$Orvi = new Review(); // Pass PDO connection
+$product_obj = new ProductItem($pdo); // Pass PDO connection
+$promotion = new Promotion($pdo); // Pass PDO connection
+$Orvi = new Review($pdo); // Pass PDO connection
 $invt = new InventoryItem($pdo); // Pass PDO connection
 $cart = new Cart($pdo, $promotion);
 

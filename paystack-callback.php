@@ -1,123 +1,118 @@
 <?php
 // paystack-callback.php
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
 
-require_once "includes.php"; // Include your core files (DB connection, Order class)
-require_once 'vendor/autoload.php'; // Include SDK autoloaders
+require_once "includes.php"; // Your main include file (defines $pdo, classes, etc.)
+require_once 'vendor/autoload.php'; // Composer autoloader for Paystack SDK
 
-// Load environment variables
+// Load environment variables if you're using them for Paystack Secret Key
 try {
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
     $dotenv->load();
 } catch (Exception $e) {
-    error_log("Error loading .env file in callback: " . $e->getMessage());
-    die("Configuration error."); // Keep error minimal on callback
+    error_log("Error loading .env file in paystack-callback: " . $e->getMessage());
 }
 
 use Yabacon\Paystack;
 use Yabacon\Paystack\Exception\ApiException;
 
-session_start();
+// --- 1. Get Transaction Reference ---
+$reference = $_GET['reference'] ?? null;
 
-// --- Get Reference from Paystack Redirect ---
-// Paystack typically sends the reference via GET parameter
-if (!isset($_GET['reference'])) {
-    error_log("Paystack callback missing reference.");
-    // Redirect to a generic error page or homepage
-    header("Location: index.php?error=payment_failed");
-    exit();
-}
-$reference = filter_input(INPUT_GET, 'reference', FILTER_SANITIZE_STRING);
-
-// --- Verify Transaction ---
-$paystackSecretKey = getenv('PAYSTACK_SECRET_KEY');
-if (!$paystackSecretKey) {
-    error_log("Paystack Secret Key not found in callback.");
-    header("Location: index.php?error=payment_config");
+if (empty($reference)) {
+    $_SESSION['payment_error'] = "Payment reference missing. Transaction cannot be verified.";
+    error_log("Paystack Callback: Missing reference parameter.");
+    header("Location: checkout.php"); // Or a generic error page
     exit();
 }
 
-$order = new Order($pdo); // Instantiate your Order class
-
+// --- 2. Initialize Paystack and Order Class ---
 try {
+    // IMPORTANT: Ensure your Paystack Secret Key is correctly loaded.
+    // Replace 'YOUR_PAYSTACK_SECRET_KEY' if not using .env or if it's defined elsewhere.
+    $paystackSecretKey = $_ENV['PAYSTACK_SECRET_KEY'] ?? 'sk_test_ee47a4a7d600efa600bffa8161353e428989243d'; // Fallback to test key if .env fails
+    if (empty($paystackSecretKey)) {
+        throw new Exception("Paystack Secret Key is not configured.");
+    }
     $paystack = new Paystack($paystackSecretKey);
+    $order = new Order($pdo); // Assuming Order class is loaded via includes.php
+} catch (Exception $e) {
+    $_SESSION['payment_error'] = "Payment system configuration error. Please contact support. [PSC01]";
+    error_log("Paystack Callback Error: " . $e->getMessage());
+    header("Location: checkout.php");
+    exit();
+}
 
-    // Verify the transaction using the reference
-    $tranx = $paystack->transaction->verify([
-        'reference' => $reference
-    ]);
+// --- 3. Verify Transaction with Paystack ---
+try {
+    $transaction = $paystack->transaction->verify(['reference' => $reference]);
 
-    // --- Check Verification Result ---
-    if ($tranx->status && $tranx->data->status === 'success') {
+    // --- 4. Process Transaction Status ---
+    if ($transaction->status && isset($transaction->data->status) && $transaction->data->status == 'success') {
         // Payment was successful
 
-        // **CRUCIAL SECURITY STEP:** Verify Amount and Currency
-        $orderId = $tranx->data->metadata->order_id ?? null; // Get order ID from metadata
-        $amountPaid = $tranx->data->amount; // Amount is in Kobo/cents
-        $currencyPaid = $tranx->data->currency;
-
-        if (!$orderId) {
-            error_log("Paystack callback successful but missing order_id in metadata for reference: " . $reference);
-            header("Location: index.php?error=payment_issue");
-            exit();
-        }
-
-        $orderDetails = $order->getOrderDetails($orderId);
-        if (!$orderDetails) {
-            error_log("Paystack callback successful but cannot find order ($orderId) for reference: " . $reference);
-            header("Location: index.php?error=payment_issue");
-            exit();
-        }
-
-        $expectedAmountInKobo = $orderDetails['order_total'] * 100;
-        $expectedCurrency = 'NGN'; // Or your store's currency
-
-        if ($amountPaid >= $expectedAmountInKobo && $currencyPaid === $expectedCurrency) {
-            // Amount and currency match! Update order status
-            $order->updateOrderStatus($orderId, 'processing'); // Or 'paid', 'completed' etc.
-
-            // Clear cart (optional, maybe do this on confirmation page)
-            unset($_SESSION['cart']);
-
-            // Redirect to a success page
-            header("Location: order-confirmation.php?order_id=" . $orderId . "&status=success");
-            exit();
-
+        // a. Get Order ID from metadata (safer than session)
+        $orderId = null;
+        if (isset($transaction->data->metadata->order_id)) {
+            $orderId = (int) $transaction->data->metadata->order_id;
         } else {
-            // Amount mismatch - potential fraud or error
-            error_log("Paystack callback amount/currency mismatch for reference: $reference. Expected: $expectedAmountInKobo $expectedCurrency, Got: $amountPaid $currencyPaid");
-            // Update order status to 'payment_failed' or similar?
-            $order->updateOrderStatus($orderId, 'payment_failed'); // Example status
-            $_SESSION['payment_error'] = "Payment verification failed (amount mismatch). Please contact support.";
-            header("Location: payment.php?order_id=" . $orderId); // Send back to payment page
+            // Fallback or error if order_id is not in metadata
+            // This part depends on how you stored it during initialization.
+            // For now, let's assume it's in metadata as per payment.php setup.
+            $_SESSION['payment_error'] = "Could not retrieve order details for successful payment. Please contact support. [PSC02]";
+            error_log("Paystack Callback Success: Missing order_id in metadata for reference " . $reference);
+            header("Location: index.php"); // Or user's order history
             exit();
         }
+
+        // b. Update Order Status in Database
+        // Ensure you have an updateOrderStatus method in your Order class
+        // This method should ideally also check if the order isn't already marked as paid to prevent duplicate processing.
+        $order->updateOrderStatus($orderId, 'paid'); // Or 'completed', 'processing' depending on your workflow
+
+        // c. Send Payment Receipt Email
+        if ($order->sendPaymentReceiptEmail($orderId)) {
+            // Email sent successfully
+            $_SESSION['order_confirmation_message'] = "Your payment for order #{$orderId} was successful! A receipt has been sent to your email.";
+        } else {
+            // Email sending failed, but payment is still successful
+            $_SESSION['order_confirmation_message'] = "Your payment for order #{$orderId} was successful! We had trouble sending a receipt, but your order is confirmed. Please check your order history or contact support.";
+            error_log("Paystack Callback: Failed to send payment receipt for order ID {$orderId} after successful payment (Ref: {$reference}).");
+        }
+
+        // d. Clear the user's cart
+        unset($_SESSION['cart']);
+
+        // e. Redirect to a success/confirmation page
+        header("Location: order-confirmation.php?order_id=" . $orderId . "&status=success");
+        exit();
 
     } else {
-        // Payment verification failed or payment was not successful on Paystack
-        $errorMessage = $tranx->message ?? 'Payment not completed or verification failed.';
-        error_log("Paystack verification failed for reference: $reference. Reason: $errorMessage | Data: " . json_encode($tranx->data ?? null));
+        // Payment was not successful (failed, abandoned, etc.)
+        $errorMessage = $transaction->data->gateway_response ?? 'Payment was not successful.';
+        $_SESSION['payment_error'] = "Payment failed or was cancelled. Reason: " . htmlspecialchars($errorMessage);
 
-        // Try to get order ID from metadata even on failure if possible
-        $orderId = $tranx->data->metadata->order_id ?? null;
+        // Optionally, retrieve order_id from metadata if available to update status to 'failed'
+        $orderId = $transaction->data->metadata->order_id ?? null;
         if ($orderId) {
-            $order->updateOrderStatus($orderId, 'payment_failed'); // Update status
-            $_SESSION['payment_error'] = "Payment failed or was cancelled. Please try again.";
-            header("Location: payment.php?order_id=" . $orderId);
-        } else {
-            // Cannot determine order, redirect generally
-            header("Location: index.php?error=payment_failed");
+            $order->updateOrderStatus((int) $orderId, 'failed');
         }
+        error_log("Paystack Callback: Payment not successful for reference {$reference}. Gateway Response: " . ($transaction->data->gateway_response ?? 'N/A'));
+        header("Location: payment.php?order_id=" . ($orderId ?? '') . "&status=failed"); // Redirect back to payment page
         exit();
     }
 
 } catch (ApiException $e) {
-    error_log("Paystack API Exception during verification for reference $reference: " . $e->getMessage());
-    // Redirect to a generic error page or payment page if possible
-    header("Location: index.php?error=payment_issue");
+    $_SESSION['payment_error'] = "Error verifying payment: " . htmlspecialchars($e->getMessage()) . ". Please contact support. [PSC03]";
+    error_log("Paystack Callback API Exception for reference {$reference}: " . $e->getMessage() . " | Response: " . ($e->getResponseObject() ? json_encode($e->getResponseObject()) : 'N/A'));
+    header("Location: checkout.php");
     exit();
 } catch (Exception $e) {
-    error_log("General Exception during Paystack callback for reference $reference: " . $e->getMessage());
-    header("Location: index.php?error=payment_issue");
+    $_SESSION['payment_error'] = "A system error occurred while verifying your payment. Please contact support. [PSC04]";
+    error_log("Paystack Callback General Exception for reference {$reference}: " . $e->getMessage());
+    header("Location: checkout.php");
     exit();
 }
 

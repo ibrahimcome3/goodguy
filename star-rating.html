@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="node_modules/star-rating.js/dist/star-rating.css" rel="stylesheet">
+    <!-- SweetAlert2 CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+
+<!-- SweetAlert2 JS -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+    <!-- Font Awesome for the cart icon (example) - Add this if you don't have it already -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+    <title>Document</title>
+    <style>
+        /* --- Your Theme's SweetAlert2 Toast Styles --- */
+        /* You'll want to adjust these to match your site's theme! */
+
+        .themed-toast-popup {
+            background-color: #f0f0f0 !important; /* Example: A light grey, change to your theme's bg */
+            border-left: 3px solid #007bff !important; /* Example: A blue accent, change to your theme's primary color */
+            border-radius: 2px !important; /* Reduced border radius for sharper corners */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+            padding: 0.55em 0.5em !important; /* Reduced padding for a more compact look */
+        }
+
+        .themed-toast-title {
+            color: #333 !important; /* Example: Dark grey text, change to your theme's text color */
+            font-size: 1em !important; /* Adjust as needed */
+        }
+
+        .themed-toast-icon .swal2-icon-content {
+            color: #007bff !important; /* Match the border or use another theme color for the icon */
+        }
+        /* Style for custom HTML icon if needed */
+        .themed-toast-html-icon i {
+            font-size: 1.5em; /* Adjust size as needed */
+            color: #007bff; /* Example color, match your theme */
+        }
+        /* --- End of Your Theme's SweetAlert2 Toast Styles --- */
+    </style>
+</head>
+<body>
+    <select class="star-rating">
+        <option value="">Select a rating</option>
+        <option value="5">Excellent</option>
+        <option value="4">Very Good</option>
+        <option value="3">Average</option>
+        <option value="2">Poor</option>
+        <option value="1">Terrible</option>
+    </select>
+
+    <br><br>
+    <button id="showAlertButton">Show Basic Alert</button>
+
+    <script src="node_modules/star-rating.js/dist/star-rating.js"></script>
+    <script>
+        var stars = new StarRating('.star-rating');
+
+        // SweetAlert2 example
+        document.getElementById('showAlertButton').addEventListener('click', function() {
+            Swal.fire({
+                toast: true, // Make it a toast
+                position: 'top-end', // Position it at the top-right corner
+                // icon: 'info', // We'll use html for a custom icon
+                showConfirmButton: false,
+                timer: 4000,
+                timerProgressBar: true,
+                html: '<i class="fas fa-shopping-cart"></i>&nbsp;&nbsp;Item added to cart!', // Custom HTML for icon and text
+                title: false,
+                customClass: {
+                    popup: 'themed-toast-popup', // Class for the main toast container
+                    title: 'themed-toast-title', // Class for the title (if you still want a separate title)
+                    htmlContainer: 'themed-toast-html-icon' // Class for the container of your custom HTML
+                    // icon: 'themed-toast-icon' // Not needed if using html for icon
+                }
+            });
+        });
+    </script>
+</body>
+</html>
