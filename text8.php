@@ -9,8 +9,8 @@ include 'class/ProductItem.php';
 include 'class/Variation.php';
 include "class/Promotion.php";
 include 'breadcrumps.php';
-$product_obj = new ProductItem();
-$promotion = new Promotion();
+$product_obj = new ProductItem($pdo);
+$promotion = new Promotion($pdo);
 $Orvi = new Review($pdo);
 
 $records_per_page = 6;

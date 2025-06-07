@@ -16,6 +16,19 @@ if (!isset($_SESSION['cart']) || count($_SESSION['cart']) == 0) {
     exit();
 }
 
+// Instantiate necessary objects if they are not already set by includes.php
+// $cart is assumed to be instantiated in includes.php as it's used directly.
+// $user might also be from includes.php; if not, instantiate it here.
+if (!isset($user) || !($user instanceof User)) {
+    // Ensure User class is loaded (should be by includes.php)
+    if (class_exists('User')) {
+        $user = new User($pdo); // Assuming User class constructor takes $pdo
+    } else {
+        error_log("User class not found in checkout-process-validation.php. Check includes.php.");
+        die("A critical error occurred with user setup. Please try again later.");
+    }
+}
+
 // Get cart items
 $cartItems = $cart->getCartItems();
 
@@ -106,10 +119,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Checkout</title>
     <?php include "htlm-includes.php/metadata.php"; ?>
+    <link rel="stylesheet" href="assets/css/plugins/jquery.countdown.css">
+    <!-- Main CSS File -->
+    <link rel="stylesheet" href="assets/css/demos/demo-13.css">
+    <link rel="stylesheet" href="assets/css/plugins/nouislider/nouislider.css">
 </head>
 
 <body>
-    <?php include "header-for-other-pages.php"; ?>
+    <?php include "header_main.php"; ?>
     <main class="main">
         <nav aria-label="breadcrumb" class="breadcrumb-nav border-0 mb-0">
             <div class="container d-flex align-items-center">

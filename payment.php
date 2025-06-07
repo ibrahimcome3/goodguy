@@ -330,7 +330,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 </head>
 
 <body>
-    <?php include "header-for-other-pages.php"; // Include the site header ?>
+    <?php include "header_main.php"; // Include the site header ?>
 
     <main class="main">
         <!-- Breadcrumbs -->

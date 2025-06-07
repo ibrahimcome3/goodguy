@@ -150,7 +150,7 @@ try {
                                         <span class="wishlist-count">(<?= (int) $wishlistCount ?>)</span>
                                     </a>
                                 </li>
-                                <li><a href="dashboard.php"><i class="icon-user"></i>Dashboard</a></li>
+                                <li><a href="user_dashboard_overview.php"><i class="icon-user"></i>Dashboard</a></li>
                                 <li><a href="logout.php"><i class="icon-log-out"></i>Log Out</a></li>
                             <?php else: ?>
                                 <li>
@@ -290,7 +290,7 @@ try {
                     <div class="dropdown category-dropdown">
                         <a href="#" class="dropdown-toggle" role="button" data-toggle="dropdown" aria-haspopup="true"
                             aria-expanded="false" data-display="static" title="Browse Categories">
-                            Browse Categories <i class="icon-angle-down"></i>
+                            Browse Categories </i>
                         </a>
                         <div class="dropdown-menu">
                             <nav class="side-nav">
@@ -300,7 +300,7 @@ try {
                                             <li class="megamenu-container">
                                                 <?php // Ensure 'cat' and 'catid' are the correct keys from your DB ?>
                                                 <a class="sf-with-ul"
-                                                    href="category.php?catid=<?= htmlspecialchars($parentCategory['category_id'] ?? '') ?>">
+                                                    href="shop.php?category=<?= htmlspecialchars($parentCategory['category_id'] ?? '') ?>">
                                                     <?= htmlspecialchars(ucfirst(strtolower($parentCategory['name'] ?? 'Category'))) ?>
                                                 </a>
                                                 <?php if (!empty($parentCategory['subcategories'])): ?>
@@ -308,14 +308,14 @@ try {
                                                         <?php foreach ($parentCategory['subcategories'] as $subCategory): ?>
                                                             <li class="megamenu-container"> <!-- Apply class if sub-subs exist -->
                                                                 <a
-                                                                    href="category.php?catid=<?= htmlspecialchars($subCategory['category_id'] ?? '') ?>">
+                                                                    href="shop.php?category=<?= htmlspecialchars($subCategory['category_id'] ?? '') ?>">
                                                                     <?= htmlspecialchars(ucfirst(strtolower($subCategory['name'] ?? 'Subcategory'))) ?>
                                                                 </a>
                                                                 <?php if (!empty($subCategory['subsubcategories'])): ?>
                                                                     <ul>
                                                                         <?php foreach ($subCategory['subsubcategories'] as $subSubCategory): ?>
                                                                             <li><a
-                                                                                    href="category.php?catid=<?= htmlspecialchars($subSubCategory['category_id'] ?? '') ?>">
+                                                                                    href="shop.php?category=<?= htmlspecialchars($subSubCategory['category_id'] ?? '') ?>">
                                                                                     <?= htmlspecialchars(ucfirst(strtolower($subSubCategory['name'] ?? 'Sub-Subcategory'))) ?>
                                                                                 </a></li>
                                                                         <?php endforeach; ?>
@@ -353,3 +353,29 @@ try {
         </div><!-- End .header-bottom -->
     </div><!-- End .sticky-wrapper -->
 </header><!-- End .header -->
+
+<script>
+    $(document).ready(function () {
+        // Get the current page URL
+        var currentPageUrl = window.location.href;
+        var currentPath = window.location.pathname; // More reliable for matching, e.g., /shop.php
+
+        // Loop through each navigation link in the main menu
+        $('.main-nav .menu li a').each(function () {
+            var linkUrl = $(this).attr('href');
+
+            // Remove any existing 'active' class from the parent li
+            // This is important if you have a default active class (like on "Home")
+            // and want to ensure only the correct one is highlighted.
+            // However, your "Home" link has 'active' on the <li>, so we'll target that.
+            $(this).parent('li').removeClass('active');
+
+            // Check if the link's href is part of the current page URL or matches the path
+            if (currentPageUrl.indexOf(linkUrl) !== -1 || currentPath.endsWith(linkUrl)) {
+                // Add 'active' class to the parent <li> of the matched link
+                $(this).parent('li').addClass('active');
+                // If you only want one link to be active, you might 'return false;' here to stop the loop.
+            }
+        });
+    });
+</script>

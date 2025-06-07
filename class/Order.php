@@ -1,5 +1,5 @@
 <?php
-include "includes.php";
+
 // Ensure Composer's autoloader is included
 require_once __DIR__ . '/../vendor/autoload.php';
 
@@ -10,13 +10,17 @@ use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 
 //$invoice = new Invoice(orderId: 78);
-$p = new ProductItem($pdo);
+
 class Order
 {
     public $user_id;
     private $order_id;
     private $order_date;
     public $pdo; // Store the PDO connection here
+
+    private $table_name = "orders";
+    private $items_table_name = "order_items";
+    private $tracking_table_name = "order_tracking_updates";
     public function __construct($pdo)
     {
 
@@ -108,7 +112,7 @@ class Order
         }
     }
 
-    function remove_order_item_from_an_order($oid, $id)
+    function remove_order_item_from_an_order($oid, $id, $uid)
     {
         $sql = "DELETE FROM `lm_order_line` WHERE `InventoryItemID` = $id and `orderID` = $oid";
         $pdo = $this->pdo;
@@ -394,15 +398,28 @@ class Order
         return $result->fetch_all(MYSQLI_ASSOC); // Return an array of associative arrays or empty array if none found
     }
 
-    function count_order_item_from_an_order($mysqli, $oid)
+    /**
+     * Counts the number of items in a specific order.
+     *
+     * @param int $orderId The ID of the order.
+     * @return int The total number of items in the order.
+     */
+    function count_order_item_from_an_order(int $orderId): int
     {
+        if ($orderId <= 0) {
+            return 0;
+        }
+
         $sql = "SELECT COUNT(*) AS total_items FROM `lm_order_line` WHERE `orderID` = ?";
-        $stmt = $mysqli->prepare($sql); // Use prepared statement for security
-        $stmt->bind_param("i", $oid);
-        $stmt->execute(); // Bind parameter to prevent SQL injection
-        $result = $stmt->get_result();
-        $row = $result->fetch_assoc(); // Fetch as associative array
-        return $row['total_items']; // Return the count
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindParam(1, $orderId, PDO::PARAM_INT); // Bind the integer order ID
+            $stmt->execute();
+            return (int) $stmt->fetchColumn(); // fetchColumn() is suitable for COUNT(*)
+        } catch (PDOException $e) {
+            error_log("Database error counting order items for order ID $orderId: " . $e->getMessage());
+            return 0; // Return 0 on error
+        }
     }
     public function addOrderTracking($mysqli, $orderId, $location)
     {
@@ -1119,7 +1136,135 @@ class Order
         }
     }
 
+    /**
+     * Gets the total number of orders for a specific user.
+     *
+     * @param int $userId The ID of the user.
+     * @param string|null $statusFilter Optional status to filter by.
+     * @return int The total number of orders for the user.
+     */
+    public function getTotalOrderCountForUser(int $userId, ?string $statusFilter = null): int
+    {
+        if ($userId <= 0) {
+            return 0; // Or throw an InvalidArgumentException
+        }
 
+        $params = [':user_id' => $userId];
+        $sql = "SELECT COUNT(*) FROM lm_orders WHERE customer_id = :user_id";
+
+        if (!empty($statusFilter)) {
+            $sql .= " AND order_status = :status_filter";
+            $params[':status_filter'] = $statusFilter;
+        }
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            // Bind parameters dynamically
+            // foreach ($params as $key => &$val) { // Pass $val by reference
+            //     $stmt->bindParam($key, $val, is_int($val) ? PDO::PARAM_INT : PDO::PARAM_STR);
+            // }
+            $stmt->execute($params);
+            return (int) $stmt->fetchColumn();
+        } catch (PDOException $e) {
+            error_log("Database error fetching total order count for user ID $userId: " . $e->getMessage());
+            return 0; // Return 0 on error, or handle more gracefully
+        }
+    }
+
+    /**
+     * Gets a paginated list of orders for a specific user, ordered by creation date.
+     *
+     * @param int $userId The ID of the user.
+     * @param int $limit The maximum number of orders to return.
+     * @param int $offset The number of orders to skip (for pagination).
+     * @param string|null $statusFilter Optional status to filter by.
+     * @return array|false An array of orders on success, or false on failure.
+     */
+    public function getOrdersForUser(int $userId, int $limit, int $offset, ?string $statusFilter = null): array|false
+    {
+        if ($userId <= 0 || $limit < 0 || $offset < 0) {
+            // Basic validation for parameters
+            error_log("Invalid parameters for getOrdersForUser: UserID: $userId, Limit: $limit, Offset: $offset");
+            return false;
+        }
+
+        $params = [
+            ':user_id' => $userId,
+            ':limit' => $limit,
+            ':offset' => $offset
+        ];
+        $sql = "SELECT * FROM lm_orders WHERE customer_id = :user_id";
+
+        if (!empty($statusFilter)) {
+            $sql .= " AND order_status = :status_filter";
+            $params[':status_filter'] = $statusFilter;
+        }
+
+        $sql .= " ORDER BY order_date_created DESC LIMIT :limit OFFSET :offset";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            // PDO can infer types for execute with an array, but explicit binding is safer for LIMIT/OFFSET
+            $stmt->bindParam(':user_id', $params[':user_id'], PDO::PARAM_INT);
+            $stmt->bindParam(':limit', $params[':limit'], PDO::PARAM_INT);
+            $stmt->bindParam(':offset', $params[':offset'], PDO::PARAM_INT);
+            if (!empty($statusFilter)) {
+                $stmt->bindParam(':status_filter', $params[':status_filter'], PDO::PARAM_STR);
+            }
+            $stmt->execute(); // Execute without passing params again if bound individually
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Database error fetching orders for user ID $userId: " . $e->getMessage());
+            return false;
+        }
+    }
+
+
+    public function get_order_by_id(int $orderId): array|false
+    {
+        if ($orderId <= 0) {
+            return false; // Invalid order ID
+        }
+
+        $sql = "SELECT * FROM lm_orders WHERE order_id = :order_id LIMIT 1";
+        // If your primary key column for orders has a different name, adjust 'order_id' accordingly.
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindParam(':order_id', $orderId, PDO::PARAM_INT);
+            $stmt->execute();
+            $order = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return $order ?: false; // Returns the order array if found, otherwise false
+        } catch (PDOException $e) {
+            // Log the error for debugging purposes
+            error_log("Database error fetching order ID $orderId: " . $e->getMessage());
+            return false; // Return false on database error
+        }
+    }
+
+    public function getTrackingEvents($orderId)
+    {
+        try {
+            $sql = "SELECT 
+                        `event_timestamp`, 
+                        `status_description`, 
+                        `location` 
+                    FROM 
+                        `" . $this->tracking_table_name . "`
+                    WHERE 
+                        `order_id` = :order_id 
+                    ORDER BY 
+                        `event_timestamp` DESC"; // Get latest events first
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindParam(':order_id', $orderId, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error fetching tracking events for order ID {$orderId}: " . $e->getMessage());
+            return []; // Return empty array on error to prevent breaking the page
+        }
+    }
 
 }
 

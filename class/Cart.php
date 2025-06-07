@@ -184,6 +184,63 @@ class Cart extends Promotion
   }
 
 
+  // c:\wamp64\www\goodguy\class\Cart.php
+// ... (other Cart class code) ...
+
+  /**
+   * Adds an item to the cart or updates its quantity if it already exists.
+   * Considers product ID, size, and color for uniqueness.
+   *
+   * @param int $productId The ID of the inventory item.
+   * @param int $quantity The quantity to add.
+   * @param string|null $size The size of the product (optional).
+   * @param string|null $color The color of the product (optional).
+   * @return bool True on success, false on failure (e.g., product not found, invalid quantity).
+   */
+  public function addItem(int $productId, int $quantity, $size = null, $color = null): bool
+  {
+    if ($quantity <= 0) {
+      return false; // Invalid quantity
+    }
+
+    // Optional: You could add validation here to check if $productId actually exists
+    // in your inventoryitem table using $this->pdo if desired.
+    // For example:
+    // $stmt = $this->pdo->prepare("SELECT InventoryItemID FROM inventoryitem WHERE InventoryItemID = ?");
+    // $stmt->execute([$productId]);
+    // if (!$stmt->fetch()) {
+    //     error_log("Attempted to add non-existent product ID to cart: " . $productId);
+    //     return false; // Product not found
+    // }
+
+    if (!isset($_SESSION['cart'])) {
+      $_SESSION['cart'] = [];
+    }
+
+    foreach ($_SESSION['cart'] as $key => &$item) { // Note the & to modify the array item by reference
+      if (
+        $item['inventory_product_id'] == $productId &&
+        (isset($item['size']) ? $item['size'] : null) == $size && // Compare size, handling nulls
+        (isset($item['color']) ? $item['color'] : null) == $color
+      ) { // Compare color, handling nulls
+        $item['quantity'] += $quantity;
+        return true; // Item found and quantity updated
+      }
+    }
+    // If item not found with same variations, add as new
+    $_SESSION['cart'][] = [
+      'inventory_product_id' => $productId,
+      'quantity' => $quantity,
+      'size' => $size,
+      'color' => $color
+    ];
+    return true;
+  }
+
+  // ... (rest of Cart class) ...
+
+
+
 }
 
 

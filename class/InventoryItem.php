@@ -324,6 +324,28 @@ class InventoryItem
         ];
     }
 
+    /**
+     * Gets the product ID (productItemID) for a given inventory item ID.
+     *
+     * @param int $inventoryItemId The ID of the inventory item.
+     * @return int|null The productItemID if found, or null otherwise.
+     */
+    public function getProductIdForInventoryItem(int $inventoryItemId): ?int
+    {
+        try {
+            $sql = "SELECT productItemID FROM inventoryitem WHERE InventoryItemID = :inventory_item_id LIMIT 1";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindParam(':inventory_item_id', $inventoryItemId, PDO::PARAM_INT);
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return $result ? (int) $result['productItemID'] : null;
+        } catch (PDOException $e) {
+            error_log("Error fetching product ID for inventory item ID {$inventoryItemId}: " . $e->getMessage());
+            return null;
+        }
+    }
+
 
 
 }

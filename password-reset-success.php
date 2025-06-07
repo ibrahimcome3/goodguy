@@ -17,6 +17,11 @@ if ($_GET['success'] != '1') {
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>Password Success Page</title>
     <?php include "htlm-includes.php/metadata.php"; ?>
+
+    <!-- Plugins CSS File -->
+    <link rel="stylesheet" href="assets/css/plugins/jquery.countdown.css">
+    <!-- Main CSS File -->
+    <link rel="stylesheet" href="assets/css/demos/demo-13.css">
 </head>
 
 <body>
@@ -25,7 +30,7 @@ if ($_GET['success'] != '1') {
 
             <?php
 
-            include "header-for-other-pages.php";
+            include "header_main.php";
             ?>
 
         </div>

@@ -24,6 +24,8 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>Welcome to GoodGuyng.com</title> <?php // More descriptive title ?>
     <?php include "htlm-includes.php/metadata.php"; ?>
+    <link rel="stylesheet" href="node_modules/swiper/swiper.min.css" />
+
 
     <!-- Plugins CSS File -->
     <link rel="stylesheet" href="assets/css/plugins/jquery.countdown.css">
@@ -212,6 +214,50 @@ try {
         }
 
         /* --- End Category Block Icon Styling --- */
+
+        /* Add this to your assets/css/demos/demo-13.css or a custom CSS file */
+        .new-slider-section .swiper-slide {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            /* background-color: #f0f0f0; /* Optional placeholder background */
+            position: relative;
+            /* For absolute positioning of captions */
+        }
+
+        .new-slider-section .swiper-slide img {
+            display: block;
+            width: 100%;
+            height: 400px;
+            /* Or your desired height */
+            object-fit: cover;
+            /* Ensures image covers the slide area */
+        }
+
+        .new-slider-section .swiper-slide-caption {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 1.2em;
+        }
+
+        /* Style Swiper navigation buttons if needed */
+        .new-slider-section .swiper-button-next,
+        .new-slider-section .swiper-button-prev {
+            color: #08C;
+            /* Example color */
+        }
+
+        .new-slider-section .swiper-pagination-bullet-active {
+            background: #08C;
+            /* Example color for active pagination dot */
+        }
     </style>
 
 </head>
@@ -219,89 +265,47 @@ try {
 <body>
     <div class="page-wrapper">
 
-    <?php
+        <?php
 
-include "header_main.php";
-?>
+        include "header_main.php";
+        ?>
 
         <main class="main">
-            <!-- ========================= BANNER SLIDER ========================= -->
-            <div class="intro-slider-container mb-4">
-                <div class="intro-slider owl-carousel owl-simple owl-nav-inside" data-toggle="owl" data-owl-options='{
-                        "nav": false, "dots": true, "loop": true, "autoplay": true, "autoplayTimeout": 5000,
-                        "responsive": { "992": { "nav": true } } }'>
-                    <?php
-                    try {
-                        // Fetch active banners and linked promotion item prices
-                        // Assumes 'promotion_items' table has 'promoitemi_d', 'promoPrice', 'regularPrice'
-                        // Assumes 'promotion_message' table has 'is_active' column for filtering
-                        $sql_banner = "SELECT
-                                           pm.title_message,
-                                           pm.price_explainer,
-                                           pm.banner,
-                                           pm.link,
-                                           pi.promoPrice,    -- Fetched from promotion_items
-                                           pi.regularPrice   -- Fetched from promotion_items
-                                       FROM
-                                           promotion_message pm
-                                       LEFT JOIN
-                                           promotion_items pi ON pm.promotion_item = pi.promoitemi_d -- Adjust 'promoitemi_d' if the primary key name in promotion_items is different
-                                       WHERE
-                                           pm.is_active = 1 -- Make sure 'is_active' column exists in promotion_message table
-                                       -- ORDER BY pm.display_order ASC -- Optional: Add a column for ordering banners if needed
-                                       ";
-                        $stmt_banner = $pdo->query($sql_banner); // Use query() for simple selects without user input
-                    
 
-                        while ($row_banner = $stmt_banner->fetch(PDO::FETCH_ASSOC)) {
-                            // Basic validation for essential banner fields from promotion_message
-                            if (empty($row_banner['banner']) || empty($row_banner['link'])) {
-                                error_log("Skipping banner due to missing banner image or link. Data: " . print_r($row_banner, true)); // Log skipped banners for debugging
-                                continue; // Skip this banner if essential info is missing
-                            }
-                            ?>
-                            <div class="intro-slide"
-                                style="background-image: url(banner/<?= htmlspecialchars($row_banner['banner']) ?>);">
-                                <div class="container intro-content">
-                                    <?php /* Banner content using fetched data */ ?>
-                                    <h3 class="intro-subtitle text-primary">
-                                        <?= htmlspecialchars($row_banner['title_message']) ?>
-                                    </h3>
-                                    <h1 class="intro-title"><?= htmlspecialchars($row_banner['price_explainer']) ?></h1>
+            <!-- New Swiper Slider Section -->
+            <div class="container new-slider-section mt-5 mb-5">
 
-                                    <?php // Display prices only if promoPrice is available from the JOINED table
-                                            // Add is_numeric check for robustness
-                                            if (!empty($row_banner['promoPrice']) && is_numeric($row_banner['promoPrice'])): ?>
-                                        <div class="intro-price">
-                                            <?php // Display old price only if regularPrice is also available and numeric
-                                                        if (!empty($row_banner['regularPrice']) && is_numeric($row_banner['regularPrice'])): ?>
-                                                <sup
-                                                    class="intro-old-price">N<?= number_format((float) $row_banner['regularPrice']) ?></sup>
-                                            <?php endif; ?>
-                                            <span class="text-third">
-                                                N<?= number_format((float) $row_banner['promoPrice']) ?>
-                                            </span>
-                                        </div>
+                <!-- Slider main container -->
+                <div class="swiper myNewSwiper">
+                    <!-- Additional required wrapper -->
+                    <div class="swiper-wrapper">
+                        <!-- Slides -->
 
-                                    <?php endif; ?>
+                        <div class="swiper-slide">
+                            <img src="banner/slide-3.png" alt="New Slide 2"
+                                style="width:100%; height:auto; object-fit: cover; max-height: 400px;">
+                            <div class="swiper-slide-caption">Caption for Slide 2</div>
+                        </div>
 
-                                    <a href="<?= htmlspecialchars($row_banner['link']) ?>" class="btn btn-primary btn-round">
-                                        <span>Shop Now</span> <i class="icon-long-arrow-right"></i>
-                                    </a>
-                                </div><!-- End .intro-content -->
-                            </div><!-- End .intro-slide -->
-                            <?php
-                        }
-                    } catch (PDOException $e) {
-                        error_log("Error fetching promotion banners: " . $e->getMessage());
-                        // Optionally display a user-friendly message if the slider fails completely
-                        // echo "<p class='text-center text-danger'>Error loading promotional banners.</p>";
-                    }
-                    ?>
-                </div><!-- End .intro-slider -->
-                <span class="slider-loader"></span>
-            </div><!-- End .intro-slider-container -->
-            <!-- ========================= BANNER SLIDER END ========================= -->
+                        <div class="swiper-slide">
+                            <img src="banner/notting.jpg" alt="New Slide 1"
+                                style="width:100%; height:auto; object-fit: cover; max-height: 400px;">
+                            <div class="swiper-slide-caption">Caption for Slide 1</div>
+                        </div>
+
+                    </div>
+                    <!-- If we need pagination -->
+                    <div class="swiper-pagination"></div>
+
+                    <!-- If we need navigation buttons -->
+                    <div class="swiper-button-prev"></div>
+                    <div class="swiper-button-next"></div>
+
+                    <!-- If we need scrollbar -->
+                    <div class="swiper-scrollbar"></div>
+                </div>
+            </div>
+            <!-- End New Swiper Slider Section -->
 
 
             <!-- ========================= POPULAR CATEGORIES ========================= -->
@@ -309,25 +313,36 @@ include "header_main.php";
                 <h2 class="title-lg text-center mb-4">Shop by Category</h2>
                 <div class="row justify-content-center">
                     <?php
-                    // Add an 'icon' key with the appropriate class name
-                    $top_categories = [
-                        ['id' => 'DRINKS', 'name' => 'Drinks', 'icon' => 'icon-coffee'], // Example icon
-                        ['id' => 'ELECTRONICS', 'name' => 'Electronics', 'icon' => 'icon-laptop'], // Example icon
-                        ['id' => 'Car Parts', 'name' => 'Car Parts', 'icon' => 'icon-cog'],    // Example icon
-                        ['id' => 'Cosmetics', 'name' => 'Skin Care', 'icon' => 'icon-leaf'],   // Example icon
-                        // Add more categories with their icons if needed
-                    ];
-                    foreach ($top_categories as $top_cat): ?>
-                        <div class="col-6 col-sm-4 col-md-3 col-lg-2">
-                            <a href="category.php?catid=<?= urlencode($top_cat['id']) ?>" class="cat-block">
-                                <figure>
-                                    <?php // Replace the <img> tag with an <i> tag for the icon ?>
-                                    <i class="<?= htmlspecialchars($top_cat['icon']) ?>"></i>
-                                </figure>
-                                <h3 class="cat-block-title"><?= htmlspecialchars($top_cat['name']) ?></h3>
-                            </a>
-                        </div>
-                    <?php endforeach; ?>
+                    try {
+                        // Query to fetch top categories from the database
+                        // Adjust table and column names as per your schema
+                        // Assumes 'icon_class' stores the CSS class for the icon
+                        // Assumes 'is_homepage_category' = 1 marks categories for the homepage
+                        // Assumes 'sort_order' column for ordering, or use any other criteria
+                        $sql_top_categories = "SELECT category_id, name, icon_class FROM categories WHERE `parent_id` is null LIMIT 8;"; // Adjust limit as needed
+                        $stmt_top_categories = $pdo->query($sql_top_categories);
+
+                        while ($top_cat_row = $stmt_top_categories->fetch(PDO::FETCH_ASSOC)):
+                            if (empty($top_cat_row['icon_class'])) { // Default icon if none specified
+                                // $top_cat_row['icon_class'] = 'icon-tag'; // A generic default icon
+                            }
+                            ?>
+                            <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+                                <a href="shop.php?category=<?= urlencode($top_cat_row['category_id']) ?>" class="cat-block">
+                                    <figure>
+
+                                        <img src="<?= $top_cat_row['icon_class'] ?>" />
+                                    </figure>
+                                    <h3 class="cat-block-title"><?= htmlspecialchars($top_cat_row['name']) ?></h3>
+                                </a>
+                            </div>
+                            <?php
+                        endwhile;
+                    } catch (PDOException $e) {
+                        error_log("Error fetching top categories: " . $e->getMessage());
+                        echo '<div class="col-12"><p class="text-danger text-center">Could not load categories at this time.</p></div>';
+                    }
+                    ?>
                 </div>
             </div>
             <!-- ========================= POPULAR CATEGORIES END ========================= -->
@@ -595,9 +610,8 @@ include "header_main.php";
                     ?>
                 </div><!-- End .row -->
                 <div class="text-center mt-3">
-                    <?php // Link to the main Electronics category page ?>
-                    <a href="category.php?catid=ELECTRONICS" <?php // Link still goes to the top-level Electronics category ?>
-                        class="btn btn-outline-primary-2"><span>View More Electronics</span><i
+                    <?php // Link to shop.php, passing the 'Electronics' category identifier ?>
+                    <a href="shop.php?category=1" class="btn btn-outline-primary-2"><span>View More Electronics</span><i
                             class="icon-long-arrow-right"></i></a>
                 </div>
             </div>
@@ -664,7 +678,7 @@ include "header_main.php";
     <?php include "login-modal.php"; ?>
 
     <?php include "jsfile.php"; ?>
-
+    <script src="node_modules/swiper/swiper-bundle.min.css"></script>
     <!-- Add to Cart / Wishlist AJAX Script -->
     <script>
         $(document).ready(function () {
@@ -734,6 +748,41 @@ include "header_main.php";
                 });
             });
         });
+
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log("Attempting to initialize Swiper for .myNewSwiper");
+            var myNewSwiper = new Swiper('.myNewSwiper', {
+                loop: true,
+                slidesPerView: 1, // Explicitly set
+                // autoplay: { delay: 3000 }, // Temporarily disable autoplay to test manual navigation
+                navigation: {
+                    nextEl: '.swiper-button-next',
+                    prevEl: '.swiper-button-prev',
+                },
+                pagination: {
+                    el: '.swiper-pagination',
+                },
+                on: {
+                    init: function () {
+                        console.log('Swiper initialized for .myNewSwiper');
+                    },
+                    slideChange: function () {
+                        console.log('Swiper slide changed to index: ' + this.activeIndex);
+                    },
+                    reachEnd: function () {
+                        console.log('Swiper reached end');
+                    }
+                }
+            });
+            // Check if the swiper instance was created
+            if (myNewSwiper && myNewSwiper.slides && myNewSwiper.slides.length > 0) {
+                console.log('Swiper instance created with ' + myNewSwiper.slides.length + ' slides.');
+            } else {
+                console.error('Swiper instance NOT created or has no slides for .myNewSwiper');
+            }
+        });
+
+
     </script>
 
 </body>

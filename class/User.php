@@ -6,7 +6,10 @@ class User
    public $user_email;
    public $user_address;
    public $user_role;
+   private $shipping_address_table = "shipping_address"; // Name of your shipping address table
 
+   private $phone_number_table = "phonenumber";
+   private $customer_table = "customer";
    public $pdo;
    public const ORDER_STATUS = [
       'PENDING' => 'Pending',
@@ -443,15 +446,6 @@ class User
       return $stmt->execute();
    }
 
-   public function addPhoneNumber($mysqli, $customerId, $phoneNumber, $isDefault = false)
-   {
-      $sql = "INSERT INTO phonenumber (CustomerID, PhoneNumber, default_) VALUES (?, ?, ?)";
-      $stmt = $mysqli->prepare($sql);
-      $stmt->bind_param("isi", $customerId, $phoneNumber, $isDefault);
-      $stmt->execute();
-      return $stmt->affected_rows > 0;
-   }
-
    public function updatePhoneNumber($mysqli, $phoneId, $phoneNumber, $isDefault)
    {
       $sql = "UPDATE phonenumber SET PhoneNumber = ?, default_ = ? WHERE phone_id = ?";
@@ -853,5 +847,352 @@ class User
       }
    }
 
+   public function getShippingAddressesByCustomerId($customerId)
+   {
+      try {
+         $sql = "SELECT * FROM {$this->shipping_address_table} WHERE customer_id = :customer_id ORDER BY shipping_address_no DESC";
+         $stmt = $this->pdo->prepare($sql);
+         $stmt->bindParam(':customer_id', $customerId, PDO::PARAM_INT);
+         $stmt->execute();
+         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+      } catch (PDOException $e) {
+         error_log("Error fetching shipping addresses for customer ID {$customerId}: " . $e->getMessage());
+         return [];
+      }
+   }
+
+   /**
+    * Fetches a single shipping address by its ID, ensuring it belongs to the user.
+    * @param int $shippingAddressNo
+    * @param int $customerId
+    * @return array|false
+    */
+   public function getShippingAddressById($shippingAddressNo, $customerId)
+   {
+      try {
+         $sql = "SELECT * FROM {$this->shipping_address_table} WHERE shipping_address_no = :shipping_address_no AND customer_id = :customer_id";
+         $stmt = $this->pdo->prepare($sql);
+         $stmt->bindParam(':shipping_address_no', $shippingAddressNo, PDO::PARAM_INT);
+         $stmt->bindParam(':customer_id', $customerId, PDO::PARAM_INT);
+         $stmt->execute();
+         return $stmt->fetch(PDO::FETCH_ASSOC);
+      } catch (PDOException $e) {
+         error_log("Error fetching shipping address ID {$shippingAddressNo} for customer ID {$customerId}: " . $e->getMessage());
+         return false;
+      }
+   }
+
+   /**
+    * Adds a new shipping address for a user.
+    * @param int $customerId
+    * @param array $data Associative array of address data
+    * @return int|false The new address ID (shipping_address_no) or false on failure
+    */
+   public function addShippingAddress($customerId, array $data)
+   {
+      $sql = "INSERT INTO {$this->shipping_address_table} 
+                    (customer_id, address1, address2, zip, shipping_area_id, city, country, ship_cost, state) 
+                VALUES 
+                    (:customer_id, :address1, :address2, :zip, :shipping_area_id, :city, :country, :ship_cost, :state)";
+      try {
+         $stmt = $this->pdo->prepare($sql);
+         $stmt->bindParam(':customer_id', $customerId, PDO::PARAM_INT);
+         $stmt->bindParam(':address1', $data['address1']);
+         $stmt->bindParam(':address2', $data['address2']);
+         $stmt->bindParam(':zip', $data['zip']);
+         $stmt->bindParam(':shipping_area_id', $data['shipping_area_id']);
+         $stmt->bindParam(':city', $data['city']);
+         $stmt->bindParam(':country', $data['country']);
+         $stmt->bindParam(':ship_cost', $data['ship_cost']); // Consider if ship_cost should be here or calculated elsewhere
+         $stmt->bindParam(':state', $data['state']);
+
+         if ($stmt->execute()) {
+            return $this->pdo->lastInsertId();
+         }
+         return false;
+      } catch (PDOException $e) {
+         error_log("Error adding shipping address for customer ID {$customerId}: " . $e->getMessage());
+         return false;
+      }
+   }
+
+   /**
+    * Updates an existing shipping address.
+    * @param int $shippingAddressNo
+    * @param int $customerId
+    * @param array $data
+    * @return bool
+    */
+   public function updateShippingAddress($shippingAddressNo, $customerId, array $data)
+   {
+      $sql = "UPDATE {$this->shipping_address_table} SET 
+                    address1 = :address1, 
+                    address2 = :address2, 
+                    zip = :zip, 
+                    shipping_area_id = :shipping_area_id, 
+                    city = :city, 
+                    country = :country, 
+                    ship_cost = :ship_cost, 
+                    state = :state
+                WHERE shipping_address_no = :shipping_address_no AND customer_id = :customer_id";
+      try {
+         $stmt = $this->pdo->prepare($sql);
+         $stmt->bindParam(':address1', $data['address1']);
+         $stmt->bindParam(':address2', $data['address2']);
+         $stmt->bindParam(':zip', $data['zip']);
+         $stmt->bindParam(':shipping_area_id', $data['shipping_area_id']);
+         $stmt->bindParam(':city', $data['city']);
+         $stmt->bindParam(':country', $data['country']);
+         $stmt->bindParam(':ship_cost', $data['ship_cost']);
+         $stmt->bindParam(':state', $data['state']);
+         $stmt->bindParam(':shipping_address_no', $shippingAddressNo, PDO::PARAM_INT);
+         $stmt->bindParam(':customer_id', $customerId, PDO::PARAM_INT);
+         return $stmt->execute();
+      } catch (PDOException $e) {
+         error_log("Error updating shipping address ID {$shippingAddressNo}: " . $e->getMessage());
+         return false;
+      }
+   }
+
+   /**
+    * Deletes a shipping address, ensuring it belongs to the user.
+    * @param int $shippingAddressNo
+    * @param int $customerId
+    * @return bool
+    */
+   public function deleteShippingAddress($shippingAddressNo, $customerId)
+   {
+      try {
+         $sql = "DELETE FROM {$this->shipping_address_table} WHERE shipping_address_no = :shipping_address_no AND customer_id = :customer_id";
+         $stmt = $this->pdo->prepare($sql);
+         $stmt->bindParam(':shipping_address_no', $shippingAddressNo, PDO::PARAM_INT);
+         $stmt->bindParam(':customer_id', $customerId, PDO::PARAM_INT);
+         return $stmt->execute();
+      } catch (PDOException $e) {
+         error_log("Error deleting shipping address ID {$shippingAddressNo}: " . $e->getMessage());
+         return false;
+      }
+   }
+
+
+   public function updateUserProfile($userId, array $data)
+   {
+      if (empty($userId) || !is_numeric($userId) || empty($data)) {
+         return false;
+      }
+
+      // Ensure expected keys exist in $data to prevent errors if not all are passed
+      $firstName = $data['firstname'] ?? null;
+      $lastName = $data['lastname'] ?? null;
+      $email = $data['email'] ?? null;
+
+      $sql = "UPDATE customer SET 
+                    `customer_fname` = :firstname, 
+                    `customer_lname` = :lastname, 
+                    `customer_email` = :email 
+                WHERE `customer_id` = :user_id";
+      try {
+         $stmt = $this->pdo->prepare($sql);
+         $stmt->bindParam(':firstname', $firstName);
+         $stmt->bindParam(':lastname', $lastName);
+         $stmt->bindParam(':email', $email);
+         $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
+         return $stmt->execute();
+      } catch (PDOException $e) {
+         error_log("Error in updateUserProfile for user ID {$userId}: " . $e->getMessage());
+         return false;
+      }
+   }
+
+   public function addPhoneNumber($userId, $newPhoneNumber)
+   {
+      if (empty($userId) || !is_numeric($userId) || empty($newPhoneNumber)) {
+         return false;
+      }
+
+      // Optional: Check if this exact phone number already exists for the user
+      try {
+         $sqlCheck = "SELECT COUNT(*) FROM `{$this->phone_number_table}` WHERE `CustomerID` = :user_id AND `PhoneNumber` = :phone_number";
+         $stmtCheck = $this->pdo->prepare($sqlCheck);
+         $stmtCheck->bindParam(':user_id', $userId, PDO::PARAM_INT);
+         $stmtCheck->bindParam(':phone_number', $newPhoneNumber);
+         $stmtCheck->execute();
+         if ($stmtCheck->fetchColumn() > 0) {
+            error_log("Attempt to add duplicate phone number {$newPhoneNumber} for user ID {$userId}");
+            return false; // Phone number already exists for this user
+         }
+
+         // Determine if this should be the default phone number
+         $sqlCountActiveDefault = "SELECT COUNT(*) FROM `{$this->phone_number_table}` WHERE `CustomerID` = :user_id AND `default_` = 1 AND `is_active` = 1";
+         $stmtCount = $this->pdo->prepare($sqlCountActiveDefault);
+         $stmtCount->bindParam(':user_id', $userId, PDO::PARAM_INT);
+         $stmtCount->execute();
+         $hasActiveDefault = ($stmtCount->fetchColumn() > 0);
+
+         $isNewDefault = !$hasActiveDefault; // If no active default exists, this new one becomes default
+
+         $this->pdo->beginTransaction();
+
+         // If this new number is to be default, ensure no others are default for this user
+         if ($isNewDefault) {
+            $sqlClearDefaults = "UPDATE `{$this->phone_number_table}` SET `default_` = 0 WHERE `CustomerID` = :user_id";
+            $stmtClear = $this->pdo->prepare($sqlClearDefaults);
+            $stmtClear->bindParam(':user_id', $userId, PDO::PARAM_INT);
+            $stmtClear->execute();
+         }
+
+         // Insert the new phone number
+         $sqlInsert = "INSERT INTO `{$this->phone_number_table}` (`CustomerID`, `PhoneNumber`, `default_`, `is_active`) 
+                          VALUES (:user_id, :phone_number, :is_default, 1)";
+         $stmtInsert = $this->pdo->prepare($sqlInsert);
+         $stmtInsert->bindParam(':user_id', $userId, PDO::PARAM_INT);
+         $stmtInsert->bindParam(':phone_number', $newPhoneNumber);
+         $stmtInsert->bindValue(':is_default', $isNewDefault ? 1 : 0, PDO::PARAM_INT);
+         $stmtInsert->execute();
+
+         // If it's the new default, update the customer table's main phone_number field
+         if ($isNewDefault) {
+            $sqlUpdateCustomer = "UPDATE `{$this->customer_table}` SET `phone_number` = :phone_number WHERE `customer_id` = :user_id";
+            $stmtUpdateCustomer = $this->pdo->prepare($sqlUpdateCustomer);
+            $stmtUpdateCustomer->bindParam(':phone_number', $newPhoneNumber);
+            $stmtUpdateCustomer->bindParam(':user_id', $userId, PDO::PARAM_INT);
+            $stmtUpdateCustomer->execute();
+         }
+
+         $this->pdo->commit();
+         return true;
+
+      } catch (PDOException $e) {
+         if ($this->pdo->inTransaction()) {
+            $this->pdo->rollBack();
+         }
+         error_log("Error in addPhoneNumber for user ID {$userId}: " . $e->getMessage());
+         return false;
+      }
+   }
+
+   public function getPhoneNumbersByUserId($userId)
+   {
+      if (empty($userId) || !is_numeric($userId)) {
+         return [];
+      }
+
+      try {
+         $sql = "SELECT `phone_id`, `CustomerID`, `PhoneNumber`, `default_`, `is_active` 
+                    FROM `{$this->phone_number_table}` 
+                    WHERE `CustomerID` = :user_id ORDER BY `default_` DESC, `phone_id` ASC"; // Show default first
+         $stmt = $this->pdo->prepare($sql);
+         $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
+         $stmt->execute();
+         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+      } catch (PDOException $e) {
+         error_log("Error fetching phone numbers for user ID {$userId}: " . $e->getMessage());
+         return [];
+      }
+   }
+
+
+   /**
+    * Deletes a phone number for a given user.
+    * If the deleted phone number was the default, it attempts to set a new default
+    * from other active phone numbers and updates the customer.phone_number field.
+    *
+    * @param int $phoneId The ID of the phone number to delete.
+    * @param int $userId The ID of the user.
+    * @return bool True on success, false on failure.
+    */
+   public function deleteUserPhoneNumber($phoneId, $userId)
+   {
+      if (empty($phoneId) || !is_numeric($phoneId) || empty($userId) || !is_numeric($userId)) {
+         return false;
+      }
+
+      try {
+         $this->pdo->beginTransaction();
+
+         // Get details of the phone number being deleted, especially if it's default
+         $sqlGetPhone = "SELECT `PhoneNumber`, `default_` FROM `{$this->phone_number_table}` WHERE `phone_id` = :phone_id AND `CustomerID` = :user_id";
+         $stmtGetPhone = $this->pdo->prepare($sqlGetPhone);
+         $stmtGetPhone->bindParam(':phone_id', $phoneId, PDO::PARAM_INT);
+         $stmtGetPhone->bindParam(':user_id', $userId, PDO::PARAM_INT);
+         $stmtGetPhone->execute();
+         $phoneToDelete = $stmtGetPhone->fetch(PDO::FETCH_ASSOC);
+
+         if (!$phoneToDelete) {
+            $this->pdo->rollBack();
+            error_log("Attempt to delete non-existent or unauthorized phone ID {$phoneId} for user ID {$userId}");
+            return false; // Phone number not found or doesn't belong to the user
+         }
+
+         // Delete the phone number
+         $sqlDelete = "DELETE FROM `{$this->phone_number_table}` WHERE `phone_id` = :phone_id AND `CustomerID` = :user_id";
+         $stmtDelete = $this->pdo->prepare($sqlDelete);
+         $stmtDelete->bindParam(':phone_id', $phoneId, PDO::PARAM_INT);
+         $stmtDelete->bindParam(':user_id', $userId, PDO::PARAM_INT);
+         $stmtDelete->execute();
+
+         // If the deleted phone was the default, try to set a new default
+         if ($phoneToDelete['default_'] == 1) {
+            $sqlFindNextDefault = "SELECT `phone_id`, `PhoneNumber` FROM `{$this->phone_number_table}` 
+                                       WHERE `CustomerID` = :user_id AND `is_active` = 1 
+                                       ORDER BY `phone_id` ASC LIMIT 1"; // Pick the one with the smallest ID as new default
+            $stmtFindNext = $this->pdo->prepare($sqlFindNextDefault);
+            $stmtFindNext->bindParam(':user_id', $userId, PDO::PARAM_INT);
+            $stmtFindNext->execute();
+            $nextDefaultPhone = $stmtFindNext->fetch(PDO::FETCH_ASSOC);
+
+            $newDefaultPhoneNumberForCustomerTable = null;
+
+            if ($nextDefaultPhone) {
+               $sqlSetNewDefault = "UPDATE `{$this->phone_number_table}` SET `default_` = 1 WHERE `phone_id` = :new_default_phone_id AND `CustomerID` = :user_id";
+               $stmtSetNewDefault = $this->pdo->prepare($sqlSetNewDefault);
+               $stmtSetNewDefault->bindParam(':new_default_phone_id', $nextDefaultPhone['phone_id'], PDO::PARAM_INT);
+               $stmtSetNewDefault->bindParam(':user_id', $userId, PDO::PARAM_INT);
+               $stmtSetNewDefault->execute();
+               $newDefaultPhoneNumberForCustomerTable = $nextDefaultPhone['PhoneNumber'];
+            }
+
+            // Update the customer table's main phone_number field
+            $sqlUpdateCustomer = "UPDATE `{$this->customer_table}` SET `phone_number` = :phone_number WHERE `customer_id` = :user_id";
+            $stmtUpdateCustomer = $this->pdo->prepare($sqlUpdateCustomer);
+            $stmtUpdateCustomer->bindParam(':phone_number', $newDefaultPhoneNumberForCustomerTable); // Binds NULL if $newDefaultPhoneNumberForCustomerTable is null
+            $stmtUpdateCustomer->bindParam(':user_id', $userId, PDO::PARAM_INT);
+            $stmtUpdateCustomer->execute();
+         }
+
+         $this->pdo->commit();
+         return true;
+
+      } catch (PDOException $e) {
+         if ($this->pdo->inTransaction()) {
+            $this->pdo->rollBack();
+         }
+         error_log("Error in deleteUserPhoneNumber for phone ID {$phoneId}, user ID {$userId}: " . $e->getMessage());
+         return false;
+      }
+   }
+
+   /**
+    * Counts the number of active phone numbers for a given user.
+    *
+    * @param int $userId The ID of the user.
+    * @return int The count of active phone numbers.
+    */
+   public function countUserPhoneNumbers($userId)
+   {
+      if (empty($userId) || !is_numeric($userId)) {
+         return 0;
+      }
+      try {
+         $sql = "SELECT COUNT(*) FROM `{$this->phone_number_table}` WHERE `CustomerID` = :user_id AND `is_active` = 1";
+         $stmt = $this->pdo->prepare($sql);
+         $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
+         $stmt->execute();
+         return (int) $stmt->fetchColumn();
+      } catch (PDOException $e) {
+         error_log("Error counting phone numbers for user ID {$userId}: " . $e->getMessage());
+         return 0; // Return 0 on error, or handle as appropriate
+      }
+   }
 
 }

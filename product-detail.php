@@ -6,6 +6,7 @@ if (session_status() == PHP_SESSION_NONE) {
         session_start();
 } // Ensure session is started for flash messages
 
+
 $_SESSION['return_to'] = $_SERVER['REQUEST_URI'];
 
 include "includes.php"; // Should provide $mysqli, $pdo, and class autoloading/definitions
@@ -162,6 +163,14 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
         <!-- Font Awesome for icons (if you use them in toasts) -->
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 
+        <!-- Plugins CSS File -->
+        <link rel="stylesheet" href="assets/css/plugins/jquery.countdown.css">
+        <!-- Main CSS File -->
+        <!-- simplePagination.js CSS (CDN example) -->
+        <link rel="stylesheet"
+                href="https://cdnjs.cloudflare.com/ajax/libs/simplePagination.js/1.6/simplePagination.css">
+        <link rel="stylesheet" href="assets/css/demos/demo-13.css">
+
         <style>
                 /* --- Theme's SweetAlert2 Toast Styles (Example) --- */
                 .themed-toast-popup {
@@ -184,8 +193,7 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                         font-size: 0.95em;
                         /* Adjust text size in toast */
                 }
-        </style>
-        <style>
+
                 .truncate {
                         overflow: hidden;
                         text-overflow: ellipsis;
@@ -212,7 +220,7 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
         <div class="page-wrapper">
                 <?php
 
-                include "header-for-other-pages.php";
+                include "header_main.php";
                 ?>
                 <main class="main">
                         <nav aria-label="breadcrumb" class="breadcrumb-nav border-0 mb-0">
@@ -561,60 +569,44 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                                                         </div>
                                                                 </div>
 
-                                                                <div class="product-reviews-section" id="product-review-link"> <!-- Added id for anchor link -->
+                                                                <div class="product-reviews-section"
+                                                                        id="product-review-link">
+                                                                        <!-- Added id for anchor link -->
                                                                         <?php
                                                                         // Display flash messages (from review submission)
                                                                         if (isset($_SESSION['flash_message'])) {
                                                                                 echo '<div class="alert alert-' . htmlspecialchars($_SESSION['flash_message']['type']) . ' alert-dismissible fade show" role="alert">';
-                                                                                echo htmlspecialchars($_SESSION['flash_message']['text']);
+                                                                                echo htmlspecialchars($_SESSION['flash_message']['text']); // Make sure this is properly escaped if it contains HTML
                                                                                 echo '<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>';
                                                                                 echo '</div>';
                                                                                 unset($_SESSION['flash_message']); // Clear the message after displaying
                                                                         }
-
-                                                                        $product_reviews = $Orvi->getReviewsByProduct($currentInventoryItemId);
+                                                                        // We still need the total count for pagination initialization
                                                                         $total_reviews_count = $Orvi->get_rating_review_number($currentInventoryItemId);
                                                                         ?>
-                                                                        <div class="reviews">
+                                                                        <div class="reviews" id="reviews-container">
+                                                                                <!-- Added ID for easier targeting -->
                                                                                 <h3 class="mb-3">Reviews
-                                                                                        (<?= $total_reviews_count ?>)</h3>
-                                                                                <div>
-                                                                                        <?php if (!empty($product_reviews)): ?>
-                                                                                                <?php foreach ($product_reviews as $review_item): ?>
-                                                                                                        <div class="review">
-                                                                                                                <div class="row no-gutters">
-                                                                                                                        <div class="col-auto">
-                                                                                                                                <h4><a href="#"><?= htmlspecialchars(($review_item['customer_fname'] ?? 'User') . ' ' . ($review_item['customer_lname'] ?? '')) ?></a>
-                                                                                                                                </h4>
-                                                                                                                                <div
-                                                                                                                                        class="ratings-container">
-                                                                                                                                        <div
-                                                                                                                                                class="ratings">
-                                                                                                                                                <div class="ratings-val"
-                                                                                                                                                        style="width: <?= (($review_item['rating'] ?? 0) / 5) * 100 ?>%;">
-                                                                                                                                                </div>
-                                                                                                                                        </div>
-                                                                                                                                </div>
-                                                                                                                                <span
-                                                                                                                                        class="review-date"><?= isset($review_item['review_date']) ? date("M d, Y", strtotime($review_item['review_date'])) : 'N/A' ?></span>
-                                                                                                                        </div>
-                                                                                                                        <div class="col">
-                                                                                                                                <h4><?= htmlspecialchars($review_item['review_title'] ?? 'Review') ?>
-                                                                                                                                </h4>
-                                                                                                                                <div
-                                                                                                                                        class="review-content">
-                                                                                                                                        <p><?= nl2br(htmlspecialchars($review_item['comment'] ?? 'No comment provided.')) ?>
-                                                                                                                                        </p>
-                                                                                                                                </div>
-                                                                                                                        </div>
-                                                                                                                </div>
-                                                                                                        </div>
-                                                                                                <?php endforeach; ?>
-                                                                                        <?php else: ?>
-                                                                                                <p>Be the first to review this product!
+                                                                                        (<?= $total_reviews_count ?>)
+                                                                                </h3>
+                                                                                <div id="review-list" class="mb-3">
+                                                                                        <!-- Reviews will be loaded here by AJAX -->
+                                                                                        <p id="no-reviews-message"
+                                                                                                style="display: <?= $total_reviews_count > 0 ? 'none' : 'block' ?>;">
+                                                                                                Be the first to review
+                                                                                                this product!</p>
+                                                                                        <div class="text-center"
+                                                                                                id="reviews-loading"
+                                                                                                style="display:none;">
+                                                                                                <p>Loading reviews...
                                                                                                 </p>
-                                                                                        <?php endif; ?>
+                                                                                        </div>
                                                                                 </div>
+                                                                                <?php if ($total_reviews_count > 0): ?>
+                                                                                        <div id="reviews-pagination-container"
+                                                                                                class="mt-4 text-center"></div>
+                                                                                        <!-- Pagination controls will go here -->
+                                                                                <?php endif; ?>
                                                                         </div><!-- End .reviews -->
                                                                 </div>
                                                         </div>
@@ -662,17 +654,21 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
         <!-- Mobile Menu -->
         <div class="mobile-menu-overlay"></div><!-- End .mobil-menu-overlay -->
 
-        <?php include "mobile-menue-index-page.php"; ?>
+
         <!-- Sign in / Register Modal -->
-        <?php include "login-modal.php"; ?>
+
 
         <!-- Plugins JS File -->
         <?php include "jsfile.php"; ?>
 
         <!-- SweetAlert2 JS (ensure it's loaded after jQuery if jQuery is used by other scripts, but SweetAlert2 itself is standalone) -->
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+        <!-- simplePagination.js (CDN example - load AFTER jQuery) -->
+        <script
+                src="https://cdnjs.cloudflare.com/ajax/libs/simplePagination.js/1.6/jquery.simplePagination.min.js"></script>
 
         <script>
+
                 document.addEventListener('DOMContentLoaded', function () {
                         <?php
                         // Prepare HTML content for the toast
@@ -701,26 +697,144 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                 });
                         <?php endif; ?>
                 });
+
+                // Pagination for Reviews
+                $(document).ready(function () {
+                        var totalReviews = <?= (int) $total_reviews_count ?>;
+                        var inventoryItemId = <?= (int) $currentInventoryItemId ?>;
+                        var itemsPerPage = 3; // Number of reviews to show per page
+
+                        function renderReviews(reviews) {
+                                var reviewList = $('#review-list');
+                                reviewList.empty(); // Clear previous reviews
+
+                                if (reviews && reviews.length > 0) {
+                                        $('#no-reviews-message').hide();
+                                        $.each(reviews, function (index, review_item) {
+                                                var ratingPercent = ((review_item.rating || 0) / 5) * 100;
+                                                var reviewDate = review_item.review_date ? new Date(review_item.review_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
+                                                var reviewerName = (review_item.customer_fname || 'User') + ' ' + (review_item.customer_lname || '');
+                                                var reviewTitle = review_item.review_title || 'Review';
+                                                var reviewComment = review_item.comment || 'No comment provided.';
+
+                                                var reviewHtml = `
+                                    <div class="review review-item" style='border-bottom: 1px solid #f0f0f0;'>
+                                        <div class="row no-gutters">
+                                            <div class="col-auto">
+                                                <h4><a href="#">${escapeHtml(reviewerName.trim())}</a></h4>
+                                                <div class="ratings-container">
+                                                    <div class="ratings">
+                                                        <div class="ratings-val" style="width: ${ratingPercent}%;"></div>
+                                                    </div>
+                                                </div>
+                                                <span class="review-date">${reviewDate}</span>
+                                            </div>
+                                            <div class="col">
+                                                <h4>${escapeHtml(reviewTitle)}</h4>
+                                                <div class="review-content">
+                                                    <p>${nl2br(escapeHtml(reviewComment))}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>`;
+                                                reviewList.append(reviewHtml);
+                                        });
+                                } else {
+                                        $('#no-reviews-message').show();
+                                }
+                        }
+
+                        function loadReviewsPage(pageNumber) {
+                                $('#reviews-loading').show();
+                                $('#review-list').empty(); // Clear before loading
+                                $('#no-reviews-message').hide();
+
+                                $.ajax({
+                                        url: 'fetch_reviews.php',
+                                        type: 'GET',
+                                        dataType: 'json',
+                                        data: {
+                                                itemid: inventoryItemId,
+                                                page: pageNumber,
+                                                perPage: itemsPerPage
+                                        },
+                                        success: function (response) {
+                                                $('#reviews-loading').hide();
+                                                if (response.success && response.reviews) {
+                                                        renderReviews(response.reviews);
+                                                } else {
+                                                        $('#review-list').html('<p class="text-danger">Could not load reviews. ' + (response.message || '') + '</p>');
+                                                        $('#no-reviews-message').hide();
+                                                }
+                                        },
+                                        error: function (xhr, status, error) {
+                                                $('#reviews-loading').hide();
+                                                $('#review-list').html('<p class="text-danger">Error loading reviews. Please try again.</p>');
+                                                $('#no-reviews-message').hide();
+                                                console.error("AJAX error loading reviews:", status, error, xhr.responseText);
+                                        }
+                                });
+                        }
+
+                        if (totalReviews > 0) {
+                                if (totalReviews > itemsPerPage) { // Only show pagination if needed
+                                        $('#reviews-pagination-container').pagination({
+                                                items: totalReviews,
+                                                itemsOnPage: itemsPerPage,
+                                                cssStyle: 'light-theme', // or 'dark-theme' or your custom theme
+                                                prevText: 'Prev',
+                                                nextText: 'Next',
+                                                onPageClick: function (pageNumber) {
+                                                        loadReviewsPage(pageNumber);
+                                                        // Optional: Scroll to top of reviews
+                                                        // $('html, body').animate({ scrollTop: $("#reviews-container").offset().top - 70 }, 500);
+                                                }
+                                        });
+                                } else {
+                                        $('#reviews-pagination-container').hide();
+                                }
+                                // Load the first page of reviews initially
+                                loadReviewsPage(1);
+                        } else {
+                                $('#reviews-pagination-container').hide(); // Hide pagination if no reviews
+                                $('#no-reviews-message').show();
+                        }
+
+                        $(".submit").click(function () {
+
+                                if ($('.size').length > 0) {
+                                        var size = $('.size option:selected').val();
+                                        if (size == "" || size == "#") {
+                                                alert("Please select a a size");
+                                                return false;
+                                        }
+                                }
+                        });
+                });
+
+                // Helper function to escape HTML (simple version)
+                function escapeHtml(unsafe) {
+                        return unsafe
+                                .replace(/&/g, "&amp;")
+                                .replace(/</g, "&lt;")
+                                .replace(/>/g, "&gt;")
+                                .replace(/"/g, "&quot;")
+                                .replace(/'/g, "&#039;");
+                }
+                // Helper function for nl2br in JS
+                function nl2br(str) {
+                        return (str + '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1<br>$2');
+                }
+
+
+
         </script>
 
 
 
 </body>
 <script src="assets/js/loadrelateditems.js"></script>
-<script type="text/javascript">
-        $(document).ready(function () {
-                $(".submit").click(function () {
 
-                        if ($('.size').length > 0) {
-                                var size = $('.size option:selected').val();
-                                if (size == "" || size == "#") {
-                                        alert("Please select a a size");
-                                        return false;
-                                }
-                        }
-                });
-        });
-</script>
 
 
 

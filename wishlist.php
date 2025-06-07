@@ -1,22 +1,50 @@
 <!DOCTYPE html>
 <?php
+session_start();
 require_once "includes.php";
 
+// Ensure $pdo, $invt, and $promotion objects are available from includes.php
+// If not, they would need to be instantiated here, e.g.:
+// if (!isset($pdo)) { /* handle missing PDO connection */ }
+// if (!isset($invt) || !($invt instanceof ProductItem)) { $invt = new ProductItem($pdo); }
+// if (!isset($promotion) || !($promotion instanceof Promotion)) { $promotion = new Promotion($pdo); }
+
+$result_items = [];
+$totalCount = 0;
+$totalPages = 0;
+$currentPage = isset($_GET['page']) && is_numeric($_GET['page']) ? (int) $_GET['page'] : 1;
+$resultsPerPage = 10; // Number of results per page
+
 if (isset($_SESSION['uid'])) {
-
-    $resultsPerPage = 10; // Number of results per page
-    $currentPage = isset($_GET['page']) && is_numeric($_GET['page']) ? $_GET['page'] : 1;
-
-    // Get total count of wishlist items for the current user
-    $countSql = "SELECT COUNT(*) AS total FROM `wishlist` WHERE customer_id = " . $_SESSION['uid'];
-    $countResult = $mysqli->query($countSql);
-    $totalCount = $countResult->fetch_assoc()['total'];
-    $totalPages = ceil($totalCount / $resultsPerPage);
-
+    $userId = $_SESSION['uid'];
     $offset = ($currentPage - 1) * $resultsPerPage;
-    require_once 'conn.php';
-    $sql = "SELECT * FROM `wishlist` LEFT JOIN inventoryitem ON wishlist.`inventory_item_id` = inventoryitem.`InventoryItemID` WHERE customer_id = " . $_SESSION['uid'] . " LIMIT $offset, $resultsPerPage";
-    $result = $mysqli->query($sql);
+
+    try {
+        // Get total count of wishlist items for the current user using PDO
+        $countSql = "SELECT COUNT(*) AS total FROM `wishlist` WHERE customer_id = :user_id";
+        $countStmt = $pdo->prepare($countSql);
+        $countStmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
+        $countStmt->execute();
+        $totalCount = (int) $countStmt->fetchColumn();
+        $totalPages = ceil($totalCount / $resultsPerPage);
+
+        // Get wishlist items for the current page using PDO
+        $sql = "SELECT w.*, ii.*, w.wishlistid as wishlist_item_id_alias 
+                FROM `wishlist` w
+                LEFT JOIN inventoryitem ii ON w.`inventory_item_id` = ii.`InventoryItemID` 
+                WHERE w.customer_id = :user_id 
+                LIMIT :offset, :limit";
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
+        $stmt->bindParam(':offset', $offset, PDO::PARAM_INT);
+        $stmt->bindParam(':limit', $resultsPerPage, PDO::PARAM_INT);
+        $stmt->execute();
+        $result_items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    } catch (PDOException $e) {
+        error_log("Error fetching wishlist items: " . $e->getMessage());
+        // Optionally display an error message to the user
+    }
 } else {
     header("Location: login.php");
     exit();
@@ -33,12 +61,16 @@ if (isset($_SESSION['uid'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>Wish list</title>
     <?php include "htlm-includes.php/metadata.php"; ?>
+    <!-- Plugins CSS File -->
+    <link rel="stylesheet" href="assets/css/plugins/jquery.countdown.css">
+    <!-- Main CSS File -->
+    <link rel="stylesheet" href="assets/css/demos/demo-13.css">
 </head>
 
 <body>
     <div class="page-wrapper">
         <?php
-        include "header-for-other-pages.php";
+        include "header_main.php";
         ?>
 
         <main class="main">
@@ -53,7 +85,7 @@ if (isset($_SESSION['uid'])) {
             <div class="page-content">
                 <div class="container">
                     <table class="table table-wishlist table-mobile">
-                        <?php if ($result && $result->num_rows > 0) { ?>
+                        <?php if (!empty($result_items)) { ?>
                             <thead>
                                 <tr>
                                     <th>Product</th>
@@ -68,15 +100,13 @@ if (isset($_SESSION['uid'])) {
                         <tbody>
 
                             <?php
-                            if ($result && $result->num_rows > 0) {
-
-
-                                while ($row = mysqli_fetch_array($result)) {
-
+                            if (!empty($result_items)) {
+                                foreach ($result_items as $row) {
                                     $old_cost = null;
-                                    if ($promotion->check_if_item_is_in_inventory_promotion($row['inventory_item_id'])) {
-                                        $row['cost'] = $promotion->get_promoPrice_price($row['inventory_item_id']);
-                                        $old_cost = $promotion->get_regular_price($row['inventory_item_id']);
+                                    // Use InventoryItemID from the joined inventoryitem table
+                                    if ($promotion->check_if_item_is_in_inventory_promotion($row['InventoryItemID'])) {
+                                        $row['cost'] = $promotion->get_promoPrice_price($row['InventoryItemID']); // This will be the promo price
+                                        $old_cost = $promotion->get_regular_price($row['InventoryItemID']); // Get original price for strikethrough
                                     }
 
                                     $formattedCost = number_format($row["cost"], 2, '.', ','); // 2 decimal places, . as decimal, , as thousands
@@ -86,15 +116,17 @@ if (isset($_SESSION['uid'])) {
                                         <td class="product-col">
                                             <div class="product">
                                                 <figure class="product-media">
-                                                    <a href="product-detail.php?itemid=<?= $row['inventory_item_id'] ?>">
-                                                        <img src="<?php echo getImage($row['inventory_item_id']); ?>"
+                                                    <a
+                                                        href="product-detail.php?itemid=<?= htmlspecialchars($row['InventoryItemID']) ?>">
+                                                        <img src="<?= htmlspecialchars($invt->get_product_image($pdo, $row['InventoryItemID'])) ?>"
                                                             alt="Product image">
                                                     </a>
                                                 </figure>
 
                                                 <h3 class="product-title">
-                                                    <a href="product-detail.php?itemid=<?= $row['inventory_item_id'] ?>">
-                                                        <?= $row["description"] ?></a>
+                                                    <a
+                                                        href="product-detail.php?itemid=<?= htmlspecialchars($row['InventoryItemID']) ?>">
+                                                        <?= htmlspecialchars($row["description"]) ?></a>
                                                 </h3><!-- End .product-title -->
                                             </div><!-- End .product -->
                                         </td>
@@ -102,14 +134,14 @@ if (isset($_SESSION['uid'])) {
 
                                             <?php
                                             if (isset($old_cost) and ($old_cost !== $row["cost"])) {
-                                                $formattedOldCost = number_format($old_cost, 2, '.', ','); // Format old cost too
+                                                $formattedOldCost = number_format((float) $old_cost, 2, '.', ','); // Format old cost too
                                                 echo "<small><span style=\"text-decoration: line-through\">$formattedOldCost</span></small>";
                                             }
                                             ?>
                                         </td>
                                         <td class="stock-col"><span class="in-stock">In stock</span></td>
                                         <!--	<td class="stock-col"><span class="out-of-stock">In stock</span></td>
-                               <!--	<td class="action-col">
+                                   <td class="action-col">
                                     <button class="btn btn-block btn-outline-primary-2 disabled">Out of Stock</button>
                                 </td>
                                 -->
@@ -119,12 +151,13 @@ if (isset($_SESSION['uid'])) {
 
                                                 <div>
                                                     <input type="hidden" name="inventory_product_id"
-                                                        value="<?= $row['inventory_item_id'] ?>">
+                                                        value="<?= htmlspecialchars($row['InventoryItemID']) ?>">
                                                     <div class="product-details-quantity"
                                                         style="margin-bottom: 5px; width: 100%;">
                                                         <input name="qty" type="number"
-                                                            id="qty-<?= $row['inventory_item_id'] ?>" class="form-control"
-                                                            value="1" min="1" max="10" step="1" data-decimals="0" required />
+                                                            id="qty-<?= htmlspecialchars($row['InventoryItemID']) ?>"
+                                                            class="form-control" value="1" min="1" max="10" step="1"
+                                                            data-decimals="0" required />
                                                     </div>
 
 
@@ -141,7 +174,7 @@ if (isset($_SESSION['uid'])) {
                                         </td>
                                         <td class="remove-col align-right" style="margin-right: 5px;">
                                             <a href="#" class="remove-from-wishlist"
-                                                data-wishlist-id="<?= $row['wishlistid'] ?>">Remove</a>
+                                                data-wishlist-id="<?= htmlspecialchars($row['wishlist_item_id_alias']) ?>">Remove</a>
 
 
                                         </td>
@@ -163,7 +196,7 @@ if (isset($_SESSION['uid'])) {
                         </tbody>
                     </table><!-- End .table table-wishlist -->
                     <?php
-                    if ($totalPages > 1) { // Only show pagination if there's more than one page
+                    if (isset($totalPages) && $totalPages > 1) { // Only show pagination if there's more than one page
                         ?>
                         <nav aria-label="Page navigation example">
                             <ul class="pagination justify-content-center">
@@ -280,25 +313,7 @@ if (isset($_SESSION['uid'])) {
                 });
             });
 
-            /*   $("button.btn-remove").click(function (event) {
-                   event.preventDefault();
-                   var del_title = $(this).attr('cart-item-id');
-                   var item_to_removed = $(this).closest('tr');
-                   console.log("About to delete itme : " + del_title);
-                   $.ajax({
-                       type: 'POST',
-                       cache: false,
-                       url: 'https://goodguyng.com/wishlist.php/remove_product_from_watch_list.php',
-                       dataType: "json",
-                       data: { remove: del_title },
-                       success: function (data) {
-                           alert(data);
-                           item_to_removed.remove();
-                           location.reload(true);
-                       }
-                   });
-               });
-           */
+
 
             $('.remove-from-wishlist').click(function (event) {
                 event.preventDefault(); // Prevent the default link behavior

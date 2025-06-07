@@ -85,6 +85,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_cart'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>Shopping Cart</title>
     <?php include "htlm-includes.php/metadata.php"; ?>
+    <link rel="stylesheet" href="assets/css/plugins/jquery.countdown.css">
+    <!-- Main CSS File -->
+    <link rel="stylesheet" href="assets/css/demos/demo-13.css">
+    <link rel="stylesheet" href="assets/css/plugins/nouislider/nouislider.css">
 </head>
 
 <body>

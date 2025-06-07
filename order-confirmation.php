@@ -19,7 +19,7 @@ $status = $_GET['status'] ?? 'unknown';
 </head>
 
 <body>
-    <?php include "header-for-other-pages.php"; ?>
+    <?php include "header_main.php"; ?>
 
     <main class="main">
         <nav aria-label="breadcrumb" class="breadcrumb-nav border-0 mb-0">
