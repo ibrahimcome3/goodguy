@@ -1,5 +1,6 @@
 <?php
 session_start();
+
 require_once "includes.php"; // Include necessary files
 
 // Initialize the cart if it doesn't exist
@@ -24,7 +25,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['inventory_product_id']
 
     // Check if the item is already in the cart
     $item_found = false;
+
     foreach ($_SESSION['cart'] as $key => $item) {
+
         if ($item['inventory_product_id'] == $inventory_product_id && $item['size'] == $size && $item['color'] == $color) {
             $_SESSION['cart'][$key]['quantity'] += $quantity;
             $item_found = true;

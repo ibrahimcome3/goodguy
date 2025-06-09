@@ -19,7 +19,7 @@ require_once "includes.php";
     <div class="page-wrapper">
         <?php
 
-        include "header-for-other-pages.php";
+        include "header_main.php";
         ?>
 
 

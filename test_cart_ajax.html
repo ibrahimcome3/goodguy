@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test cart_ajax.php</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; padding: 20px; background-color: #f4f4f4; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+        input[type="number"], input[type="text"] { width: 100%; padding: 10px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        pre { background-color: #eee; padding: 15px; border: 1px solid #ccc; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; }
+        h2 { text-align: center; color: #333; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Test Add to Cart (cart_ajax.php)</h2>
+
+        <div>
+            <label for="inventory_product_id">Inventory Product ID:</label>
+            <input type="number" id="inventory_product_id" name="inventory_product_id" value="1">
+        </div>
+
+        <div>
+            <label for="qty">Quantity:</label>
+            <input type="number" id="qty" name="qty" value="1">
+        </div>
+
+        <button id="addToCartBtn">Add to Cart</button>
+
+        <h3>Response:</h3>
+        <pre id="responseOutput">Click "Add to Cart" to see the response.</pre>
+    </div>
+
+    <!-- Include jQuery from a CDN -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#addToCartBtn').click(function() {
+                var inventoryItemId = $('#inventory_product_id').val();
+                var quantity = $('#qty').val();
+
+                $('#responseOutput').text('Loading...'); // Show loading indicator
+
+                $.ajax({
+                    url: 'cart_ajax.php', // Path to your PHP script
+                    type: 'POST',
+                    dataType: 'json', // Expect JSON response
+                    data: {
+                        inventory_product_id: inventoryItemId,
+                        qty: quantity
+                    },
+                    success: function(response) {
+                        // Display the raw JSON response, pretty-printed
+                        $('#responseOutput').text(JSON.stringify(response, null, 2));
+                        console.log(response); // Also log to console for easier inspection
+                    },
+                    error: function(xhr, status, error) {
+                        var errorMessage = "AJAX Error: " + status + "\n";
+                        errorMessage += "Message: " + error + "\n";
+                        errorMessage += "Response Text:\n" + xhr.responseText; // Show the raw response text
+                        $('#responseOutput').text(errorMessage);
+                        console.error("AJAX Error:", xhr, status, error);
+                    }
+                });
+            });
+        });
+    </script>
+
+</body>
+</html>

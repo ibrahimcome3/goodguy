@@ -1,10 +1,10 @@
 <?php
 session_start();
 //var_dump($_SESSION);
-   if(!isset($_SESSION['uid']) and isset($_GET['shipping'])){
-          header("Location: login.php");
-          exit();
-   }
+if (!isset($_SESSION['uid']) and isset($_GET['shipping'])) {
+    header("Location: login.php");
+    exit();
+}
 
 ?>
 
@@ -13,6 +13,7 @@ session_start();
 
 
 <!-- molla/login.html  22 Nov 2019 10:04:03 GMT -->
+
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -44,7 +45,7 @@ session_start();
 <body>
     <div class="page-wrapper">
         <?php
-         include "header-for-other-pages.php";
+        include "header_main.php";
         ?>
 
         <main class="main">
@@ -59,37 +60,37 @@ session_start();
             </nav><!-- End .breadcrumb-nav -->
 
             <div class="container">
-            	<form>
-                  <table>
-                      <tr>
-                          <td></td>
-                          <td></td>
-                          <td></td>
-                      </tr>
-                      <tr>
-                          <td><input name="shipping" type="radio" value="2000"></td>
-                          <td>Normal Shipping Cost</td>
-                          <td></td>
-                      </tr>
-                      <tr>
-                          <td><input name="shipping" type="radio" value="3000"></td>
-                          <td>Express Shipping Cost</td>
-                          <td></td>
-                      </tr>
-                      <tr>
-                          <td></td>
-                          <td></td>
-                          <td><input name="Submit" type="button" value="Submit"></td>
-                      </tr>
-                  </table>
+                <form>
+                    <table>
+                        <tr>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td><input name="shipping" type="radio" value="2000"></td>
+                            <td>Normal Shipping Cost</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td><input name="shipping" type="radio" value="3000"></td>
+                            <td>Express Shipping Cost</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td></td>
+                            <td></td>
+                            <td><input name="Submit" type="button" value="Submit"></td>
+                        </tr>
+                    </table>
 
-            	</form>
+                </form>
             </div><!-- End .login-page section-bg -->
         </main><!-- End .main -->
 
         <footer class="footer">
 
-                <?php include "footer.php"; ?>
+            <?php include "footer.php"; ?>
 
         </footer><!-- End .footer -->
     </div><!-- End .page-wrapper -->
@@ -97,7 +98,7 @@ session_start();
 
     <!-- Mobile Menu -->
     <div class="mobile-menu-overlay"></div><!-- End .mobil-menu-overlay -->
-        <?php include "mobile-menue.php"; ?>
+    <?php include "mobile-menue.php"; ?>
 
     <!-- Sign in / Register Modal -->
     <?php include "login-module.php"; ?>
@@ -118,4 +119,5 @@ session_start();
 
 
 <!-- molla/login.html  22 Nov 2019 10:04:03 GMT -->
+
 </html>

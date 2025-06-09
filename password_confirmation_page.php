@@ -2,6 +2,7 @@
 <?php require_once "includes.php"; ?>
 <html lang="en">
 <!-- molla/about-2.html  22 Nov 2019 10:03:54 GMT -->
+
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -12,20 +13,20 @@
 
 <body>
     <div class="page-wrapper">
-    <?php
-         include "header-for-other-pages.php";
-    ?>
+        <?php
+        include "header_main.php";
+        ?>
 
         <main class="main">
             <div class="container">
-            <br/>
-            <br/>
-            <h4>Kindly check your mail for a reset password link.</h4>
+                <br />
+                <br />
+                <h4>Kindly check your mail for a reset password link.</h4>
             </div>
         </main><!-- End .main -->
 
         <footer class="footer">
-        	     <?php include "footer.php"; ?>
+            <?php include "footer.php"; ?>
         </footer><!-- End .footer -->
     </div><!-- End .page-wrapper -->
     <button id="scroll-top" title="Back to Top"><i class="icon-arrow-up"></i></button>
@@ -43,4 +44,5 @@
 
 
 <!-- molla/about-2.html  22 Nov 2019 10:04:01 GMT -->
+
 </html>

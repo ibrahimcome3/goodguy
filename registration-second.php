@@ -27,7 +27,7 @@ if (!isset($_SESSION["r_email"])) { // Check if session variable is set
         <br />
         <?php
 
-        include "header-for-other-pages.php";
+        include "header_main.php";
         ?>
 
         <main class="main">

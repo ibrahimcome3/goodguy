@@ -673,17 +673,18 @@ try {
 
     <!-- Mobile Menu -->
     <div class="mobile-menu-overlay"></div>
-    <?php include "mobile-menue-index-page.php"; // Or the standard mobile-menue.php ?>
     <!-- Sign in / Register Modal -->
-    <?php include "login-modal.php"; ?>
+
 
     <?php include "jsfile.php"; ?>
     <script src="node_modules/swiper/swiper-bundle.min.css"></script>
     <!-- Add to Cart / Wishlist AJAX Script -->
     <script>
         $(document).ready(function () {
+
             // Add to Cart Button Handler
             $('.page-wrapper').on('click', '.submit-cart', function (e) {
+
                 e.preventDefault();
                 var $button = $(this);
                 var inventoryItemId = $button.attr('product-info');
@@ -691,7 +692,7 @@ try {
 
                 $button.prop('disabled', true).find('span').text('Adding...');
                 $.ajax({
-                    type: "POST", url: 'cart.php',
+                    type: "POST", url: 'cart_ajax.php',
                     data: { inventory_product_id: inventoryItemId, qty: 1 },
                     dataType: 'json',
                     success: function (response) {

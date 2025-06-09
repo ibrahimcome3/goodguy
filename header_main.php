@@ -11,6 +11,7 @@ if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
 
+
 // --- Data Fetching ---
 // Default values
 $cartDetails = [];
@@ -60,7 +61,9 @@ try {
 
     // Get Cart Details
     $cartDetails = $cart->getCartDetails();
+
     $cartCount = $cart->getCartItemCount();
+    //var_dump($cartCount);
     $cartTotal = $cart->calculateCartTotal($cartDetails); // Pass $cartDetails
 
     // Get 3-Level Categories
@@ -101,7 +104,7 @@ try {
 }
 ?>
 <style>
-    /* Styles from header-for-other-pages.php for cart dropdown text */
+    /* Styles from header_main.php for cart dropdown text */
     .cart-dropdown .product-title a {
         display: block;
         white-space: nowrap;
@@ -127,6 +130,14 @@ try {
         font-weight: 600;
         letter-spacing: -.01em;
         color: black;
+    }
+
+    .dropdown-cart-products {
+        max-height: 50vh;
+        /* Set max height to 50% of the viewport height */
+        /* Or a fixed height: max-height: 300px; */
+        overflow-y: auto;
+        /* Show scrollbar only when needed */
     }
 </style>
 <header class="header header-10 header-intro-clearance">

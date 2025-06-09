@@ -600,7 +600,6 @@ $total_pages = ceil($total_products / $products_per_page);
 
     <!-- Mobile Menu -->
     <div class="mobile-menu-overlay"></div>
-    <?php include "mobile-menue-index-page.php"; ?>
     <!-- Sign in / Register Modal -->
     <?php include "login-modal.php"; ?>
 
@@ -608,6 +607,8 @@ $total_pages = ceil($total_products / $products_per_page);
     <!-- Add to Cart/Wishlist JS (copy from index.php or include shared file) -->
     <script src="assets/js/nouislider.min.js"></script>
     <script src="assets/js/wNumb.js"></script>
+    <script src="js/add-to-cart.js"></script>
+
     <script>
         // Add Cart/Wishlist handlers (same as index.php)
         $(document).ready(function () {
@@ -685,6 +686,8 @@ $total_pages = ceil($total_products / $products_per_page);
             });
         });
     </script>
+
+
 </body>
 
 </html>

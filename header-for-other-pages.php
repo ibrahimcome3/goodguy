@@ -1,5 +1,5 @@
 <?php
-// File: header-for-other-pages.php
+// File: header_main.php
 
 // Ensure session is started if not already (usually done in includes.php or at the very top of page scripts)
 if (session_status() == PHP_SESSION_NONE) {
@@ -85,7 +85,7 @@ try {
     }
 
 } catch (Exception $e) {
-    error_log("Error in header-for-other-pages.php setup: " . $e->getMessage());
+    error_log("Error in header_main.php setup: " . $e->getMessage());
     // Set defaults again in case of partial failure
     $cartDetails = [];
     $cartCount = 0;

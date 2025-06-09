@@ -12,43 +12,6 @@ class Cart extends Promotion
   }
 
 
-
-
-  function get_reviews_by_inventory_item($id)
-  {
-    $pdo = $this->dbc;
-    $sql = "select * from product_review left join customer on customer.customer_id = product_review.user_id where `inventory_item` = $id";
-    $stmt = $pdo->query($sql);
-    return $stmt;
-    // return $stmt->fetch();
-  }
-
-  function get_right_inventroy_item_neede($arryofproperties)
-  {
-    $pdo = $this->dbc;
-    $str = '';
-    $counter = 0;
-    foreach ($arryofproperties as $key => $val) {
-      $str .= "JSON_EXTRACT(sku, '$." . $key . "') =  '" . $val . "'";
-      if ($counter != count($arryofproperties) - 1) {
-        $str .= "  and  ";
-      }
-
-      $counter = $counter + 1;
-
-
-    }
-
-    $sql = "SELECT InventoryItemID, barcode, sku, JSON_CONTAINS_PATH(sku, 'all', '$.size', '$.color') as size_color from inventoryitem   WHERE  ";
-    $sql = $sql . " " . $str;
-    $stmt = $pdo->query($sql);
-    $row = $stmt->fetch();
-    return $row['InventoryItemID'];
-
-
-  }
-
-
   public function getCartItemCount()
   {
     // Assuming your getCartDetails() method returns an array of all cart items
@@ -97,14 +60,17 @@ class Cart extends Promotion
 
   public function getCartDetails(): array
   {
+
     if (!isset($_SESSION['cart']) || empty($_SESSION['cart'])) {
       return [];
     }
+
 
     // 1. Create lookup map for quantities and collect unique IDs
     $itemQuantities = [];
     $inventoryItemIds = [];
     foreach ($_SESSION['cart'] as $item) {
+
       if (!isset($item['inventory_product_id']) || !isset($item['quantity']))
         continue;
       $id = (int) $item['inventory_product_id'];
@@ -115,15 +81,20 @@ class Cart extends Promotion
       }
     }
 
+
+
     if (empty($inventoryItemIds))
       return [];
-
     // 2. Fetch product data efficiently
     // *** SELECT ONLY NEEDED COLUMNS, including image path if available ***
     // *** Adjust 'image_path' column name if different ***
-    $columns = "InventoryItemID, description, cost, image_path"; // Add other needed columns
+    $columns = "ii.InventoryItemID, ii.description, ii.cost, iii.image_path"; // ii for inventoryitem, iii for inventory_item_image
     $placeholders = implode(',', array_fill(0, count($inventoryItemIds), '?'));
-    $sql = "SELECT {$columns} FROM inventoryitem WHERE InventoryItemID IN ($placeholders)";
+    $sql = "SELECT {$columns} 
+            FROM inventoryitem ii
+            LEFT JOIN inventory_item_image iii ON ii.InventoryItemID = iii.inventory_item_id AND iii.is_primary = 1
+            WHERE ii.InventoryItemID IN ({$placeholders})";
+
 
     try {
       $stmt = $this->pdo->prepare($sql);

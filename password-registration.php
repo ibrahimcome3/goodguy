@@ -22,7 +22,7 @@ if (!isset($_SESSION['registration_step']) || $_SESSION['registration_step'] < 2
 <body>
     <div class="page-wrapper">
         <br />
-        <?php include "header-for-other-pages.php"; ?>
+        <?php include "header_main.php"; ?>
         <main class="main">
             <div class="page-content">
                 <center>

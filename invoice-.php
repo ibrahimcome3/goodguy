@@ -235,7 +235,7 @@ $p = new ProductItem($pdo);
 </head>
 
 <body>
-    <?php include "header-for-other-pages.php"; ?>
+    <?php include "header_main.php"; ?>
 
 
     <main>

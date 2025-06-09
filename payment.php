@@ -283,6 +283,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Complete Payment - Order #<?= htmlspecialchars($orderId) ?> - Goodguy</title>
     <?php include "htlm-includes.php/metadata.php"; // Include meta tags, base CSS links ?>
+    <link rel="stylesheet" href="assets/css/demos/demo-13.css">
+    <link rel="stylesheet" href="assets/css/plugins/nouislider/nouislider.css">
     <style>
         /* Basic styling for pagination and table */
         .pagination-controls {
@@ -327,6 +329,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             margin: 10px 0;
         }
     </style>
+
 </head>
 
 <body>

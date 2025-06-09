@@ -169,6 +169,11 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
         <!-- simplePagination.js CSS (CDN example) -->
         <link rel="stylesheet"
                 href="https://cdnjs.cloudflare.com/ajax/libs/simplePagination.js/1.6/simplePagination.css">
+
+
+        <!-- Plugins CSS File -->
+        <link rel="stylesheet" href="assets/css/plugins/jquery.countdown.css">
+        <!-- Main CSS File -->
         <link rel="stylesheet" href="assets/css/demos/demo-13.css">
 
         <style>

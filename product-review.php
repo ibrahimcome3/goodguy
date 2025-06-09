@@ -20,12 +20,17 @@ if (!isset($_SESSION['uid'])) {
     <?php include "htlm-includes.php/metadata.php"; ?>
     <link href="node_modules/star-rating.js/dist/star-rating.css" rel="stylesheet">
 
+    <!-- Plugins CSS File -->
+    <link rel="stylesheet" href="assets/css/plugins/jquery.countdown.css">
+    <!-- Main CSS File -->
+    <link rel="stylesheet" href="assets/css/demos/demo-13.css">
+
 </head>
 
 <body>
     <div class="page-wrapper">
         <?php
-        include "header-for-other-pages.php";
+        include "header_main.php";
         ?>
 
         <main class="main">

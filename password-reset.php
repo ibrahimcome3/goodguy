@@ -57,7 +57,7 @@ if (isset($_GET['error'])) {
 <body>
     <div class="page-wrapper">
 
-        <?php include "header-for-other-pages.php"; // Or header_main.php if consolidated ?>
+        <?php include "header_main.php"; // Or header_main.php if consolidated ?>
 
         <main class="main">
             <nav aria-label="breadcrumb" class="breadcrumb-nav border-0 mb-0">

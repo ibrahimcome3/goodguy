@@ -102,7 +102,7 @@ if (isset($_GET['error'])) {
 <body>
     <div class="page-wrapper">
 
-        <?php include "header-for-other-pages.php"; // Use the consolidated header ?>
+        <?php include "header_main.php"; // Use the consolidated header ?>
 
         <main class="main">
             <nav aria-label="breadcrumb" class="breadcrumb-nav border-0 mb-0">

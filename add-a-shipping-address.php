@@ -123,7 +123,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 <body>
     <div class="page-wrapper">
-        <?php include "header-for-other-pages.php"; ?>
+        <?php include "header_main.php"; ?>
 
         <main class="main">
             <nav aria-label="breadcrumb" class="breadcrumb-nav border-0 mb-0">

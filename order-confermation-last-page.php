@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <?php
-include 'breadcrumps.php'; 
+include 'breadcrumps.php';
 ?>
 <html lang="en">
 
 
 <!-- molla/login.html  22 Nov 2019 10:04:03 GMT -->
+
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -29,40 +30,42 @@ include 'breadcrumps.php';
     <!-- Plugins CSS File -->
     <link rel="stylesheet" href="assets/css/bootstrap.min.css">
     <!-- Main CSS File -->
-    <link rel="stylesheet" href="assets/css/style.css">
-    <link rel="stylesheet" href="assets/css/skins/skin-demo-13.css">
+    <link rel="stylesheet" href="assets/css/demos/demo-13.css">
+    <link rel="stylesheet" href="assets/css/plugins/nouislider/nouislider.css">
 </head>
 
 <body>
     <div class="page-wrapper">
-    <div class="container">
+        <div class="container">
 
-          <?php include "header-for-other-pages.php" ?>
+            <?php include "header_main.php" ?>
 
-                   </div>
+        </div>
         <main class="main">
             <nav aria-label="breadcrumb" class="breadcrumb-nav border-0 mb-0">
                 <div class="container">
                     <ol class="breadcrumb">
-                      <?php  echo breadcrumbs();  ?>
+                        <?php echo breadcrumbs(); ?>
                     </ol>
                 </div><!-- End .container -->
             </nav><!-- End .breadcrumb-nav -->
-             <div class="container">
-            <div class="login-page bg-image pt-8 pb-8 pt-md-12 pb-md-12 pt-lg-17 pb-lg-17" style="background-image: url(assets/images/backgrounds/thank-you-6587.png)">
-                <div class="container">
-            		<div class="form-box">
-                    <p style="font-size: larger">
-                       Thank you for your order. we will notify you on delivery date and you will be notified via phone call few hours from delivery.
-                    </p>
-            		</div><!-- End .form-box -->
-            	</div><!-- End .container -->
-            </div><!-- End .login-page section-bg -->
+            <div class="container">
+                <div class="login-page bg-image pt-8 pb-8 pt-md-12 pb-md-12 pt-lg-17 pb-lg-17"
+                    style="background-image: url(assets/images/backgrounds/thank-you-6587.png)">
+                    <div class="container">
+                        <div class="form-box">
+                            <p style="font-size: larger">
+                                Thank you for your order. we will notify you on delivery date and you will be notified
+                                via phone call few hours from delivery.
+                            </p>
+                        </div><!-- End .form-box -->
+                    </div><!-- End .container -->
+                </div><!-- End .login-page section-bg -->
             </div>
         </main><!-- End .main -->
 
         <footer class="footer">
-               <?php include "footer.php" ?>
+            <?php include "footer.php" ?>
 
         </footer><!-- End .footer -->
     </div><!-- End .page-wrapper -->
@@ -71,7 +74,7 @@ include 'breadcrumps.php';
     <!-- Mobile Menu -->
     <div class="mobile-menu-overlay"></div><!-- End .mobil-menu-overlay -->
 
- <?php include "mobile-menue-index-page.php"; ?>
+    <?php include "mobile-menue-index-page.php"; ?>
 
     <!-- Sign in / Register Modal -->
 
@@ -89,4 +92,5 @@ include 'breadcrumps.php';
 
 
 <!-- molla/login.html  22 Nov 2019 10:04:03 GMT -->
+
 </html>

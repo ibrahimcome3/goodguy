@@ -100,7 +100,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["login"])) {
 <body>
     <div class="page-wrapper">
         <?php
-        include "header-for-other-pages.php";
+        include "header_main.php";
 
         ?>
 
