@@ -21,7 +21,10 @@ try {
   global $pdo;
   $pdo = new \PDO($dsn, $username, $password, $options);
 } catch (\PDOException $e) {
-  throw new \PDOException($e->getMessage(), (int) $e->getCode());
+  // Log the detailed error
+  error_log("PDO Connection Error in conn.php: " . $e->getMessage());
+  // Make the script die explicitly to prevent further execution if $pdo is not set.
+  die("Database connection failed. Please check server logs. PDO Error: " . htmlspecialchars($e->getMessage()));
 }
 
 ?>

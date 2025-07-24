@@ -5,8 +5,8 @@ require_once '../class/Category.php';
 require_once '../class/ProductItem.php';
 require_once '../class/InventoryItem.php';
 
-$p = new ProductItem();
-$c = new Category();
+$p = new ProductItem($pdo);
+$c = new Category($pdo);
 $i = new InventoryItem($pdo);
 
 // Get the referring URL (the page that sent the request)

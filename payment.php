@@ -339,9 +339,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <!-- Breadcrumbs -->
         <nav aria-label="breadcrumb" class="breadcrumb-nav border-0 mb-0">
             <div class="container d-flex align-items-center">
-                <ol class="breadcrumb">
-                    <?php echo breadcrumbs(); // Assumes breadcrumbs() function is defined in includes.php ?>
-                </ol>
+
             </div>
         </nav>
 

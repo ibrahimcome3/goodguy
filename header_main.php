@@ -267,8 +267,9 @@ try {
                                                         alt="<?= htmlspecialchars($productDetailsInCart['description'] ?? 'Product Image') ?>">
                                                 </a>
                                             </figure>
-                                            <a href="cart.php?remove=<?= (int) $itemId ?>" class="btn-remove" <?php // Assuming 'remove' is the GET param your cart.php expects ?> title="Remove Product"><i
-                                                    class="icon-close"></i></a>
+                                            <a href="cart.php?remove=<?= (int) $itemId ?>" class="btn-remove-dropdown-item"
+                                                <?php // Assuming 'remove' is the GET param your cart.php expects ?>
+                                                title="Remove Product"><i class="icon-close"></i></a>
                                         </div><!-- End .product -->
                                     <?php endforeach; ?>
                                 </div><!-- End .cart-product -->

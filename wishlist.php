@@ -170,7 +170,9 @@ if (isset($_SESSION['uid'])) {
                                         </td>
                                         <td>
                                             <button class="submit-cart  btn btn-block btn-outline-primary-2"
-                                                style="border: none;"><i class="icon-cart-plus"></i>Add to Cart</button>
+                                                product-info="<?= htmlspecialchars($row['InventoryItemID']) ?>"
+                                                style="border: none;" title="Add to cart"><i class="icon-cart-plus"></i>Add to
+                                                Cart</button>
                                         </td>
                                         <td class="remove-col align-right" style="margin-right: 5px;">
                                             <a href="#" class="remove-from-wishlist"
@@ -281,38 +283,9 @@ if (isset($_SESSION['uid'])) {
     <script src="assets/js/owl.carousel.min.js"></script>
     <!-- Main JS File -->
     <script src="assets/js/main.js"></script>
-    <script src="assets/js/main.js"></script>
-    <script src="login.js"></script>
+    <script src="js/add-to-cart-from-wishlist.js"></script>
     <script>
         $(document).ready(function () {
-            $(".submit-cart").click(function (event) {  // Use class selector, more robust
-                event.preventDefault(); // Prevent default form submission
-
-                var inventory_product_id = $(this).closest('tr').find('input[name="inventory_product_id"]').val();
-                var qty = $(this).closest('tr').find('input[name="qty"]').val();
-                $.ajax({
-                    type: 'POST',
-                    url: 'cart-ajax.php',
-                    data: {
-                        inventory_product_id: inventory_product_id,
-                        qty: qty
-                    },
-                    success: function (response) {
-                        if (response.success) { // Check for success in JSON response
-                            alert(response.message); // Display success message from server
-
-                            //Optionally update cart count or other elements
-                        } else {
-                            alert("Error: " + response.message); // Handle errors gracefully
-                        }
-                    },
-                    error: function (xhr, status, error) {
-                        console.error(xhr.responseText); // Log error for debugging
-                        alert("An error occurred adding to cart."); // Display general error
-                    }
-                });
-            });
-
 
 
             $('.remove-from-wishlist').click(function (event) {

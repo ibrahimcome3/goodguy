@@ -613,10 +613,7 @@ $total_pages = ceil($total_products / $products_per_page);
         // Add Cart/Wishlist handlers (same as index.php)
         $(document).ready(function () {
 
-            // Add to Cart Button Handler (copy from index.php)
-            $('.page-wrapper').on('click', '.submit-cart', function (e) { /* ... copy code ... */ });
-            // Wishlist Button Handler (copy from index.php)
-            $('.page-wrapper').on('click', '.btn-wishlist', function (e) { /* ... copy code ... */ });
+
 
             // Optional: Auto-submit form when sort dropdown changes
             $('#sortby').closest('form').on('change', '#sortby', function () {

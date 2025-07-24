@@ -2,30 +2,35 @@
 // view_inventory.php
 
 session_start();
+if (!isset($_SESSION['uid'])) {
+    header("Location: ../login.php");
+    exit;
+}
+var_dump($_SESSION);
 include "../conn.php"; // Include to have access to $pdo
 require_once '../class/User.php';
 require_once '../class/Seller.php';
 require_once '../class/InventoryItem.php';
 
 // Check if a user is logged in
-if (!isset($_SESSION['uid'])) {
-    header("Location: ../login.php");
-    exit;
-}
+
 
 // Get user data
-$u = new User();
+$u = new User($pdo);
 $userId = $_SESSION['uid'];
-$user = $u->getUserById($mysqli, $userId);
+$user = $u->getUserById($userId);
+
+
 
 // Check if the user is an approved seller
 if ($user['vendor_status'] != 'approved') {
-    header("Location: ../index.php");
+    // header("Location: ../index.php");
     exit;
 }
 
 // Get the product ID from the query string
 $productId = $_GET["product_id"] ?? null;
+exit;
 if ($productId === null) {
     header("Location: seller-dashboard.php");
     exit;

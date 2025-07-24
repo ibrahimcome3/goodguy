@@ -2,8 +2,9 @@
 // removed require_once "../db_conncection/conn.php";
 // Go up one level from the current file's directory
 
+require_once __DIR__ . '/ProductItem.php';
 
-class InventoryItem
+class InventoryItem extends ProductItem
 {
     private $timestamp;
     private $pdo; // Store the PDO connection here
@@ -20,34 +21,87 @@ class InventoryItem
     }
 
 
-    public function setDiscountPercent($percent)
+    /**
+     * Uploads multiple images for an inventory item.
+     *
+     * @param int   $inventoryItemId
+     * @param array $files           $_FILES['images']
+     * @return array                 An array of results from addInventoryItemImage()
+     */
+    public function addInventoryItemImages(int $inventoryItemId, array $files): array
     {
-        $this->discount_percent = max(0, min(100, $percent)); //Ensure it's between 0 and 100
-    }
-
-    public function getDiscountedPrice()
-    {
-        if (isset($this->discount_percent)) {
-            $discount = $this->discount_percent / 100;
-            return $this->cost * (1 - $discount);
-        } else {
-            return $this->cost;
+        $results = [];
+        foreach ($files['tmp_name'] as $index => $tmpPath) {
+            $file = [
+                'tmp_name' => $tmpPath,
+                'name' => $files['name'][$index],
+                'error' => $files['error'][$index]
+            ];
+            // mark the first uploaded file as primary
+            $isPrimary = ($index === 0);
+            $results[] = $this->addInventoryItemImage($inventoryItemId, $file, $isPrimary);
         }
+        return $results;
     }
 
-
-    public function setDiscountAmount($amount)
+    /**
+     * Uploads a single image for an inventory item (creates dirs, moves file, inserts DB record),
+     * then converts and resizes the image.
+     */
+    public function addInventoryItemImage(int $inventoryItemId, array $file, bool $isPrimary = false): array
     {
-        $this->discount_amount = max(0, $amount); //Ensure amount is not negative
-    }
+        // determine product ID
+        $productId = $this->getProductIdForInventoryItem($inventoryItemId);
 
-    public function getDiscountedPriceAmount()
-    {
-        if (isset($this->discount_amount)) {
-            return $this->cost - $this->discount_amount;
-        } else {
-            return $this->cost;
+        // prepare directories
+        $basePath = "../products/product-{$productId}/inventory-{$productId}-{$inventoryItemId}/";
+        $resizedDir = $basePath . "resized/";
+        if (!is_dir($basePath)) {
+            mkdir($basePath, 0755, true);
         }
+        if (!is_dir($resizedDir)) {
+            mkdir($resizedDir, 0755, true);
+        }
+
+        // check upload
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            return ['error' => "Upload error code {$file['error']}"];
+        }
+
+        // move original file
+        $filename = round(microtime(true)) . '_' . basename($file['name']);
+        $target = $basePath . $filename;
+        if (!move_uploaded_file($file['tmp_name'], $target)) {
+            return ['error' => "Failed to move {$file['name']}"];
+        }
+
+        // convert quality if needed
+        $this->convertImage1($target, $target, 100);
+
+        // resize to a max of 600×600 and save in 'resized' folder
+        $resizedFilename = pathinfo($filename, PATHINFO_FILENAME) . ".jpg";
+        $resizedTarget = $resizedDir . $resizedFilename;
+        $this->resize_image($target, 600, 600, $resizedTarget);
+
+        // insert DB record using resized image path
+        $stmt = $this->pdo->prepare("
+            INSERT INTO inventory_item_image 
+                (inventory_item_id, image_name, image_path, is_primary)
+            VALUES (?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $inventoryItemId,
+            $filename,
+            ltrim($resizedTarget, './'),
+            $isPrimary ? 1 : 0
+        ]);
+
+        return [
+            'filename' => $filename,
+            'original' => $target,
+            'resized' => $resizedTarget,
+            'is_primary' => $isPrimary ? 1 : 0
+        ];
     }
 
     // ... (rest of the methods, now using $this->pdo) ...
@@ -110,93 +164,22 @@ class InventoryItem
             // Handle the error appropriately (e.g., display error message to user)
         }
     }
-    function get_products()
-    {
-
-        $stmt = $this->pdo->query("select * from productitem"); // Use $this->pdo
-        while ($row = $stmt->fetch()) {
-            echo $row['description'] . "<br />\n";
-        }
-    }
-
-    function get_all_drinks()
-    {
-        //$pdo = $this->dbc; REMOVED
-        $stmt = $this->pdo->query("select * from inventoryitem where category in (select `cat_id` from category_new where `cat_path` like '%1/%')"); // Use $this->pdo
-        return $stmt;
-    }
-
-    function get_all_drinks_count()
-    {
-        //$pdo = $this->dbc; REMOVED
-        $stmt = $this->pdo->query("select count(*) as count from inventoryitem where category in (select `cat_id` from category_new where `cat_id` in (SELECT `cat_id` from category_new WHERE `cat_path` like '%1/%'))"); // Use $this->pdo
-        $row = $stmt->fetch();
-        return $row['count'];
-    }
-
-
-    function get_inventory_items_product($category_id)
-    {
-        // $pdo = $this->dbc; REMOVED
-        $stmt = $this->pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `ParentID` = $category_id) "); // Use $this->pdo
-        if ($stmt->rowCount() === 0)
-            $stmt = $this->pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `categoryID` = $category_id) "); // Use $this->pdo
-        if ($stmt->rowCount() === 0)
-            print ("<center><b>No items in this category</b></center>");
-        return $stmt;
-    }
-
-    function get_multiple_inventory_items_product($category_id)
-    {
-        // $pdo = $this->dbc; REMOVED
-        $stmt = $this->pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `ParentID` = $category_id) "); // Use $this->pdo
-        if ($stmt->rowCount() === 0)
-            $stmt = $this->pdo->query("select * from inventoryitem where category in (SELECT `categoryID` FROM category WHERE `categoryID` = $category_id) "); // Use $this->pdo
-        if ($stmt->rowCount() === 0)
-            print ("<center><b>No items in this category</b></center>");
-        return $stmt;
-    }
-
-    function get_multiple_inventory_items_product2($sql, $starting_limit, $limit)
-    {
-        $sql = $sql . ' LIMIT ' . $starting_limit . ',' . $limit;
-        //$pdo = $this->dbc; REMOVED
-
-        $stmt = $this->pdo->query($sql); // Use $this->pdo
-        return $stmt;
-    }
-
-
-    function get_product_inventory($product_id = 1)
-    {
-        // $pdo = $this->dbc; REMOVED
-        $stmt = $this->pdo->prepare("SELECT * FROM inventoryitem as i WHERE i.productItemID = ?"); // Use $this->pdo
-
-        $stmt->execute([$product_id]);
-        while ($row = $stmt->fetch()) {
-            echo $row['description'] . "<br />\n";
-        }
-    }
 
 
 
-    function decript_string($string)
-    {
-        $string2 = explode(",", $string);
-        foreach ($string2 as $key => $value) {
-            if (strlen($value) === 0) {
-                unset($string2[$key]);
-            }
-        }
-        return (array_unique($string2));
-    }
-    function get_description($id)
-    {
-        // $pdo = $this->dbc; REMOVED
-        $stmt = $this->pdo->query("select * from inventoryitem where InventoryItemID = $id"); // Use $this->pdo
-        $row = $stmt->fetch();
-        return $row['small_description'];
-    }
+
+
+
+
+
+
+
+
+
+
+
+
+
     function check_item_in_existance($id)
     {
         try {
@@ -210,20 +193,6 @@ class InventoryItem
         }
     }
 
-    function get_color($c)
-    {
-        // $pdo = $this->dbc; REMOVED
-        $sql = "select JSON_VALUE(sku, '$.color') as color from inventoryitem where `InventoryItemID` = $c";
-        $stmt = $this->pdo->query($sql); // Use $this->pdo
-        $row = $stmt->fetch();
-        $row_count = $stmt->rowCount();
-        if (strlen($row['color']) > 0) {
-            return strtoupper($row['color']);
-        } else {
-            return null;
-        }
-        //return strtoupper($row['color']);
-    }
 
     /**
      * Gets the total inventory quantity for a given product ID.
@@ -347,5 +316,89 @@ class InventoryItem
     }
 
 
+
+
+    /**
+     * Get all color variants (from inventoryitem.sku JSON) 
+     * and their primary inventory‐item image.
+     *
+     * @param int $product_id
+     * @return array
+     */
+    public function get_color_variations_for_product_from_sku(int $product_id): array
+    {
+        $sql = "
+        SELECT 
+            ii.InventoryItemID, 
+            ii.sku,
+            invImg.image_path AS thumbnail
+        FROM inventoryitem ii
+        LEFT JOIN inventory_item_image invImg 
+            ON invImg.inventory_item_id = ii.InventoryItemID 
+            AND invImg.is_primary = 1
+        WHERE ii.productItemID = ?
+    ";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$product_id]);
+
+        $colors = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $skuData = json_decode($row['sku'], true) ?: [];
+            if (isset($skuData['color'])) {
+                $colors[] = [
+                    'InventoryItemID' => $row['InventoryItemID'],
+                    'color' => $skuData['color'],
+                    'thumbnail' => $row['thumbnail'] ?? '../assets/img/products/default-variant.png'
+                ];
+            }
+        }
+
+        return $colors;
+    }
+
+    /**
+     * Get color‐based variants for a product, including all inventory_item_image paths.
+     *
+     * @param int $productId
+     * @return array
+     */
+    public function getColorVariationsWithImages(int $productId): array
+    {
+        $sql = "
+        SELECT 
+            ii.InventoryItemID,
+            ii.sku,
+            img.image_path,
+            img.is_primary
+        FROM inventoryitem ii
+        LEFT JOIN inventory_item_image img
+            ON img.inventory_item_id = ii.InventoryItemID
+        WHERE ii.productItemID = ?
+        ORDER BY ii.InventoryItemID, img.is_primary DESC, img.inventory_item_image_id ASC
+    ";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$productId]);
+
+        $variants = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $skuData = json_decode($row['sku'], true) ?: [];
+            if (empty($skuData['color'])) {
+                continue;
+            }
+            $key = $row['InventoryItemID'];
+            if (!isset($variants[$key])) {
+                $variants[$key] = [
+                    'InventoryItemID' => $row['InventoryItemID'],
+                    'color' => $skuData['color'],
+                    'thumbnail' => $row['image_path'], // first (primary) image
+                    'images' => []
+                ];
+            }
+            if ($row['image_path']) {
+                $variants[$key]['images'][] = $row['image_path'];
+            }
+        }
+        return array_values($variants);
+    }
 
 }

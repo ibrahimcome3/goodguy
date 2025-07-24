@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test cart_ajax.php</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        .container { max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], input[type="number"], select {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background-color: #0056b3; }
+        #response {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #eee;
+            background-color: #f9f9f9;
+            white-space: pre-wrap; /* To display JSON nicely */
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Test `cart_ajax.php`</h1>
+        <form id="testCartForm">
+            <div>
+                <label for="inventory_product_id">Product ID (inventory_product_id):</label>
+                <input type="number" id="inventory_product_id" name="inventory_product_id" value="101" required>
+            </div>
+
+            <div>
+                <label for="qty">Quantity (qty):</label>
+                <input type="number" id="qty" name="qty" value="1" min="1" required>
+            </div>
+
+            <div>
+                <label for="size">Size (optional):</label>
+                <input type="text" id="size" name="size" placeholder="e.g., M, L, XL">
+            </div>
+
+            <div>
+                <label for="color">Color (optional):</label>
+                <input type="text" id="color" name="color" placeholder="e.g., Red, Blue">
+            </div>
+
+            <button type="submit">Add to Cart</button>
+        </form>
+
+        <h2>Response:</h2>
+        <pre id="response">Awaiting submission...</pre>
+    </div>
+
+    <!-- Include jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#testCartForm').on('submit', function(e) {
+                e.preventDefault(); // Prevent traditional form submission
+
+                var formData = {
+                    inventory_product_id: $('#inventory_product_id').val(),
+                    qty: $('#qty').val(),
+                    size: $('#size').val(),
+                    color: $('#color').val()
+                };
+
+                $('#response').text('Loading...');
+
+                $.ajax({
+                    type: "POST",
+                    url: "cart_ajax.php", // Path to your PHP script
+                    data: formData,
+                    dataType: "json", // Expect JSON response
+                    success: function(response) {
+                        $('#response').text(JSON.stringify(response, null, 2));
+                    },
+                    error: function(xhr, status, error) {
+                        var errorMessage = "Error: " + status + "\n" + error + "\n\nResponse Text:\n" + xhr.responseText;
+                        $('#response').text(errorMessage);
+                        console.error("AJAX Error:", status, error, xhr.responseText);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

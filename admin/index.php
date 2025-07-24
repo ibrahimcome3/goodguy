@@ -1,80 +1,92 @@
-<!DOCTYPE html>
-<html lang="en">
+<?php
+// Include common admin header (session start, login check, variable setup, and navbar)
+include 'includes/admin_header.php';
+// The variables $admin_username and $is_super_admin are now available from admin_header.php
+?>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bootstrap Sidebar Template</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <link rel="stylesheet" href="styles.css"> <!-- Your custom CSS -->
-</head>
-
-<body>
-    <nav class="navbar" style="background-color: azure;">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="#">
-                <svg width="45px" viewBox="0 -1 12 12" version="1.1" xmlns="http://www.w3.org/2000/svg"
-                    xmlns:xlink="http://www.w3.org/1999/xlink">
-                    <title>emoji_happy_simple [#454]</title>
-                    <desc>Created with Sketch.</desc>
-                    <defs></defs>
-                    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
-                        <g id="Dribbble-Light-Preview" transform="translate(-224.000000, -6165.000000)">
-                            <g id="icons" transform="translate(56.000000, 160.000000)">
-                                <path
-                                    d="M176,6009.21053 L180,6009.21053 L180,6005 L176,6005 L176,6009.21053 Z M168,6008.15789 L172,6008.15789 L172,6006.05263 L168,6006.05263 L168,6008.15789 Z M177,6010.26316 L179,6010.26316 C179,6016.57895 169,6016.57895 169,6010.26316 L171,6010.26316 C171,6014.47368 177,6014.47368 177,6010.26316 L177,6010.26316 Z"
-                                    id="emoji_happy_simple-[#454]" fill="blue" />
-                            </g>
-                        </g>
-                    </g>
-                </svg>
-
-                goodguyng.com
-            </a>
-        </div>
-    </nav>
-    <div class="container-fluid">
-        <!-- Sidebar -->
-
+<div class="container-fluid">
+    <div class="row">
+        <?php include 'includes/admin_sidebar.php'; ?>
 
         <!-- Page Content -->
-        <main role="main" class="col-md-9 ml-sm-auto col-lg-10 px-md-4">
-
-            <div class="row">
-                <div class="col-sm-3 px-0">
-                    <nav id="sidebar" class="col-md-3 col-lg-2 d-md-block sidebar">
-                        <div class="sidebar-sticky">
-                            <ul class="nav flex-column">
-                                <li class="nav-item"><a class="nav-link active" href="product.php">Product</a></li>
-                                <li class="nav-item"><a class="nav-link" href="#">Orders</a></li>
-                                <li class="nav-item"><a class="nav-link" href="#">Products</a></li>
-                                <li class="nav-item"><a class="nav-link" href="#">Customers</a></li>
-                                <li class="nav-item"><a class="nav-link" href="#">Reports</a></li>
-                                <!-- Add more sidebar items as needed -->
-                            </ul>
-                        </div>
-                    </nav>
+        <main role="main" class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+            <div
+                class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                <h1 class="h2">Dashboard</h1>
+                <div class="btn-toolbar mb-2 mb-md-0">
+                    <div class="btn-group me-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary">Share</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary">Export</button>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle">
+                        <i class="bi bi-calendar3"></i> This week
+                    </button>
                 </div>
-                <div class="col-sm-9 px-0">
-                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center  pb-2 mb-3
-                border-bottom">
-                        <h1 class="h2">Dashboard</h1>
+            </div>
 
+            <!-- Example Dashboard Widgets/Cards -->
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <div class="card text-white bg-primary">
+                        <div class="card-body">
+                            <h5 class="card-title"><i class="bi bi-cart-check-fill"></i> New Orders</h5>
+                            <p class="card-text">XX</p> <!-- Replace XX with dynamic data -->
+                            <a href="order_manager.php?status=pending" class="text-white">View Details <i
+                                    class="bi bi-arrow-right-circle"></i></a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card text-white bg-success">
+                        <div class="card-body">
+                            <h5 class="card-title"><i class="bi bi-people-fill"></i> Registered Users</h5>
+                            <p class="card-text">YY</p> <!-- Replace YY with dynamic data -->
+                            <a href="customer_manager.php" class="text-white">View Details <i
+                                    class="bi bi-arrow-right-circle"></i></a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card text-white bg-info">
+                        <div class="card-body">
+                            <h5 class="card-title"><i class="bi bi-box-seam"></i> Total Products</h5>
+                            <p class="card-text">ZZ</p> <!-- Replace ZZ with dynamic data -->
+                            <a href="product_manager.php" class="text-white">View Details <i
+                                    class="bi bi-arrow-right-circle"></i></a>
+                        </div>
                     </div>
                 </div>
             </div>
 
-
-
-
-
+            <!-- You can add charts or more detailed reports here -->
+            <h2>Recent Activity</h2>
+            <div class="table-responsive">
+                <table class="table table-striped table-sm">
+                    <thead>
+                        <tr>
+                            <th scope="col">#</th>
+                            <th scope="col">Activity</th>
+                            <th scope="col">User</th>
+                            <th scope="col">Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1</td>
+                            <td>New product added</td>
+                            <td>AdminUser1</td>
+                            <td>2023-10-27 10:00</td>
+                        </tr>
+                        <!-- Add more rows dynamically -->
+                    </tbody>
+                </table>
+            </div>
         </main>
     </div>
+</div>
 
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-    <script src="script.js"></script> <!-- Your custom JavaScript -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- <script src="script.js"></script> --> <!-- Your custom JavaScript if needed -->
 </body>
 
 </html>

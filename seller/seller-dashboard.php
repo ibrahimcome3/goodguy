@@ -16,7 +16,7 @@ if (!isset($_SESSION['uid'])) {
 $u = new User($pdo);
 $i = new InventoryItem($pdo);
 $userId = $_SESSION['uid'];
-$user = $u->getUserById($mysqli, $userId);
+$user = $u->getUserById($userId);
 
 if ($user['vendor_status'] != 'approved') {
     header("Location: ../index.php"); // Redirect if not an approved seller
@@ -56,7 +56,7 @@ $seller = $s->getSellerByUserId($mysqli, $userId);
 if (!$seller) {
     // Handle error (seller not found)
 }
-$p = new ProductItem();
+$p = new ProductItem($pdo);
 
 $sql = "SELECT * FROM productitem WHERE vendor_id = ?";
 $params = [$userId];

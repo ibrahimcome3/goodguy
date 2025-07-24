@@ -20,11 +20,33 @@ class Cart extends Promotion
     return count($cartItems);
   }
 
+  public function removeItemByProductId(int $productId): bool
+  {
+    if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) {
+      $_SESSION['cart'] = []; // Ensure cart is an array
+      return true; // Nothing to remove
+    }
+
+    $initialCount = count($_SESSION['cart']);
+    foreach ($_SESSION['cart'] as $key => $item) {
+      if (is_array($item) && isset($item['inventory_product_id']) && $item['inventory_product_id'] == $productId) {
+        unset($_SESSION['cart'][$key]);
+      }
+    }
+
+    // Re-index the array if items were removed
+    if (count($_SESSION['cart']) < $initialCount) {
+      $_SESSION['cart'] = array_values($_SESSION['cart']);
+    }
+    return true;
+  }
+  // ... (rest of Cart class) ...
+
 
 
   public function getCartItems()
   {
-    if (!isset($_SESSION['cart']) || count($_SESSION['cart']) == 0) {
+    if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart']) || empty($_SESSION['cart'])) {
       return [];
     }
 
@@ -45,6 +67,11 @@ class Cart extends Promotion
         'cost' => $product['cost'],
       ];
       foreach ($cartItems as $item) {
+        // Defensive check for $item structure
+        if (!is_array($item) || !isset($item['inventory_product_id'])) {
+          error_log("Malformed cart item encountered in Cart::getCartItems: " . print_r($item, true));
+          continue;
+        }
         if ($item['inventory_product_id'] == $product['InventoryItemID']) {
           $cartData[$product['InventoryItemID']]['quantity'] += $item['quantity'];
         }
@@ -61,7 +88,7 @@ class Cart extends Promotion
   public function getCartDetails(): array
   {
 
-    if (!isset($_SESSION['cart']) || empty($_SESSION['cart'])) {
+    if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart']) || empty($_SESSION['cart'])) {
       return [];
     }
 
@@ -70,9 +97,11 @@ class Cart extends Promotion
     $itemQuantities = [];
     $inventoryItemIds = [];
     foreach ($_SESSION['cart'] as $item) {
-
-      if (!isset($item['inventory_product_id']) || !isset($item['quantity']))
+      // Defensive check for $item structure
+      if (!is_array($item) || !isset($item['inventory_product_id']) || !isset($item['quantity'])) {
+        error_log("Malformed cart item encountered in Cart::getCartDetails: " . print_r($item, true));
         continue;
+      }
       $id = (int) $item['inventory_product_id'];
       $qty = (int) $item['quantity'];
       if ($id > 0 && $qty > 0) {
@@ -143,7 +172,9 @@ class Cart extends Promotion
       return $total;
     }
     foreach ($cartItems as $item) {
-
+      // Defensive check, though $cartItems from getCartDetails should be structured
+      if (!is_array($item))
+        continue;
       // Ensure 'cost' and 'quantity' keys exist and are numeric
       $cost = isset($item['cost']) && is_numeric($item['cost']) ? (float) $item['cost'] : 0.0;
 
@@ -184,20 +215,30 @@ class Cart extends Promotion
     //     return false; // Product not found
     // }
 
-    if (!isset($_SESSION['cart'])) {
+    // Ensure $_SESSION['cart'] is an array
+    if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) {
       $_SESSION['cart'] = [];
     }
 
     foreach ($_SESSION['cart'] as $key => &$item) { // Note the & to modify the array item by reference
+      // Defensive check: Ensure $item is an array before attempting to access offsets.
+      if (!is_array($item)) {
+        // Log the malformed item and skip it.
+        error_log("Malformed cart item encountered in Cart::addItem at key {$key}: " . print_r($item, true));
+        continue; // Skip this iteration
+      }
       if (
-        $item['inventory_product_id'] == $productId &&
-        (isset($item['size']) ? $item['size'] : null) == $size && // Compare size, handling nulls
-        (isset($item['color']) ? $item['color'] : null) == $color
+        isset($item['inventory_product_id']) && $item['inventory_product_id'] == $productId &&
+        (isset($item['size']) ? $item['size'] : null) == $size &&
+        (isset($item['color']) ? $item['color'] : null) == $color // Line 193 (now safe after the is_array check)
       ) { // Compare color, handling nulls
         $item['quantity'] += $quantity;
         return true; // Item found and quantity updated
       }
     }
+    // Unset $item because it was a reference from the foreach loop
+    unset($item);
+
     // If item not found with same variations, add as new
     $_SESSION['cart'][] = [
       'inventory_product_id' => $productId,

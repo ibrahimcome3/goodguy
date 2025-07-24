@@ -244,7 +244,7 @@ class User
     */
    public function getUserById($userId)
    {
-      $sql = "SELECT customer_id, customer_email, customer_fname AS first_name, customer_lname AS last_name, customer_address1, customer_address2, user_role FROM customer WHERE customer_id = :user_id LIMIT 1";
+      $sql = "SELECT customer_id, customer_email, user_role, customer_fname AS first_name, customer_lname AS last_name, customer_address1, customer_address2, vendor_status, user_role FROM customer WHERE customer_id = :user_id LIMIT 1";
       try {
          $stmt = $this->pdo->prepare($sql);
          $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);

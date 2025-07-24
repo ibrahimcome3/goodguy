@@ -5,26 +5,31 @@ require_once '../class/Category.php';
 require_once '../class/ProductItem.php';
 require_once '../class/InventoryItem.php';
 
-$p = new ProductItem();
+$p = new ProductItem($pdo);
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $product_id = $_POST['product_id'];
-    $colors = $_POST['color'];
-    $sizes = $_POST['size'];
+    $color_val = $_POST['color']; // Assuming this is a single color value
+    $size_val = $_POST['size'];   // Assuming this is a single size value
     $description = $_POST['description'];
-    $skus = $_POST['sku']; // Get SKUs
+    // $skus = $_POST['sku']; // This was likely for manual SKU code entry, we will generate it.
     $tax = $_POST['tax'];
     $cost = $_POST['price'];
     $bcode = $_POST['bcode']; // Bar codes
     $quantityOnHand = $_POST['quantity'];
-    $image_paths = []; // Array to store processed image paths
-    $image_path = handleVariantImageUpload($product_id, $_FILES['image']);  // Process image and get path
-    $sku = convertColorAndSizeToSku($colors, $sizes);
 
+    // Fetch product name for SKU generation
+    $productDetails = $p->getProductById($product_id); // Uses PDO now
+    $productName = $productDetails['product_name'] ?? 'PROD';
 
+    // Generate the descriptive SKU
+    $descriptiveSku = generateDescriptiveSku($product_id, $productName, $color_val, $size_val);
 
+    // Generate JSON SKU for attributes column
+    $sku_attributes_json = convertColorAndSizeToSku($color_val, $size_val);
 
-
-    $result = insertInventoryItem($mysqli, $product_id, $description, $skus, $sku, $cost, $tax, $quantityOnHand, $bcode, $image_path);
+    // Call insertInventoryItem with the generated descriptive SKU for the sku_code field
+    // The $sku_attributes_json will go into the 'sku' field (for JSON attributes)
+    $result = insertInventoryItem($mysqli, $product_id, $description, $descriptiveSku, $sku_attributes_json, $cost, $tax, $quantityOnHand, $bcode);
 
     if (isset($result['success']) && $result['success']) {
         $p->makeSubDirectoriesForVarients($product_id, $result['id']);
@@ -65,31 +70,32 @@ function insertInventoryItem($mysqli, $product_id, $description, $sku_code, $sku
     }
 }
 
-
-function handleVariantImageUpload($productId, $files)
+function generateDescriptiveSku($productId, $productName, $color, $size)
 {
+    $skuParts = [];
+    // Product ID part (e.g., P000)
+    $skuParts[] = "P" . str_pad($productId, 3, '0', STR_PAD_LEFT);
 
-    $productDir = "../products/product-" . $productId . "/product-" . $productId . "-image/"; // Consistent directory structure
-    if (!is_dir($productDir) && !mkdir($productDir, 0777, true)) {
-        return "default_image.jpg"; // Or handle the directory creation error appropriately
+    // Product Name part (e.g., first 4 chars, uppercase, alphanumeric)
+    $namePart = strtoupper(substr(preg_replace("/[^A-Za-z0-9]/", '', $productName), 0, 4));
+    if (!empty($namePart)) {
+        $skuParts[] = $namePart;
     }
 
-
-    if ($files["error"] == UPLOAD_ERR_OK) {
-        $temp = explode(".", $files["name"]);
-        $newFilename = round(microtime(true)) . '.' . end($temp); // Include index in filename
-        $targetFile = $productDir . $newFilename;
-
-        if (move_uploaded_file($files["tmp_name"], $targetFile)) {
-            // ... your image processing/resizing functions ...
-            return $targetFile; // Return full path
+    // Color part (e.g., first 3 chars of color name, or hex without # if it's a hex code)
+    if (!empty($color)) {
+        if (preg_match('/^#[0-9A-Fa-f]{6}$/', $color) || preg_match('/^#[0-9A-Fa-f]{3}$/', $color)) { // Basic hex check
+            $skuParts[] = strtoupper(substr($color, 1, 3)); // e.g., F00 for #FF0000
         } else {
-            return "default_image.jpg"; // Or handle the move_uploaded_file error
+            $skuParts[] = strtoupper(substr(preg_replace("/[^A-Za-z0-9]/", '', $color), 0, 3));
         }
-    } else {
-        return "default_image.jpg"; // Handle any upload errors
     }
 
+    // Size part (e.g., uppercase, alphanumeric)
+    if (!empty($size)) {
+        $skuParts[] = strtoupper(preg_replace("/[^A-Za-z0-9]/", '', $size));
+    }
+    return implode("-", array_filter($skuParts)); // array_filter to remove any empty parts before imploding
 }
 
 function convertColorAndSizeToSku($color, $size)

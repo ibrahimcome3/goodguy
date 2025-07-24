@@ -13,7 +13,7 @@ if (!isset($_SESSION['uid'])) {
     header("Location: ../login.php");
     exit;
 }
-$user = $u->getUserById($mysqli, $_SESSION['uid']);
+$user = $u->getUserById($_SESSION['uid']);
 //Check if the user is a seller
 if ($user['user_role'] == "customer") {
     header("Location: ../index.php");

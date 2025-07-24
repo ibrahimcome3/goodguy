@@ -1,43 +1,50 @@
 <?php
-include "../conn.php";
-require_once '../class/Conn.php';
-require_once '../class/Category.php';
-require_once '../class/ProductItem.php';
-require_once '../class/InventoryItem.php';
+include "../includes.php";
+include "../class/Admin.php";
 
-$p = new ProductItem();
-$c = new Category();
+session_start(); // Ensure session is started
 
-$file = $_FILES['file'];
-var_dump($_POST);
-if (isset($file['name'])) {
+// Redirect to login if user is not logged in
+if (empty($_SESSION['admin_id'])) {
+    header("Location: admin_login.php");
+    exit();
+}
 
-    $product_name = $_POST['product_name'];
-    $vendor = $_POST['vendor'];
-    $brand = $_POST['brand'];
-    $product_information = $_POST['produt_info'];
+$p = new ProductItem($pdo);
+$c = new Category($pdo);
 
-    $shipping_and_returns = 2;//$_POST['ship_returns'];
-    $cat = $category = $_POST['category'];
-    $qonhand = 100;//$_POST['quintity_in_inventory'];
-    //$cost = $_POST['cost'];
+// Use the correct file input name from add-product.php
+$file = $_FILES['product_image'] ?? null;
 
-    //$sku = $_POST['sku'];
-    //$barcode = $_POST['barcode'];
-    //$description = $_POST['description'];
+// Debugging line to check the file input
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Use correct POST field names from add-product.php
+    $product_name = $_POST['product_name'] ?? '';
+    $category = $_POST['category'] ?? '';
+    $brand = $_POST['brand'] ?? '';
+    $product_information = $_POST['product_information'] ?? '';
+    $shipping_and_returns = (int) ($_POST['shipping_returns'] ?? 0);
+    $vendor = $_POST['vendor'] ?? null;
+    //$shipping_type = $_POST['shipping_type'] ?? '';
+    //$attribute = $_POST['attribute'] ?? '';
+    $adminObj = new Admin($pdo);
+    $admin_id = $adminObj->getAdminIdByUserId($_SESSION['admin_id']) ?? null;
+
+
+
     // Validate POST data
     $validationResults = [];
-
     $validationResults[] = $p->validatePost('product_name', 'string', true, 1, 255);
-    //$validationResults[] = $p->validatePost('description', 'string', true, 1, 1000);
-    $validationResults[] = $p->validatePost('vendor', 'string', true, 1, 255);
-    $validationResults[] = $p->validatePost('brand', 'string', true, 1, 255);
-    $validationResults[] = $p->validatePost('produt_info', 'string', true, 1, 1000);  //Example max length
     $validationResults[] = $p->validatePost('category', 'string', true, 1, 255);
+    $validationResults[] = $p->validatePost('brand', 'string', true, 1, 255);
+    $validationResults[] = $p->validatePost('product_information', 'string', true, 1, 1000);
+    $validationResults[] = $p->validatePost('shipping_returns', 'int', true, 1, 255);
 
+    // $validationResults[] = $p->validatePost('shipping_type', 'int', true, 1, 255);
+    //$validationResults[] = $p->validatePost('attribute', 'string', true, 1, 255);
 
     // Check for errors
-
     $errors = [];
     foreach ($validationResults as $result) {
         if (isset($result['error'])) {
@@ -45,7 +52,6 @@ if (isset($file['name'])) {
         }
     }
 
-    //If there are errors display them, otherwise proceed with processing
     if (!empty($errors)) {
         echo "<ul style='color: red;'>";
         foreach ($errors as $error) {
@@ -56,73 +62,93 @@ if (isset($file['name'])) {
     }
 
     $product_name = $validationResults[0]['value'];
-    $vendor = $validationResults[1]['value'];
+    $category = $validationResults[1]['value'];
     $brand = $validationResults[2]['value'];
-    //$description = $validationResults[3]['value'];
     $product_information = $validationResults[3]['value'];
-    $category = $validationResults[4]['value'];
-
-
+    $shipping_and_returns = $validationResults[4]['value'];
+    $vendor = $_POST['vendor'] ?? null; // Get vendor from POST data
+    //$shipping_type = $validationResults[5]['value'];
+    //$attribute = $validationResults[6]['value'];
 
     // Prepare Product data for insertion
+    $currentUserId = $_SESSION['admin_id'] ?? null; // Get current user ID from session
     $productData = [
         'product_name' => $product_name,
-        'vendor' => $vendor,
         'category' => $category,
         'brand' => $brand,
         'product_information' => $product_information,
         'shipping_returns' => $shipping_and_returns,
-        'user_id' => 10009, // Replace with actual user ID
+        'vendor_id' => $vendor, // Assuming vendor is passed correctly
+        //'attribute' => $attribute,
+        'admin_id' => $admin_id
     ];
 
 
-    // Now you can use $lastProductId to link this product to other tables
+    // Validate and move image
 
 
+    if (!$p->checkAllowableImage($file)) {
 
-    if (isset($file['name'])) {
-        if (!$p->checkAllowableImage($file)) {
-            echo "<b style='color:#CC0000'>Image type not allowed.</b>";
-            echo "<a href=" . $_SERVER['HTTP_REFERER'] . ">Back</a>";
-            exit();
-        }
+
+        echo "<b style='color:#CC0000'>Image type not allowed.</b>";
+        echo "<a href=" . $_SERVER['HTTP_REFERER'] . ">Back</a>";
+        exit();
     }
 
 
 
 
+    // Insert product
+    $lastProductId = $p->insertProductItemAsAdmin($mysqli, $productData);
 
-    $lastProductId = $p->insertProductItem($mysqli, $productData);
     if ($lastProductId !== false) {
-        $last_id = $lastProductId;
-        $productName = $productData['product_name'];
-        $category = $productData['category'];
-        $sku = generateSKUFromCategoryAndName($mysqli, $category, $productName, $lastProductId); // Pass product ID
-        $p->makedir_for_product($last_id);
-        $p->moveProductImage($last_id, $file);
+        // Handle tags
+        if (isset($_POST['tags']) && is_array($_POST['tags'])) {
+            $tags = $_POST['tags'];
+
+            // Prepare statements for tag handling
+            $stmt_find_tag = $pdo->prepare("SELECT tag_id FROM tags WHERE tag_name = ?");
+            $stmt_insert_tag = $pdo->prepare("INSERT INTO tags (tag_name) VALUES (?)");
+            $stmt_link_product_tag = $pdo->prepare("INSERT INTO product_tags (product_id, tag_id) VALUES (?, ?)");
+
+            foreach ($tags as $tagName) {
+                $tagName = trim($tagName);
+                if (empty($tagName)) {
+                    continue;
+                }
+
+                // 1. Find or create the tag
+                $stmt_find_tag->execute([$tagName]);
+                $tag = $stmt_find_tag->fetch();
+
+                if ($tag) {
+                    $tag_id = $tag['tag_id'];
+                } else {
+                    // Tag doesn't exist, create it
+                    $stmt_insert_tag->execute([$tagName]);
+                    $tag_id = $pdo->lastInsertId();
+                }
+
+                // 2. Link the tag to the product
+                $stmt_link_product_tag->execute([$lastProductId, $tag_id]);
+            }
+        }
+
+        $sku = generateSKUFromCategoryAndName($mysqli, $category, $product_name, $lastProductId);
+        $p->makedir_for_product($lastProductId);
+        $p->moveProductImage($lastProductId, $file);
         header("Location: add-product-varient.php?product_id=$lastProductId");
         exit();
-
+    } else {
+        echo "<b style='color:#CC0000'>Failed to add product.</b>";
     }
 } else {
-    echo "Please select an image for this product.";
+    echo "Invalid request.";
 }
-
 
 function generateSKUFromCategoryAndName($mysqli, $category, $productName, $productId)
 {
-    // Simpler, MySQL-compatible SKU generation
     $sku = strtoupper(substr($category, 0, 3)) . "-" . strtoupper(substr($productName, 0, 4)) . "-" . $productId;
     return $sku;
 }
-
-// Example usage
-$sku = generateSKUFromCategoryAndName($mysqli, "Electronics", "Super SmartPhone", 67);
-echo $sku;
-
-
-
-
-
-
 ?>

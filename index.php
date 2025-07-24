@@ -677,46 +677,13 @@ try {
 
 
     <?php include "jsfile.php"; ?>
+    <script src="js/add-to-cart.js"></script>
     <script src="node_modules/swiper/swiper-bundle.min.css"></script>
+
+
     <!-- Add to Cart / Wishlist AJAX Script -->
     <script>
         $(document).ready(function () {
-
-            // Add to Cart Button Handler
-            $('.page-wrapper').on('click', '.submit-cart', function (e) {
-
-                e.preventDefault();
-                var $button = $(this);
-                var inventoryItemId = $button.attr('product-info');
-                if (!inventoryItemId || $button.prop('disabled')) return;
-
-                $button.prop('disabled', true).find('span').text('Adding...');
-                $.ajax({
-                    type: "POST", url: 'cart_ajax.php',
-                    data: { inventory_product_id: inventoryItemId, qty: 1 },
-                    dataType: 'json',
-                    success: function (response) {
-                        if (response && response.success) {
-                            if (typeof response.cartCount !== 'undefined') {
-                                $('.cart-count').text(response.cartCount);
-                                $('.cart-dropdown > a').addClass('cart-updated-animation');
-                                setTimeout(function () { $('.cart-dropdown > a').removeClass('cart-updated-animation'); }, 1000);
-                            }
-                            $button.find('span').text('Added!');
-                            setTimeout(function () { $button.prop('disabled', false).find('span').text('add to cart'); }, 1500);
-                        } else {
-                            alert(response.message || "Could not add item.");
-                            $button.prop('disabled', false).find('span').text('add to cart');
-                        }
-                    },
-                    error: function (xhr, status, error) {
-                        console.error("Add to Cart AJAX Error:", status, error, xhr.responseText);
-                        alert("Error adding item. Please try again.");
-                        $button.prop('disabled', false).find('span').text('add to cart');
-                    }
-                });
-            });
-
             // Wishlist Button Handler
             $('.page-wrapper').on('click', '.btn-wishlist', function (e) {
                 e.preventDefault();

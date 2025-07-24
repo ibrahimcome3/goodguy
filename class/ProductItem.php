@@ -27,7 +27,13 @@ class ProductItem
         }
         return $img;
     }
-
+    public function getProductImages($productId)
+    {
+        $sql = "SELECT * FROM product_images WHERE product_id = ? ORDER BY p_imgeid ASC";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$productId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
     function add_product()
     {
 
@@ -48,7 +54,13 @@ class ProductItem
 
     public function getAllProductsByVendorId_($mysqli, $vendorId)
     {
-        $sql = "SELECT * FROM productitem WHERE vendor_id = ?";
+        $sql = "SELECT pi.*, iii.image_path AS image 
+                FROM productitem pi
+                LEFT JOIN inventoryitem ii ON pi.productID = ii.productItemID
+                LEFT JOIN inventory_item_image iii ON ii.InventoryItemID = iii.inventory_item_id
+                WHERE pi.vendor_id = ?
+                GROUP BY pi.productID
+                ORDER BY pi.date_added DESC";
         $stmt = $mysqli->prepare($sql);
 
         if (!$stmt) {
@@ -67,34 +79,29 @@ class ProductItem
             return []; // Return an empty array if no products are found
         }
     }
-    public function getAllProductsByVendorId($mysqli, $vendorId, $limit = null, $offset = null)
+    public function getAllProductsByVendorId($vendorId, $limit = null, $offset = null)
     {
-        $sql = "SELECT * FROM productitem WHERE vendor_id = ?";
+        // Join vendors table to get vendor info for each product
+        $sql = "SELECT pi.*, iii.image_path AS image, v.business_name, v.vendor_id, v.user_id
+                FROM productitem pi
+                LEFT JOIN inventoryitem ii ON pi.productID = ii.productItemID
+                LEFT JOIN inventory_item_image iii ON ii.InventoryItemID = iii.inventory_item_id
+                LEFT JOIN vendors v ON pi.vendor_id = v.vendor_id
+                WHERE v.vendor_id = ?
+                GROUP BY pi.productID
+                ORDER BY pi.date_added DESC";
         $params = [$vendorId];
-        $types = "i";
 
         if ($limit !== null && $offset !== null) {
             $sql .= " LIMIT ? OFFSET ?";
-            $params[] = $limit;
-            $params[] = $offset;
-            $types .= "ii";
+            $params[] = (int) $limit;
+            $params[] = (int) $offset;
         }
 
-        $stmt = $mysqli->prepare($sql);
-        if (!$stmt) {
-            error_log("Error preparing statement: " . $mysqli->error);
-            return false;
-        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
 
-        $stmt->bind_param($types, ...$params);
-        $stmt->execute();
-        $result = $stmt->get_result();
-
-        if ($result->num_rows > 0) {
-            return $result->fetch_all(MYSQLI_ASSOC);
-        } else {
-            return [];
-        }
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     function get_product_id($inventory_item_id)
@@ -109,19 +116,20 @@ class ProductItem
 
     }
 
-    public function getProductById($mysqli, $productId)
+    public function getProductById($productId) // Removed $mysqli parameter
     {
         $sql = "SELECT * FROM productitem WHERE productID = ?";
-        $stmt = $mysqli->prepare($sql);
+        $stmt = $this->pdo->prepare($sql); // Use $this->pdo
         if (!$stmt) {
-            error_log("Error preparing statement: " . $mysqli->error);
+            error_log("Error preparing statement: " . implode(", ", $this->pdo->errorInfo()));
             return false;
         }
-        $stmt->bind_param("i", $productId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        if ($result->num_rows > 0) {
-            return $result->fetch_assoc();
+        // $stmt->bind_param("i", $productId); // mysqli style
+        // $stmt->execute(); // mysqli style
+        $stmt->execute([$productId]); // PDO style
+        // $result = $stmt->get_result(); // mysqli style
+        if ($stmt->rowCount() > 0) { // PDO style
+            return $stmt->fetch(PDO::FETCH_ASSOC); // PDO style
         }
         return false;
     }
@@ -153,10 +161,31 @@ class ProductItem
         }
 
 
-
-
-
     }
+    function getTotalProductCount()
+    {
+        $stmt = $this->pdo->query("SELECT COUNT(*) FROM productitem");
+        return $stmt->fetchColumn();
+    }
+
+    public function getProductsForPage($offset, $limit)
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM productitem LIMIT :offset, :limit");
+        $stmt->bindParam(':offset', $offset, PDO::PARAM_INT);
+        $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+
+
+
+
+
+
+
+
+
     function makeSubDirectoriesForVarients($product_id, $inventory_item_id)
     {
         //Construct the full path
@@ -279,18 +308,22 @@ class ProductItem
 
     function checkAllowableImage($file)
     {
-        var_dump($file);
+        $allowedTypes = array(IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_GIF);
+
         foreach ($file['name'] as $i => $name) {
-            $allowedTypes = array(IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_GIF);
-            $detectedType = @exif_imagetype($_FILES["file"]["tmp_name"][$i]); //Added @ to suppress warnings
+            $tmpName = $file['tmp_name'][$i] ?? '';
+            if (empty($tmpName) || !file_exists($tmpName)) {
+                return false; // No file uploaded or file missing
+            }
+            $detectedType = @exif_imagetype($tmpName);
             if ($detectedType === false) {
-                return false; //Not an image
+                return false; // Not an image
             }
             if (!in_array($detectedType, $allowedTypes)) {
-                return false; //Image type not allowed
+                return false; // Image type not allowed
             }
         }
-        return true; //All images are allowed
+        return true; // All images are allowed
     }
 
 
@@ -303,6 +336,7 @@ class ProductItem
         $value = isset($_POST[$key]) ? trim($_POST[$key]) : null; //Get and trim value
 
         switch ($type) {
+            case 'integer': // Allow 'integer' as an alias for 'int'
             case 'int':
                 if (!is_numeric($value) || $value < $min || $value > $max) {
                     return ["error" => "$key must be an integer between $min and $max."];
@@ -331,10 +365,11 @@ class ProductItem
 
     function insertProductItem($mysqli, $productData)
     {
+
         // Prepare the SQL statement (preventing SQL injection)
         $stmt = $mysqli->prepare("INSERT INTO `productitem` (
                                    `product_name`,  `vendor`, `category`, `brand`, 
-                                   `product_information`,  `shipping_returns`, `user_id` ) 
+                                   `product_information`,  `shipping_returns`, `vendor_id` ) 
                                VALUES (
                                    ?, ?, ?, ?, ?, ?, ?)");
 
@@ -360,6 +395,54 @@ class ProductItem
 
 
 
+    /**
+     * Insert a product item by administrator.
+     * Sets vendor_id to NULL, is_company_owned to 1, and captures admin_id.
+     *
+     * @param mysqli $mysqli
+     * @param array $productData (expects keys: product_name, category, brand, product_information, shipping_returns, shipping_type, attribute, admin_id)
+     * @return int|false Last insert ID or false on failure
+     */
+    function insertProductItemAsAdmin($mysqli, $productData)
+    {
+
+        // Prepare the SQL statement (preventing SQL injection)
+        $stmt = $mysqli->prepare("INSERT INTO `productitem` (
+        `product_name`, `category`, `brand`, `product_information`, `shipping_returns`, 
+        `vendor_id`, `is_company_owned`,  `admin_id`
+    ) VALUES (
+        ?, ?, ?, ?, ?, ?, 1, ?
+    )");
+
+        if (!$stmt) {
+            die("Error preparing statement: " . $mysqli->error);
+        }
+        extract($productData);
+
+        // Bind parameters. Order matters! Match placeholders in SQL.
+        // vendor_id should be provided (not NULL) for admin
+        $stmt->bind_param(
+            "siisiii",
+            $product_name,
+            $category,
+            $brand,
+            $product_information,
+            $shipping_returns,
+            $vendor_id,   // <-- vendor_id must be set in $productData
+            $admin_id
+        );
+        // Execute the query
+        if ($stmt->execute()) {
+            return $mysqli->insert_id; // Return the last insert ID
+        } else {
+            die("Error inserting product item: " . $stmt->error);
+        }
+
+        // Close statement
+        $stmt->close();
+    }
+
+
     function moveImageforProduct($target_file_name, $file, $last_id)
     {
         if (move_uploaded_file($file["tmp_name"][0], $$target_file_name)) {
@@ -375,9 +458,9 @@ class ProductItem
 
     function moveProductImage($productId, $files)
     {
-
         $productDir = "../products/product-" . $productId;
         $productImageDir = $productDir . "/product-" . $productId . "-image";
+        $resizedDir = $productImageDir . "/resized";
 
         // Create directories if they don't exist
         if (!is_dir($productDir) && !mkdir($productDir, 0777, true)) {
@@ -386,31 +469,39 @@ class ProductItem
         if (!is_dir($productImageDir) && !mkdir($productImageDir, 0777, true)) {
             return ["error" => "Error creating product image directory."];
         }
+        if (!is_dir($resizedDir) && !mkdir($resizedDir, 0777, true)) {
+            return ["error" => "Error creating resized image directory."];
+        }
 
-
-        $uploadedImages = []; //Store paths of uploaded images
+        $uploadedImages = []; // Store paths of uploaded images
 
         foreach ($files['name'] as $key => $name) {
-            if ($files["error"][$key] == UPLOAD_ERR_OK) {  //Check for upload errors for each file
-
+            if ($files["error"][$key] == UPLOAD_ERR_OK) {  // Check for upload errors for each file
                 $temp = explode(".", $name);
-                $newFilename = round(microtime(true)) . $key . '.' . end($temp); //More unique filename
+                $newFilename = round(microtime(true)) . $key . '.' . end($temp); // More unique filename
                 $targetFile = $productImageDir . "/" . $newFilename;
-
 
                 if (move_uploaded_file($files["tmp_name"][$key], $targetFile)) {
                     $this->convertImage1($targetFile, $targetFile, 100);
 
-                    $sql = "INSERT INTO `product_images` (`p_imgeid`, `image`, `product_id`) VALUES (NULL, ?, ?)";
+                    // --- Resize and save a copy as JPG in the resized directory ---
+                    $resizedFilename = pathinfo($newFilename, PATHINFO_FILENAME) . ".jpg";
+                    $resizedTarget = $resizedDir . "/" . $resizedFilename;
+
+                    $this->resize_image($targetFile, 600, 600, $resizedTarget); // You can change size as needed
+
+                    $sql = "INSERT INTO `product_images` (`p_imgeid`, `image`, `image_path`, `product_id`) VALUES (NULL, ?, ?, ?)";
                     $stmt = $this->pdo->prepare($sql);
 
-                    if ($stmt->execute([$newFilename, $productId])) {
-                        $uploadedImages[] = ["name" => $name, "path" => $targetFile];
+                    if ($stmt->execute([$newFilename, $resizedTarget, $productId])) {
+                        $uploadedImages[] = [
+                            "name" => $name,
+                            "path" => $targetFile,
+                            "resized" => $resizedTarget
+                        ];
                     } else {
                         return ["error" => "Database insertion failed for image: " . $name];
                     }
-
-
                 } else {
                     return ["error" => "Error uploading file: " . $name];
                 }
@@ -423,6 +514,32 @@ class ProductItem
     }
 
 
+    function resize_image($file, $new_width, $new_height, $to_be_saved)
+    {
+
+        list($original_width, $original_height) = getimagesize($file);
+        $image = imagecreatefromjpeg($file);
+
+        // Calculate new dimensions while maintaining aspect ratio
+        $aspect_ratio = $original_width / $original_height;
+        if ($new_width / $new_height > $aspect_ratio) {
+            $new_width = $new_height * $aspect_ratio;
+        } else {
+            $new_height = $new_width / $aspect_ratio;
+        }
+        $resized_image = imagecreatetruecolor(600, 600);
+        $x = (600 / 2) - ($new_width / 2);
+        $y = (600 / 2) - ($new_height / 2);
+
+        $color = imagecolorallocate($resized_image, 255, 255, 255);
+        imagefill($resized_image, 0, 0, $color);
+        imagecopyresampled($resized_image, $image, $x, $y, 0, 0, $new_width, $new_height, $original_width, $original_height);
+
+
+        imagejpeg($resized_image, $to_be_saved);
+
+        return 1;//$resized_image;
+    }
 
 
     function makedir_for_product($last_id)
@@ -527,7 +644,7 @@ class ProductItem
     {
 
         //Correct and simpler path construction
-        $basePath = "../products/product-{$product_id}/inventory-{$product_id}-{$inventory_item_id}/";
+        $basePath = "products/product-{$product_id}/inventory-{$product_id}-{$inventory_item_id}/";
         $resizedPath = $basePath . "resized/";
         $resized600Path = $basePath . "resized_600/";
 
@@ -583,18 +700,32 @@ class ProductItem
     //Improved image resizing function; handles more image types
     function resizeImage($source, $destination, $width, $height)
     {
-        list($originalWidth, $originalHeight) = getimagesize($source);
-        $image = imagecreatefromjpeg($source); // Attempt to create image from JPEG
+        list($originalWidth, $originalHeight, $imageType) = getimagesize($source);
+        $image = null;
 
-        if (!$image) {
-            $image = imagecreatefrompng($source); //Try PNG
-            if (!$image) {
-                $image = imagecreatefromgif($source); //Try GIF
-                if (!$image) {
-                    return false; // Or handle the error appropriately
-                }
-            }
+        switch ($imageType) {
+            case IMAGETYPE_JPEG:
+                $image = imagecreatefromjpeg($source);
+                break;
+            case IMAGETYPE_PNG:
+                $image = imagecreatefrompng($source);
+                // Handle transparency for PNG to JPEG conversion
+                // Create a new true color image with a white background
+                $bg = imagecreatetruecolor($originalWidth, $originalHeight);
+                $white = imagecolorallocate($bg, 255, 255, 255);
+                imagefill($bg, 0, 0, $white);
+                imagecopy($bg, $image, 0, 0, 0, 0, $originalWidth, $originalHeight);
+                imagedestroy($image); // Free original PNG resource
+                $image = $bg; // Use the image with white background
+                break;
+            case IMAGETYPE_GIF:
+                $image = imagecreatefromgif($source);
+                break;
+            default:
+                error_log("Unsupported image type for resizing: " . image_type_to_mime_type($imageType) . " for source: " . $source);
+                return false; // Unsupported image type
         }
+
 
         $aspect_ratio = $originalWidth / $originalHeight;
         if ($width / $height > $aspect_ratio) {
@@ -602,7 +733,7 @@ class ProductItem
         } else {
             $height = $width / $aspect_ratio;
         }
-        $resizedImage = imagecreatetruecolor($width, $height);
+        $resizedImage = imagecreatetruecolor($height, $height);
         $x = ($width / 2) - ($width / 2);
         $y = ($height / 2) - ($height / 2);
         $color = imagecolorallocate($resizedImage, 255, 255, 255);
@@ -615,35 +746,18 @@ class ProductItem
 
 
 
-    function resize_image($file, $new_width, $new_height, $to_be_saved, $filename)
-    {
-        echo $file;
-        list($original_width, $original_height) = getimagesize($file);
-        $image = imagecreatefromjpeg($file);
 
-        // Calculate new dimensions while maintaining aspect ratio
-        $aspect_ratio = $original_width / $original_height;
-        if ($new_width / $new_height > $aspect_ratio) {
-            $new_width = $new_height * $aspect_ratio;
-        } else {
-            $new_height = $new_width / $aspect_ratio;
+    function imageprocessorforproductInInventory1($product_item, $file, $i, $c = 0, $last_id = 0)
+    {
+        // $product_item = 140;
+        // $file = $_FILES['image'];
+        // $i = 0;
+        // $c = 0;
+        // $last_id = 90;
+
+        if ($last_id === 0) {
+            $last_id = $this->getLastInventoryItemId($product_item);
         }
-        $resized_image = imagecreatetruecolor(600, 600);
-        $x = (600 / 2) - ($new_width / 2);
-        $y = (600 / 2) - ($new_height / 2);
-
-        $color = imagecolorallocate($resized_image, 255, 255, 255);
-        imagefill($resized_image, 0, 0, $color);
-        imagecopyresampled($resized_image, $image, $x, $y, 0, 0, $new_width, $new_height, $original_width, $original_height);
-
-
-        imagejpeg($resized_image, $to_be_saved . $filename);
-
-        return 1;//$resized_image;
-    }
-
-    function imageprocessorforproductInInventory1($product_item, $file, $i, $c = 0)
-    {
         $target_dir = "../products/product-" . $product_item . "/" . "product-" . $product_item . "-image/" . "inventory-" . $product_item . "-" . $last_id . "/";
         $target_dir_second = "../products/product-" . $product_item . "/" . "product-" . $product_item . "-image/" . "inventory-" . $product_item . "-" . $last_id . "/resized/";
         $target_dir_second_600 = "../products/product-" . $product_item . "/" . "product-" . $product_item . "-image/" . "inventory-" . $product_item . "-" . $last_id . "/resized_600/";
@@ -683,8 +797,8 @@ class ProductItem
 
         }
         $c++;
-    }
 
+    }
     function handleVariantImageUpload($productId, $files)
     {
 
@@ -711,38 +825,87 @@ class ProductItem
 
     }
 
-    public function deleteProduct($mysqli, $productId)
+    function deleteProduct($productId)
     {
-        $sql = "DELETE FROM productitem WHERE productID = ?";
-        $stmt = $mysqli->prepare($sql);
-        if ($stmt) {
-            $stmt->bind_param("i", $productId);
-            return $stmt->execute();
+        // 1. Delete all inventory items under this product
+        $stmt = $this->pdo->prepare("SELECT InventoryItemID FROM inventoryitem WHERE productItemID = ?");
+        $stmt->execute([$productId]);
+        $inventoryItems = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($inventoryItems as $inventoryItemId) {
+            // Delete inventory item images
+            $imgStmt = $this->pdo->prepare("SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ?");
+            $imgStmt->execute([$inventoryItemId]);
+            $images = $imgStmt->fetchAll(PDO::FETCH_COLUMN);
+
+            foreach ($images as $imgPath) {
+                $fullPath = $_SERVER['DOCUMENT_ROOT'] . '/' . $imgPath;
+                if (file_exists($fullPath)) {
+                    @unlink($fullPath);
+                }
+            }
+
+            // Delete inventory item image records
+            $this->pdo->prepare("DELETE FROM inventory_item_image WHERE inventory_item_id = ?")->execute([$inventoryItemId]);
+            // Delete inventory item itself
+            $this->pdo->prepare("DELETE FROM inventoryitem WHERE InventoryItemID = ?")->execute([$inventoryItemId]);
         }
-        return false;
+
+        // 2. Delete the folder related to the product (assuming folder is named by productID)
+        $folderPath = $_SERVER['DOCUMENT_ROOT'] . '/uploads/products/' . $productId;
+        if (is_dir($folderPath)) {
+            $files = glob($folderPath . '/*');
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    @unlink($file);
+                }
+            }
+            @rmdir($folderPath);
+        }
+
+        // 3. Delete the product itself
+        $stmt = $this->pdo->prepare("DELETE FROM productitem WHERE productID = ?");
+        $stmt->execute([$productId]);
+
+        return true;
     }
 
-    public function deleteProductCompletely($mysqli, $productId)
+    function deleteProductCompletely($mysqli, $productId)
     {
         $mysqli->begin_transaction(); // Start transaction for atomicity
 
         try {
-            // 1. Delete associated inventory items
+            // 1. Delete associated images (inventory_item_image) for all inventory items under this product
+            $sql = "SELECT InventoryItemID FROM inventoryitem WHERE productItemID = ?";
+            $stmt = $mysqli->prepare($sql);
+            $stmt->bind_param("i", $productId);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $inventoryIds = [];
+            while ($row = $result->fetch_assoc()) {
+                $inventoryIds[] = $row['InventoryItemID'];
+            }
+
+            // Delete images for each inventory item
+            if (!empty($inventoryIds)) {
+                $in = implode(',', array_fill(0, count($inventoryIds), '?'));
+                $types = str_repeat('i', count($inventoryIds));
+                $sql = "DELETE FROM inventory_item_image WHERE inventory_item_id IN ($in)";
+                $stmt = $mysqli->prepare($sql);
+                $stmt->bind_param($types, ...$inventoryIds);
+                $stmt->execute();
+                if ($stmt->error) {
+                    throw new Exception("Error deleting images: " . $stmt->error);
+                }
+            }
+
+            // 2. Delete inventory items
             $sql = "DELETE FROM inventoryitem WHERE productItemID = ?";
             $stmt = $mysqli->prepare($sql);
             $stmt->bind_param("i", $productId);
             $stmt->execute();
             if ($stmt->error) {
                 throw new Exception("Error deleting inventory items: " . $stmt->error);
-            }
-
-            // 2. Delete associated images
-            $sql = "DELETE FROM inventory_item_image WHERE inventory_item_id IN (SELECT InventoryItemID FROM inventoryitem WHERE productItemID = ?)";
-            $stmt = $mysqli->prepare($sql);
-            $stmt->bind_param("i", $productId);
-            $stmt->execute();
-            if ($stmt->error) {
-                throw new Exception("Error deleting images: " . $stmt->error);
             }
 
             // 3. Delete product images from the product_images table
@@ -753,7 +916,6 @@ class ProductItem
             if ($stmt->error) {
                 throw new Exception("Error deleting product images: " . $stmt->error);
             }
-
 
             // 4. Delete the product itself
             $sql = "DELETE FROM productitem WHERE productID = ?";
@@ -866,7 +1028,227 @@ class ProductItem
 
     // ... rest of your ProductItem class code ...
 
+    public function getTagsByProductId($productId)
+    {
+        // Join product_tags with tags table to get full tag info
+        $sql = "SELECT t.* 
+                FROM product_tags pt
+                JOIN tags t ON pt.tag_id = t.tag_id
+                WHERE pt.product_id = ?";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$productId]);
+        $tags = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $tags[] = $row; // Each $row contains all columns from tags table
+        }
+        return $tags;
+    }
 
+    /**
+     * Get all products posted by an administrator.
+     *
+     * @param int $adminId
+     * @return array
+     */
+    public function getAllProductsByAdminId($adminId)
+    {
+        $sql = "SELECT 
+                pi.*, 
+                a.user_id AS admin_user_id, 
+                a.admin_id,
+                piimg.image_path AS product_image_path
+            FROM productitem pi
+            LEFT JOIN admins a ON pi.admin_id = a.admin_id
+            LEFT JOIN product_images piimg ON pi.productID = piimg.product_id AND piimg.p_imgeid = (
+                SELECT p_imgeid FROM product_images 
+                WHERE product_id = pi.productID 
+                ORDER BY p_imgeid ASC LIMIT 1
+            )
+            WHERE pi.admin_id = ?";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$adminId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+
+    /**
+     * Get all products from all vendors.
+     *
+     * @param int|null $limit
+     * @param int|null $offset
+     * @return array
+     */
+    public function getAllProducts($limit = null, $offset = null)
+    {
+        $sql = "SELECT 
+            pi.*, 
+            v.business_name,
+            v.vendor_id,
+            (
+                SELECT image_path FROM product_images 
+                WHERE product_id = pi.productID 
+                ORDER BY p_imgeid ASC LIMIT 1
+            ) AS product_image_path
+        FROM productitem pi
+        LEFT JOIN vendors v ON pi.vendor_id = v.vendor_id
+        GROUP BY pi.productID
+        ORDER BY pi.date_added DESC";
+
+        $params = [];
+
+        if ($limit !== null && $offset !== null) {
+            $sql .= " LIMIT ? OFFSET ?";
+            $params[] = (int) $limit;
+            $params[] = (int) $offset;
+        }
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+
+    /**
+     * Get the price range of inventory items for a product.
+     * Returns "min - max" if items exist, or null if none.
+     *
+     * @param int $productId
+     * @return string|null
+     */
+    public function getBasePrice($productId)
+    {
+        $sql = "SELECT MIN(cost) AS min_price, MAX(cost) AS max_price FROM inventoryitem WHERE productItemID = ?";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$productId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($row && $row['min_price'] !== null && $row['max_price'] !== null) {
+            if ($row['min_price'] == $row['max_price']) {
+                return number_format($row['min_price'], 2);
+            }
+            return number_format($row['min_price'], 2) . ' - ' . number_format($row['max_price'], 2);
+        }
+        return null;
+    }
+
+    // public function getProductById($productId)
+    // {
+    //     $sql = "SELECT pi.*, (
+    //             SELECT image_path FROM product_images 
+    //             WHERE product_id = pi.productID 
+    //             ORDER BY p_imgeid ASC LIMIT 1
+    //         ) AS product_image_path
+    //         FROM productitem pi
+    //         WHERE pi.productID = ?";
+    //     $stmt = $this->pdo->prepare($sql);
+    //     $stmt->execute([$productId]);
+    //     return $stmt->fetch(PDO::FETCH_ASSOC);
+    // }
+
+    public function getInventoryItemsByProductId($productId)
+    {
+        $sql = "SELECT ii.*, (
+                SELECT * FROM inventory_item_image 
+                WHERE inventory_item_id = ii.InventoryItemID AND is_primary = 1
+                LIMIT 1
+            ) AS image_path
+            FROM inventoryitem ii
+            WHERE ii.productItemID = ?";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$productId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getAllInventoryItemsByProductId($productId)
+    {
+        $sql = "
+        SELECT 
+            ii.*, img.*,
+            img.image_path AS image_path
+        FROM inventoryitem ii
+        LEFT JOIN inventory_item_image img
+            ON img.inventory_item_id = ii.InventoryItemID
+        
+        WHERE ii.productItemID = ?
+        ORDER BY ii.InventoryItemID
+    ";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$productId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+
+    /**
+     * Get color‐based variants for a product, including all inventory_item_image paths.
+     *
+     * @param int $productId
+     * @return array
+     */
+    public function getColorVariationsWithImages(int $productId): array
+    {
+        $sql = "
+        SELECT 
+            ii.InventoryItemID,
+            ii.sku,
+            img.image_path,
+            img.is_primary
+        FROM inventoryitem ii
+        LEFT JOIN inventory_item_image img
+            ON img.inventory_item_id = ii.InventoryItemID
+        WHERE ii.productItemID = ?
+        ORDER BY ii.InventoryItemID, img.is_primary DESC, img.inventory_item_image_id ASC
+    ";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$productId]);
+
+        $variants = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $skuData = json_decode($row['sku'], true) ?: [];
+            if (empty($skuData['color'])) {
+                continue;
+            }
+            $key = $row['InventoryItemID'];
+            if (!isset($variants[$key])) {
+                $variants[$key] = [
+                    'InventoryItemID' => $row['InventoryItemID'],
+                    'color' => $skuData['color'],
+                    'thumbnail' => $row['image_path'], // first (primary) image
+                    'images' => []
+                ];
+            }
+            if ($row['image_path']) {
+                $variants[$key]['images'][] = $row['image_path'];
+            }
+        }
+        return array_values($variants);
+    }
+
+    /**
+     * Get cost range (min–max) for a product's inventory items.
+     *
+     * @param int $productId
+     * @return string|null  e.g. "10.00 - 25.00" or "15.00" or null if none
+     */
+    public function getCostRange(int $productId): ?string
+    {
+        $sql = "
+        SELECT 
+            MIN(cost) AS min_cost, 
+            MAX(cost) AS max_cost
+        FROM inventoryitem
+        WHERE productItemID = ?
+    ";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$productId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row || $row['min_cost'] === null) {
+            return null;
+        }
+        $min = number_format((float) $row['min_cost'], 2);
+        $max = number_format((float) $row['max_cost'], 2);
+        return $min === $max ? $min : "$min - $max";
+    }
 
 }
 ?>

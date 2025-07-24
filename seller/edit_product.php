@@ -3,7 +3,7 @@ include "../conn.php";
 require_once '../class/Connn.php';
 require_once '../class/ProductItem.php';
 
-$p = new ProductItem();
+$p = new ProductItem($pdo);
 
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['action'])) {
     if ($_POST['action'] === 'delete_product') {

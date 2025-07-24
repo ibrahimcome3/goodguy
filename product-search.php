@@ -1,36 +1,101 @@
 <?php
+session_start(); // Ensure session is started for cart and other functionalities
 require_once "includes.php";
-$string = "XXXXX";
+
+// --- Input and Pagination Setup ---
+$searchQuery = isset($_GET['q']) ? trim($_GET['q']) : '';
+$pageno = isset($_GET['pageno']) ? (int) $_GET['pageno'] : 1;
+$no_of_records_per_page = 20; // Adjusted for potentially more items
+$offset = ($pageno - 1) * $no_of_records_per_page;
+
+$total_rows = 0;
+$total_pages = 0;
+$products_rs = null;
+
+if (!empty($searchQuery)) {
+    $searchTerm = "%" . strtolower($searchQuery) . "%";
+
+    // --- Count Total Matching Products (PDO Prepared Statement) ---
+    $sql_count = "SELECT COUNT(DISTINCT ii.InventoryItemID) as c
+                  FROM inventoryitem ii
+                  JOIN productitem pi ON ii.productItemID = pi.productID
+                  LEFT JOIN categories cat ON pi.category = cat.category_id
+                  LEFT JOIN brand b ON pi.brand = b.brandID
+                  WHERE (LOWER(ii.barcode) LIKE :term_bc
+                         OR LOWER(ii.description) LIKE :term_desc
+                         OR LOWER(pi.product_name) LIKE :term_pn
+                         OR LOWER(cat.name) LIKE :term_cat
+                         OR LOWER(b.Name) LIKE :term_brand)";
+
+    try {
+        $stmt_count = $pdo->prepare($sql_count);
+        $stmt_count->execute([
+            ':term_bc' => $searchTerm,
+            ':term_desc' => $searchTerm,
+            ':term_pn' => $searchTerm,
+            ':term_cat' => $searchTerm,
+            ':term_brand' => $searchTerm,
+        ]);
+        $total_rows_result = $stmt_count->fetch(PDO::FETCH_ASSOC);
+
+        // Corrected debug output (optional, can be removed)
+        // echo "<h1>Count: " . ($total_rows_result['c'] ?? 0) . "</h1>";
+        // exit;
+
+        if ($total_rows_result) {
+            $total_rows = (int) $total_rows_result['c'];
+        }
+    } catch (PDOException $e) {
+        error_log("Error counting search results: " . $e->getMessage());
+        // Handle error appropriately, maybe show a message to the user
+    }
+    $total_pages = ceil($total_rows / $no_of_records_per_page);
+
+    // --- Fetch Products for the Current Page (PDO Prepared Statement) ---
+    if ($total_rows > 0) {
+        $sql_results = "SELECT ii.*, pi.product_name, pi.productID as baseProductID, 
+                               b.Name, cat.name as category_name, cat.category_id as cat_id_for_link,
+                               img.image_path as primary_image_path
+                        FROM inventoryitem ii
+                        JOIN productitem pi ON ii.productItemID = pi.productID
+                        LEFT JOIN categories cat ON pi.category = cat.category_id
+                        LEFT JOIN brand b ON pi.brand = b.brandID
+                        LEFT JOIN inventory_item_image img ON ii.InventoryItemID = img.inventory_item_id AND img.is_primary = 1
+                        WHERE (LOWER(ii.barcode) LIKE :term_bc_res
+                               OR LOWER(ii.description) LIKE :term_desc_res
+                               OR LOWER(pi.product_name) LIKE :term_pn_res
+                               OR LOWER(cat.name) LIKE :term_cat_res
+                               OR LOWER(b.Name) LIKE :term_brand_res)
+                        ORDER BY ii.date_added DESC -- Or a relevance score if using full-text search
+                        LIMIT :limit_val OFFSET :offset_val"; // Use unique names for limit/offset too
+        try {
+            $stmt_results = $pdo->prepare($sql_results);
+            $stmt_results->execute([
+                ':term_bc_res' => $searchTerm,
+                ':term_desc_res' => $searchTerm,
+                ':term_pn_res' => $searchTerm,
+                ':term_cat_res' => $searchTerm,
+                ':term_brand_res' => $searchTerm,
+                ':offset_val' => $offset,
+                ':limit_val' => $no_of_records_per_page,
+            ]);
+            $products_rs = $stmt_results; // Keep as PDOStatement to fetch in loop
+        } catch (PDOException $e) {
+            error_log("Error fetching search results: " . $e->getMessage());
+            // Handle error
+        }
+    }
+}
+
+// Pagination variables
+$prev_page = $pageno - 1;
+$next_page = $pageno + 1;
+
 if (isset($_GET['pageno'])) {
     $pageno = $_GET['pageno'];
 } else {
     $pageno = 1;
 }
-if (isset($_GET['q'])) {
-    $p = $_GET['q'];
-} else {
-    $p = '';
-}
-$no_of_records_per_page = 25;
-$offset = ($pageno - 1) * $no_of_records_per_page;
-$sql = "SELECT * FROM `inventoryitem`INNER join productitem on inventoryitem.productItemID = productitem.productID left join brand on productitem.brand = brand.brandID where lower(small_description) LIKE \"%$p%\" or lower(description) like \"%$p%\";";
-$sql_ = "SELECT count(*) as c FROM `inventoryitem`INNER join productitem on inventoryitem.productItemID = productitem.productID left join brand on productitem.brand = brand.brandID where lower(small_description) LIKE \"%$p%\" or lower(description) like \"%$p%\";";
-$stmt = $pdo->query($sql);
-
-$total_pages_sql = $sql_;
-
-$result = mysqli_query($mysqli, $total_pages_sql);
-$total_rows = mysqli_fetch_array($result)[0];
-$total_pages = ceil($total_rows / $no_of_records_per_page);
-
-
-$limit = 25;
-$paginationPrev = "";
-$paginationnext = "";
-$prev = $pageno - 1;                          //previous page is page - 1
-$next = $pageno + 1;
-$initial_page = ($pageno - 1) * $limit;
-$lastpage = ceil($total_pages / $limit);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -88,14 +153,10 @@ $lastpage = ceil($total_pages / $limit);
 
             <div class="page-content">
                 <div class="container">
-                    <?php if ($total_rows == 0) {
-                        echo "<center><span style=\"
-						padding-top: .25rem;
-						padding-right: .5rem;
-						padding-left: .5rem;
-						margin-bottom: 1rem;
-						background-color: black; 
-						padding-bottom: .25rem;color: Yellow\">No result for your search term <b>$p</b></span></center>";
+                    <?php if (empty($searchQuery)) {
+                        echo "<div class='text-center my-5'><p>Please enter a search term.</p> <a href='index.php' class='btn btn-primary'>Go to Homepage</a></div>";
+                    } elseif ($total_rows == 0) {
+                        echo "<div class='text-center my-5'><p>No results found for your search term: <b>" . htmlspecialchars($searchQuery) . "</b></p> <a href='index.php' class='btn btn-primary'>Try another search or Go to Homepage</a></div>";
                     } ?>
                     <div class="row">
                         <div class="col-lg-9">
@@ -104,8 +165,7 @@ $lastpage = ceil($total_pages / $limit);
                                     <div class="toolbox-info">
 
                                         <?php
-                                        $items_per_page = $no_of_records_per_page;
-                                        $displayed_items = ($total_rows - $items_per_page * ($pageno - 1)) > $items_per_page ? $items_per_page * $pageno : $total_rows;
+                                        $displayed_items = min($total_rows, $pageno * $no_of_records_per_page);
                                         //echo "Display results " . $displayed_items . "/" . $total_rows;
                                         ?>
                                         Showing <span><?= $displayed_items ?> of <?= $total_rows ?></span> search
@@ -128,98 +188,104 @@ $lastpage = ceil($total_pages / $limit);
                                 <!-- </div><!-- End .toolbox-right -->
 
                             </div><!-- End .toolbox -->
-                            <?php $inventory_items = new InventoryItem();
-                            $p = new ProductItem();
-                            $category = new Category();
-                            //$selected_category_for_selection = implode(",", $inventory_items->decript_string($_GET['arr']));
-                            //$stmt = $inventory_items->get_multiple_inventory_items_product2(implode(",", $inventory_items->decript_string($_GET['arr'])));
-                            if (isset($_GET['arr']) && $_GET['arr'] == '0') {
-                                $stmt = $inventory_items->get_all_drinks();
-                            } else {
-                                //  $stmt = $inventory_items->get_multiple_inventory_items_product2($sql, $starting_limit, $limit);
-                            }
+                            <?php
+                            // Objects likely already instantiated in includes.php or at the top
+                            // $product_obj = new ProductItem($pdo);
+                            // $promotion = new Promotion($pdo);
+                            // $Orvi = new Review($pdo); // For reviews
                             ?>
                             <div class="products mb-3">
                                 <div class="row justify-content-center">
                                     <?php
-                                    while ($row = $stmt->fetch()) {
+                                    if ($products_rs) { // Check if $products_rs is not null
+                                        while ($row = $products_rs->fetch(PDO::FETCH_ASSOC)) {
+                                            $itemId = $row['InventoryItemID'];
+                                            //echo $row['primary_image_path'];
+                                            $imagePath = !empty($row['primary_image_path']) && file_exists(ltrim($row['primary_image_path'], './')) ? htmlspecialchars(ltrim($row['primary_image_path'], './')) : 'assets/images/products/default-product.png';
+                                            $productName = htmlspecialchars($row['product_name'] ?? $row['description']); // Fallback to description
+                                            $categoryName = htmlspecialchars($row['category_name'] ?? 'Uncategorized');
+                                            $categoryIdForLink = $row['cat_id_for_link'] ?? '#';
+                                            $isNew = (strtotime($row['date_added']) > strtotime('-30 days'));
 
-                                        ?>
-                                        <div class="col-6 col-md-4 col-lg-4 col-xl-3">
-                                            <div class="product product-7 text-center">
-                                                <figure class="product-media">
-                                                    <?php if ($promotion->check_if_item_is_in_promotion($product_obj->get_product_id($row['InventoryItemID'])) != null) { ?>
-                                                        <span class="product-label label-sale">Sale</span>
-                                                    <?php } ?>
+                                            // Promotion check (assuming $promotion object is available from includes.php)
+                                            $isPromo = $promotion->check_if_item_is_in_inventory_promotion($itemId);
+                                            $displayPrice = $row['cost'];
+                                            $oldPrice = null;
+                                            if ($isPromo) {
+                                                $displayPrice = $promotion->get_promoPrice_price($itemId);
+                                                $oldPrice = $promotion->get_regular_price($itemId);
+                                            }
+                                            ?>
+                                            <div class="col-6 col-md-4 col-lg-4 col-xl-3">
+                                                <div class="product product-7 text-center">
+                                                    <figure class="product-media">
+                                                        <?php if ($isPromo) { ?>
+                                                            <span class="product-label label-sale">Sale</span>
+                                                        <?php } ?>
+                                                        <?php if ($isNew) { // Assuming $isNew is determined earlier ?>
+                                                            <span class="product-label label-top">NEW</span>
+                                                        <?php } ?>
+                                                        <a href="product-detail.php?itemid=<?= $itemId ?>">
+                                                            <img src="<?= $imagePath ?>" alt="<?= $productName ?>"
+                                                                class="product-image">
+                                                        </a>
 
-                                                    <?php if (in_array($product_obj->get_product_id($row['InventoryItemID']), $product_obj->get_all_product_items_that_are_less_than_one_month())) { ?>
-                                                        <span class="product-label label-top">NEW</span>
-                                                    <?php } ?>
-                                                    <a href="product-detail.php?itemid=<?= $row['InventoryItemID'] ?>">
-                                                        <img src="<?= $p->get_image($row['InventoryItemID']); ?>"
-                                                            alt="Product image" class="product-image">
-                                                    </a>
+                                                        <div class="product-action-vertical">
+                                                            <a href="#" data-product-id="<?= $itemId ?>"
+                                                                class="btn-product-icon btn-wishlist btn-expandable"><span>add
+                                                                    to wishlist</span></a>
+                                                            <a href="<?= $imagePath ?>" class="btn-product-icon btn-quickview"
+                                                                title="Quick view"><span>Quick view</span></a>
+                                                        </div><!-- End .product-action-vertical -->
 
-                                                    <div class="product-action-vertical">
-                                                        <a href="#"
-                                                            class="btn-product-icon btn-wishlist btn-expandable"><span>add
-                                                                to wishlist</span></a>
-                                                        <a href="<?= $p->get_image($row['InventoryItemID']) ?>"
-                                                            class="btn-product-icon btn-quickview"
-                                                            title="Quick view"><span>Quick view</span></a>
-                                                    </div><!-- End .product-action-vertical -->
+                                                        <div class="product-action">
+                                                            <a href="#" class="submit-cart btn-product btn-cart"
+                                                                product-info="<?= $row['InventoryItemID'] ?>"><span>add to
+                                                                    cart</span></a>
+                                                            <!-- Ensure product-info has the correct ID -->
+                                                        </div><!-- End .product-action -->
+                                                    </figure><!-- End .product-media -->
 
-                                                    <div class="product-action">
-                                                        <a href="#" class="submit-cart btn-product btn-cart"
-                                                            product-info="<?= $row['InventoryItemID'] ?>"><span>add to
-                                                                cart</span></a>
-                                                    </div><!-- End .product-action -->
-                                                </figure><!-- End .product-media -->
+                                                    <div class="product-body">
+                                                        <div class="product-cat text-center">
+                                                            <a
+                                                                href="category.php?id=<?= $categoryIdForLink ?>"><?= $categoryName ?></a>
+                                                        </div><!-- End .product-cat -->
+                                                        <h3 class="product-title truncate"><a
+                                                                href="product-detail.php?itemid=<?= $itemId ?>"><?= $productName ?></a>
+                                                        </h3>
+                                                        <!-- End .product-title -->
+                                                        <div class="product-price">
+                                                            <?php if ($isPromo && $oldPrice): ?>
+                                                                <span
+                                                                    class="new-price">&#8358;<?= number_format($displayPrice, 2) ?></span>
+                                                                <span class="old-price">Was
+                                                                    &#8358;<?= number_format($oldPrice, 2) ?></span>
+                                                            <?php else: ?>
+                                                                <span
+                                                                    class="price">&#8358;<?= number_format($displayPrice, 2) ?></span>
+                                                            <?php endif; ?>
+                                                        </div><!-- End .product-price -->
+                                                        <?php
+                                                        // $Orvi should be available from includes.php
+                                                        ?>
+                                                        <div class="ratings-container">
+                                                            <div class="ratings">
+                                                                <div class="ratings-val"
+                                                                    style="width: <?= $Orvi->get_rating_($itemId) ?>%;">
+                                                                </div><!-- End .ratings-val -->
+                                                            </div><!-- End .ratings -->
 
-                                                <div class="product-body">
-                                                    <div class="product-cat text-center">
-                                                        <a
-                                                            href="#"><?= $category->get_categorie_name($row['category']); ?></a>
-                                                    </div><!-- End .product-cat -->
-                                                    <h3 class="product-title truncate"><a
-                                                            href="product.html"><?= $row['description'] ?></a></h3>
-                                                    <!-- End .product-title -->
-                                                    <div class="product-price">
-                                                        <span
-                                                            class="new-price">&#8358;<?= " " . number_format($row['cost'], 2) ?></span>
-                                                    </div><!-- End .product-price -->
-                                                    <?php
-                                                    $obj = new Review();
-                                                    ?>
-                                                    <div class="ratings-container">
-                                                        <div class="ratings">
-                                                            <div class="ratings-val"
-                                                                style="width: <?= $obj->get_rating_($row['InventoryItemID']) ?>%;">
-                                                            </div><!-- End .ratings-val -->
-                                                        </div><!-- End .ratings -->
-
-                                                        <span class="ratings-text">(
-                                                            <?= $obj->get_total_review_of_product($row['InventoryItemID']) ?>
-                                                            Reviews )</span>
-                                                    </div><!-- End .rating-container -->
-                                                    <!--
-                                                <div class="product-nav product-nav-thumbs">
-                                                    <a href="#" class="active">
-                                                        <img src="assets/images/products/product-4-thumb.jpg" alt="product desc">
-                                                    </a>
-                                                    <a href="#">
-                                                        <img src="assets/images/products/product-4-2-thumb.jpg" alt="product desc">
-                                                    </a>
-
-                                                    <a href="#">
-                                                        <img src="assets/images/products/product-4-3-thumb.jpg" alt="product desc">
-                                                    </a>
-                                                </div><!-- End .product-nav -->
-                                                </div><!-- End .product-body -->
-                                            </div><!-- End .product -->
-                                        </div><!-- End .col-sm-6 col-lg-4 col-xl-3 -->
-                                        <?php
-                                    }
+                                                            <span class="ratings-text">(
+                                                                <?= $Orvi->get_rating_review_number($itemId) ?>
+                                                                Reviews )</span>
+                                                        </div><!-- End .rating-container -->
+                                                    </div><!-- End .product-body -->
+                                                </div><!-- End .product -->
+                                            </div><!-- End .col-sm-6 col-lg-4 col-xl-3 -->
+                                            <?php
+                                        } // end while
+                                    } // end if ($products_rs)
                                     ?>
 
 
@@ -233,43 +299,46 @@ $lastpage = ceil($total_pages / $limit);
                             <nav aria-label="Page navigation">
                                 <ul class="pagination justify-content-center">
                                     <?php
-                                    $paginationPrev .= "";
-                                    $paginationnext .= "";
-                                    if ($pageno > 1) {
-                                        $paginationPrev .= "<li class='page-item active' aria-current='page'><a class='page-link' href='{$_SERVER['PHP_SELF']}?catid=DRINKS&pageno={$prev}'>prev</a></li>";
-                                    } else {
-                                        $paginationPrev .= "<span>prev</span>";
-                                    }
-                                    if ($pageno < $total_pages) {
-                                        $paginationnext .= "<li class='page-item active' aria-current='page'><a class='page-link' href='category.php?catid=DRINKS&pageno={$next}'>Next</a></li>";
-                                    } else {
-                                        $paginationnext .= "<span>Next</span>";
-                                    }
-                                    $skipped = false;
-                                    echo $paginationPrev;
-                                    ?>
-                                    <?php for ($page_number = 1; $page_number <= $total_pages; $page_number++) { ?>
-                                        <?php
-                                        if ($page_number < 3 || $total_pages - $page_number < 5 || abs($pageno - $page_number) < 3) {
-                                            if ($skipped)
-                                                echo '<li class="page-item active" aria-current="page"><span> ... </span></li>';
-                                            $skipped = false;
-                                            // echo "<a href='test2.php?pageno=" . $page_number . "'>" . $page_number . "</a>";
-                                            ?>
-                                            <li class="page-item active" aria-current="page"><a class='page-link'
-                                                    href="<?= $_SERVER['REQUEST_URI'] ?>&pageno=<?= $page_number ?>"><?= $page_number ?></a>
-                                            </li>
-                                            <?php
+                                    if ($total_pages > 1) { // Only show pagination if there's more than one page
+                                        $queryString = "?q=" . urlencode($searchQuery);
+
+                                        // Previous button
+                                        if ($pageno > 1) {
+                                            echo "<li class='page-item'><a class='page-link' href='product-search.php{$queryString}&pageno={$prev_page}'>Prev</a></li>";
                                         } else {
-                                            $skipped = true;
+                                            echo "<li class='page-item disabled'><span class='page-link'>Prev</span></li>";
+                                        }
+
+                                        // Page numbers
+                                        $skipped = false;
+                                        for ($page_number = 1; $page_number <= $total_pages; $page_number++) {
+                                            if ($page_number < 3 || $total_pages - $page_number < 2 || abs($pageno - $page_number) < 2 || $total_pages <= 5) {
+                                                if ($skipped) {
+                                                    echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                                                    $skipped = false;
+                                                }
+                                                $activeClass = ($page_number == $pageno) ? "active" : "";
+                                                echo "<li class='page-item {$activeClass}'><a class='page-link' href='product-search.php{$queryString}&pageno={$page_number}'>{$page_number}</a></li>";
+                                            } else {
+                                                $skipped = true;
+                                            }
+                                        }
+                                        if ($skipped) { // If the last pages were skipped and we need a final ellipsis
+                                            echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                                            // Optionally show the last page if not already shown
+                                            if ($pageno < $total_pages - 2 && $total_pages > 5) {
+                                                echo "<li class='page-item'><a class='page-link' href='product-search.php{$queryString}&pageno={$total_pages}'>{$total_pages}</a></li>";
+                                            }
+                                        }
+
+                                        // Next button
+                                        if ($pageno < $total_pages) {
+                                            echo "<li class='page-item'><a class='page-link' href='product-search.php{$queryString}&pageno={$next_page}'>Next</a></li>";
+                                        } else {
+                                            echo "<li class='page-item disabled'><span class='page-link'>Next</span></li>";
                                         }
                                     }
                                     ?>
-
-
-                                    <li class="page-item-total" style="margin-right: 10px">of <?= $total_pages . " " ?>
-                                    </li>
-                                    <?php echo $paginationnext; ?>
                                 </ul>
                             </nav>
                         </div><!-- End .col-lg-9 -->
@@ -314,48 +383,14 @@ $lastpage = ceil($total_pages / $limit);
     <script src="assets/js/jquery.countdown.min.js"></script>
     <script src="assets/js/main.js"></script>
     <script src="assets/js/demos/demo-13.js"></script>
-    <script src="login.js"></script>
+    <script src="js/add-to-cart.js"></script>
+    <?php // Added add-to-cart.js ?>
+    <?php // Assuming login.js is still needed ?>
 
     <!-- Main JS File -->
-
-
-    <script>
-        $(document).ready(function () {
-            //$(".pagination span").css('margin-right', '10px');
-            $("a.submit-cart").click(function (e) {
-                var product_id = $(this).attr("product-info");
-                alert("adding: " + product_id);
-                //inventory_product_id
-                //inventory_product_id
-                $.ajax({
-                    method: "POST",
-                    url: "test3.php",
-                    data: { inventory_product_id: product_id, qty: 1 }
-                })
-                    .done(function (msg) {
-                        $(".cart-count").text(msg);
-                        console.log("Data Saved: " + msg);
-                    });
-                e.preventDefault();
-            });
-        });
-    </script>
 
 </body>
 
 
 
 </html>
-
-<?php
-function decript_string($string)
-{
-    $string2 = explode(",", $string);
-    foreach ($string2 as $key => $value) {
-        if (strlen($value) === 0) {
-            unset($string2[$key]);
-        }
-    }
-    return (array_unique($string2));
-}
-?>

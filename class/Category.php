@@ -157,19 +157,20 @@ class Category
 
 
 
-      function get_category_by_id($id)
+      public function getCategoryById($categoryId)
       {
-
-            $pdo = $this->pdo;
-            // Assuming you want the category JSON for a specific cat_id, not hardcoded to 2
-            $sql_ = "SELECT json_ from category_new where cat_id = :cat_id";
-            $stmt = $pdo->query($sql_);
-            $row = $stmt->fetch();
-            $decoded_jason_array = json_decode($row['json_']);
-            $blog = get_object_vars($decoded_jason_array);
-
-            return $blog['roots'][0];
-
+            if (!$categoryId) {
+                  return false;
+            }
+            try {
+                  $sql = "SELECT * FROM categories WHERE category_id = ?";
+                  $stmt = $this->pdo->prepare($sql);
+                  $stmt->execute([$categoryId]);
+                  return $stmt->fetch(PDO::FETCH_ASSOC);
+            } catch (PDOException $e) {
+                  error_log("Error fetching category by ID: " . $e->getMessage());
+                  return false;
+            }
       }
 
 
@@ -192,6 +193,54 @@ class Category
       }
 
 
+      // ...existing code...
+
+      /**
+       * Get all categories (full info) for a given product ID.
+       * Uses product_categories and categories tables.
+       *
+       * @param int $productId
+       * @return array
+       */
+      public function getAllCategoriesOfProduct($productId)
+      {
+            // Get all category_ids for the product
+            $sql = "SELECT category_id FROM product_categories WHERE product_id = ?";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$productId]);
+            $categoryIds = [];
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                  $categoryIds[] = $row['category_id'];
+            }
+
+            if (empty($categoryIds)) {
+                  return [];
+            }
+
+            // Get all category info for those IDs
+            $in = str_repeat('?,', count($categoryIds) - 1) . '?';
+            $sql = "SELECT category_id, name, parent_id, level, owner_id, icon_class FROM categories WHERE category_id IN ($in)";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($categoryIds);
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+      }
+
+
+
+      public function getAllCategories()
+      {
+            $sql = "SELECT * FROM categories ORDER BY name ASC";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+      }
 }
+
+
+
+
+
+
 
 ?>
