@@ -7,7 +7,7 @@ require_once __DIR__ . '/ProductItem.php';
 class InventoryItem extends ProductItem
 {
     private $timestamp;
-    private $pdo; // Store the PDO connection here
+    protected $pdo; // Store the PDO connection here
     public $discount_percent;
     public $cost;
 
@@ -104,6 +104,94 @@ class InventoryItem extends ProductItem
         ];
     }
 
+    /**
+     * Deletes a single image for an inventory item.
+     * Removes the database record and the physical files (original and resized).
+     * If the primary image is deleted, it promotes the next available image.
+     *
+     * @param int $inventoryItemId The ID of the inventory item.
+     * @param int $imageId         The ID of the inventory item image.
+     * @return array               An array with a success or error message.
+     */
+    public function deleteInventoryItemImage(int $inventoryItemId, int $imageId): array
+    {
+        // 1. Get image details from the database
+        $stmt = $this->pdo->prepare("
+            SELECT image_path, image_name, is_primary
+            FROM inventory_item_image
+            WHERE inventory_item_image_id = ? AND inventory_item_id = ?
+        ");
+        $stmt->execute([$imageId, $inventoryItemId]);
+        $image = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$image) {
+            return ['error' => 'Image not found or does not belong to this inventory item.'];
+        }
+
+        $isPrimary = (int) $image['is_primary'] === 1;
+        $resizedPath = '../' . $image['image_path'];
+        $baseDir = dirname(dirname($resizedPath));
+        $originalPath = $baseDir . '/' . $image['image_name'];
+
+        // 2. Delete physical files
+        if (file_exists($resizedPath)) {
+            @unlink($resizedPath);
+        }
+        if (file_exists($originalPath)) {
+            @unlink($originalPath);
+        }
+
+        // 3. Delete the database record
+        $stmt = $this->pdo->prepare("DELETE FROM inventory_item_image WHERE inventory_item_image_id = ?");
+        $stmt->execute([$imageId]);
+
+        // 4. If the primary image was deleted, promote the next one
+        if ($isPrimary) {
+            $this->pdo->query("UPDATE inventory_item_image SET is_primary = 1 WHERE inventory_item_id = {$inventoryItemId} ORDER BY sort_order ASC, inventory_item_image_id ASC LIMIT 1");
+        }
+
+        return ['success' => true, 'message' => 'Image deleted successfully.'];
+    }
+
+    /**
+     * Updates the sort order of images for an inventory item and sets the primary image.
+     *
+     * @param int   $inventoryItemId The ID of the inventory item.
+     * @param array $imageOrder      An array of inventory_item_image_id's in the desired order.
+     * @return array                 An array with a success or error message.
+     */
+    public function updateInventoryItemImageOrder(int $inventoryItemId, array $imageOrder): array
+    {
+        if (empty($imageOrder)) {
+            return ['error' => 'Image order array cannot be empty.'];
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            // First, set all images for this inventory item to not be primary
+            $stmt = $this->pdo->prepare("UPDATE inventory_item_image SET is_primary = 0 WHERE inventory_item_id = ?");
+            $stmt->execute([$inventoryItemId]);
+
+            // Then, iterate through the new order and update sort_order and set the new primary
+            foreach ($imageOrder as $index => $imageId) {
+                $isPrimary = ($index === 0) ? 1 : 0;
+                $stmt = $this->pdo->prepare("
+                    UPDATE inventory_item_image 
+                    SET sort_order = ?, is_primary = ? 
+                    WHERE inventory_item_image_id = ? AND inventory_item_id = ?
+                ");
+                $stmt->execute([$index, $isPrimary, (int) $imageId, $inventoryItemId]);
+            }
+
+            $this->pdo->commit();
+            return ['success' => true, 'message' => 'Image order updated successfully.'];
+        } catch (Exception $e) {
+            $this->pdo->rollBack();
+            error_log("Error updating image order for inventory item {$inventoryItemId}: " . $e->getMessage());
+            return ['error' => 'An internal server error occurred while updating image order.'];
+        }
+    }
+
     // ... (rest of the methods, now using $this->pdo) ...
 
     function add_inventory_item()
@@ -167,8 +255,29 @@ class InventoryItem extends ProductItem
 
 
 
-
-
+    /**
+     * Get all images for a specific inventory item.
+     *
+     * @param int $inventoryItemId
+     * @return array
+     */
+    public function getImagesForInventoryItem(int $inventoryItemId): array
+    {
+        $sql = "
+        SELECT 
+            inventory_item_image_id,
+            image_name,
+            image_path,
+            is_primary,
+            sort_order
+        FROM inventory_item_image
+        WHERE inventory_item_id = ?
+        ORDER BY is_primary DESC, sort_order ASC
+    ";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$inventoryItemId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 
 
 
@@ -234,14 +343,17 @@ class InventoryItem extends ProductItem
         }
     }
 
-    public function get_product_details($pdo, $inventory_item_id)
+    /**
+     * Gets a single inventory item by its ID.
+     *
+     * @param int $inventoryItemId The ID of the inventory item.
+     * @return array|false The inventory item data or false if not found.
+     */
+    public function getInventoryItemById(int $inventoryItemId)
     {
-
-        $stmt = $pdo->prepare("SELECT * FROM inventoryitem WHERE InventoryItemID = ?");
-        $stmt->execute([$inventory_item_id]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        return $row ? $row : null;
+        $stmt = $this->pdo->prepare("SELECT * FROM inventoryitem WHERE InventoryItemID = ?");
+        $stmt->execute([$inventoryItemId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
     public function get_product_image($pdo, $inventory_item_id)
@@ -399,6 +511,38 @@ class InventoryItem extends ProductItem
             }
         }
         return array_values($variants);
+    }
+
+
+    public function getOtherInventoryItemsForProduct(int $productId, int $currentInventoryItemId): array
+    {
+        // Simplified query without CTE for better compatibility
+        $sql = "
+        SELECT 
+            i.inventoryitemID, 
+            i.sku, 
+            (SELECT ii.image_path 
+             FROM inventory_item_image ii 
+             WHERE ii.inventory_item_id = i.inventoryitemID 
+             ORDER BY ii.is_primary DESC, ii.sort_order ASC 
+             LIMIT 1) as image_path
+        FROM inventoryitem i
+        WHERE i.productItemID = ? AND i.inventoryitemID != ?
+        ORDER BY i.inventoryitemID
+    ";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$productId, $currentInventoryItemId]);
+
+        $items = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $items[$row['inventoryitemID']] = [
+                'sku' => json_decode($row['sku'], true) ?: [],
+                'image_path' => $row['image_path']
+            ];
+        }
+
+        return $items;
     }
 
 }

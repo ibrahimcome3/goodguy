@@ -215,18 +215,19 @@ $displayedProductCount = count($products);
                                         <th class="sort white-space-nowrap align-middle fs-10" scope="col"
                                             style="width:70px;"></th>
                                         <th class="sort white-space-nowrap align-middle ps-4" scope="col"
-                                            style="width:350px;" data-sort="product">PRODUCT NAME</th>
+                                            style="width:250px;" data-sort="product">PRODUCT NAME</th>
                                         <th class="sort align-middle text-end ps-4" scope="col" data-sort="price"
                                             style="width:150px;">PRICE</th>
                                         <th class="sort align-middle ps-4" scope="col" data-sort="category"
                                             style="width:150px;">CATEGORY</th>
                                         <th class="sort align-middle ps-3" scope="col" data-sort="tags"
-                                            style="width:250px;">TAGS</th>
+                                            style="width:200px;">TAGS</th>
                                         <th class="sort align-middle ps-4" scope="col" data-sort="vendor"
                                             style="width:200px;">VENDOR</th>
                                         <th class="sort align-middle ps-4" scope="col" data-sort="time"
                                             style="width:150px;">PUBLISHED ON</th>
-                                        <th class="sort text-end align-middle pe-0 ps-4" scope="col">ACTIONS</th>
+                                        <th class="sort text-end align-middle pe-0 ps-4" scope="col"
+                                            style="width:50px;">ACTIONS</th>
                                     </tr>
                                 </thead>
                                 <tbody class="list" id="products-table-body">
@@ -256,15 +257,16 @@ $displayedProductCount = count($products);
                                                     </div>
                                                 </td>
                                                 <td class="align-middle white-space-nowrap py-0">
+
                                                     <a class="d-block border border-translucent rounded-2"
-                                                        href="product-details.php?id=<?= $product['productID'] ?>">
-                                                        <img src="<?= htmlspecialchars($product["product_image_path"] ?? "../assets/img/products/default-product.png") ?>"
+                                                        href="view-single-product.php?id=<?= $product['productID'] ?>">
+                                                        <img src="<?= htmlspecialchars($product["product_image_path"]) ?>"
                                                             alt="" width="53">
                                                     </a>
                                                 </td>
                                                 <td class="product align-middle ps-4">
-                                                    <a class="fw-semibold line-clamp-3 mb-0"
-                                                        href="product-details.php?id=<?= $product['productID'] ?>">
+                                                    <a class="fw-semibold line-clamp-2 mb-0"
+                                                        href="view-single-product.php?id=<?= $product['productID'] ?>">
                                                         <?= htmlspecialchars($product["product_name"]) ?>
                                                     </a>
                                                 </td>
@@ -304,26 +306,27 @@ $displayedProductCount = count($products);
                                                     class="time align-middle white-space-nowrap text-body-tertiary text-opacity-85 ps-4">
                                                     <?= date("M d, Y", strtotime($product["date_added"])) ?>
                                                 </td>
-                                                <td
-                                                    class="align-middle white-space-nowrap text-end pe-0 ps-4 btn-reveal-trigger">
-                                                    <div class="btn-group">
-                                                        <a href="product-details.php?id=<?= $product['productID'] ?>"
-                                                            class="btn btn-sm btn-info me-2">
-                                                            <i class="fas fa-eye"></i> View
-                                                        </a>
-
-                                                        <?php if ($isOwner): ?>
-                                                            <a href="edit-product.php?id=<?= $product['productID'] ?>"
-                                                                class="btn btn-sm btn-warning me-2">
-                                                                <i class="fas fa-edit"></i> Edit
-                                                            </a>
-                                                            <a href="delete-product.php?id=<?= $product['productID'] ?>"
-                                                                class="btn btn-sm btn-danger"
-                                                                onclick="return confirm('Are you sure you want to delete this product?');">
-                                                                <i class="fas fa-trash"></i> Delete
-                                                            </a>
-                                                        <?php endif; ?>
-                                                    </div>
+                                                <td class="align-middle white-space-nowrap text-end pe-0 ps-4">
+                                                    <div class="btn-reveal-trigger position-static">
+                                                        <button
+                                                            class="btn btn-sm dropdown-toggle dropdown-caret-none transition-none btn-reveal fs-10"
+                                                            type="button" data-bs-toggle="dropdown" data-boundary="window"
+                                                            aria-haspopup="true" aria-expanded="false"
+                                                            data-bs-reference="parent"><span
+                                                                class="fas fa-ellipsis-h fs-10"></span></button>
+                                                        <div class="dropdown-menu dropdown-menu-end py-2">
+                                                            <a class="dropdown-item"
+                                                                href="view-single-product.php?id=<?= $product['productID'] ?>">View</a>
+                                                            <?php if ($isOwner): ?>
+                                                                <a class="dropdown-item"
+                                                                    href="edit-product.php?id=<?= $product['productID'] ?>">Edit</a>
+                                                                <div class="dropdown-divider"></div><a
+                                                                    class="dropdown-item text-danger"
+                                                                    href="delete-product.php?id=<?= $product['productID'] ?>"
+                                                                    onclick="return confirm('Are you sure you want to delete this product?');">
+                                                                    Delete</a>
+                                                            <?php endif; ?>
+                                                        </div>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>

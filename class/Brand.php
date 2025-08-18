@@ -1,139 +1,155 @@
 <?php
-require_once '../db_connection/conn.php';
+// No longer need to require the connection file here.
+// It should be provided via the constructor.
 
 class Brand
 {
+    private $pdo;
     private $uploadDir = '../brand/';
 
-    public function __construct()
+    public function __construct($pdo)
     {
+        $this->pdo = $pdo;
         // Ensure upload directory exists
         if (!is_dir($this->uploadDir) && !mkdir($this->uploadDir, 0777, true)) {
             die("Failed to create upload directory: " . $this->uploadDir);
         }
     }
 
-    public function getBrandById($mysqli, $brandId)
+    public function getBrandById(int $brandId)
     {
         $sql = "SELECT * FROM brand WHERE brandID = ?";
-        $stmt = $mysqli->prepare($sql);
-        $stmt->bind_param("i", $brandId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        return $result->fetch_assoc();
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$brandId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    public function getBrandByName($mysqli, $brandName)
+    public function getBrandByName(string $brandName)
     {
         $sql = "SELECT * FROM brand WHERE Name = ?";
-        $stmt = $mysqli->prepare($sql);
-        $stmt->bind_param("s", $brandName);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        return $result->fetch_assoc();
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$brandName]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-
-    public function getAllBrands($mysqli)
+    public function getAllBrands(): array
     {
-        $sql = "SELECT * FROM brand";
-        $result = $mysqli->query($sql);
-        $brands = [];
-        while ($row = $result->fetch_assoc()) {
-            $brands[] = $row;
-        }
-        return $brands;
+        $sql = "SELECT * FROM brand ORDER BY Name ASC";
+        $stmt = $this->pdo->query($sql);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function addBrand($mysqli, $brandData)
+    /**
+     * Adds a new brand to the database
+     *
+     * @param string $name The brand name
+     * @param string $description The brand description (optional)
+     * @param string $websiteURL The brand's website URL (optional)
+     * @param string $logo The brand logo filename (optional)
+     * @return int|false The new brand ID if successful, false otherwise
+     */
+    public function addBrand(string $name, string $description = '', string $websiteURL = '', string $logo = '')
     {
-        // Get the current user's ID from the session (make sure session_start() is called)
+        // Get the current user's ID from the session (if available)
         $brandOwner = isset($_SESSION['uid']) ? $_SESSION['uid'] : null;
+        $adminId = isset($_SESSION['admin_id']) ? $_SESSION['admin_id'] : null;
 
-        //If there is no user id return false
+        try {
+            $sql = "INSERT INTO brand (Name, brand_description, websiteURL, brand_logo, brand_owner, admin_id, Dateadded) 
+                    VALUES (:name, :brand_description, :websiteURL, :brand_logo, :brand_owner, :admin_id, NOW())";
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([
+                ':name' => $name,
+                ':brand_description' => $description,
+                ':websiteURL' => $websiteURL,
+                ':brand_logo' => $logo,
+                ':brand_owner' => $brandOwner,
+                ':admin_id' => $adminId
+            ]);
+
+            return $this->pdo->lastInsertId();
+        } catch (PDOException $e) {
+            error_log("Error adding brand: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function updateBrand(int $brandId, array $brandData): bool
+    {
+        $brandOwner = isset($_SESSION['uid']) ? $_SESSION['uid'] : null;
         if ($brandOwner === null) {
             return false;
         }
 
-        $sql = "INSERT INTO brand (Name, brand_description, brand_logo, websiteURL, brand_owner) VALUES (?, ?, ?, ?, ?)";
-        $stmt = $mysqli->prepare($sql);
-        $stmt->bind_param("ssssi", $brandData['name'], $brandData['brand_description'], $brandData['brand_logo'], $brandData['websiteURL'], $brandOwner);
-        return $stmt->execute();
-    }
-    public function updateBrand($mysqli, $brandId, $brandData)
-    {
-        // Get the current user's ID from the session (make sure session_start() is called)
-        $brandOwner = isset($_SESSION['uid']) ? $_SESSION['uid'] : null;
-
-        //If there is no user id return false
-        if ($brandOwner === null) {
-            return false;
-        }
+        $params = [
+            'name' => $brandData['name'],
+            'brand_description' => $brandData['brand_description'],
+            'websiteURL' => $brandData['websiteURL'],
+            'brand_owner' => $brandOwner,
+            'brandID' => $brandId
+        ];
 
         $brandLogoQuery = "";
-        $paramTypes = "sss";
-        $params = [$brandData['name'], $brandData['brand_description'], $brandData['websiteURL']];
         if (!empty($brandData['brand_logo'])) {
-            $brandLogoQuery = ", brand_logo = ?";
-            $paramTypes .= "s";
-            $params[] = $brandData['brand_logo'];
+            $brandLogoQuery = ", brand_logo = :brand_logo";
+            $params['brand_logo'] = $brandData['brand_logo'];
         }
-        // Add brandOwner to the parameters
-        $params[] = $brandOwner;
-        $params[] = $brandId;
-        $paramTypes .= "ii";
-        $sql = "UPDATE brand SET name = ?, brand_description = ?, websiteURL = ? {$brandLogoQuery}, brand_owner = ? WHERE brandID = ?";
-        $stmt = $mysqli->prepare($sql);
-        $stmt->bind_param($paramTypes, ...$params);
-        return $stmt->execute();
+
+        $sql = "UPDATE brand SET 
+                    Name = :name, 
+                    brand_description = :brand_description, 
+                    websiteURL = :websiteURL
+                    {$brandLogoQuery}, 
+                    brand_owner = :brand_owner 
+                WHERE brandID = :brandID";
+
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute($params);
     }
 
-
-    public function deleteBrand($mysqli, $brandId)
+    public function deleteBrand(int $brandId): bool
     {
-        $mysqli->begin_transaction();
+        $this->pdo->beginTransaction();
         try {
             // Check if the brand is used by any product
             $productSql = "SELECT productID FROM productitem WHERE brand_id = ?";
-            $productStmt = $mysqli->prepare($productSql);
-            $productStmt->bind_param("i", $brandId);
-            $productStmt->execute();
-            $productResult = $productStmt->get_result();
+            $productStmt = $this->pdo->prepare($productSql);
+            $productStmt->execute([$brandId]);
 
-            if ($productResult->num_rows > 0) {
+            if ($productStmt->fetch()) {
                 throw new Exception("Cannot delete brand because it is associated with products.");
             }
 
-            //get the brand information to delete image
-            $brand = $this->getBrandById($mysqli, $brandId);
-            $brandLogo = $brand['brand_logo'];
-            //delete the file if any
-            if (!empty($brandLogo)) {
-                $brandLogoPath = "../brand/" . $brandLogo;
+            // Get the brand information to delete image
+            $brand = $this->getBrandById($brandId);
+            if ($brand && !empty($brand['brand_logo'])) {
+                $brandLogoPath = $this->uploadDir . $brand['brand_logo'];
                 if (file_exists($brandLogoPath)) {
                     if (!unlink($brandLogoPath)) {
-                        throw new Exception("Error deleting brand logo.");
+                        // Non-fatal, so we can log it but still proceed.
+                        error_log("Could not delete brand logo file: " . $brandLogoPath);
                     }
-                } else {
-                    error_log("Image file not found: " . $brandLogoPath);
                 }
             }
 
             $sql = "DELETE FROM brand WHERE brandID = ?";
-            $stmt = $mysqli->prepare($sql);
-            $stmt->bind_param("i", $brandId);
-            if (!$stmt->execute()) {
-                throw new Exception("Error deleting brand.");
+            $stmt = $this->pdo->prepare($sql);
+            if (!$stmt->execute([$brandId])) {
+                throw new Exception("Error deleting brand from database.");
             }
-            $mysqli->commit();
+            $this->pdo->commit();
             return true;
 
         } catch (Exception $e) {
-            $mysqli->rollback();
-            throw new Exception($e->getMessage());
+            $this->pdo->rollBack();
+            // In a real app, you'd log the error message.
+            // For the user, you might just return false.
+            error_log($e->getMessage());
             return false;
         }
     }
+
     public function validatePost($field, $type, $required, $minLength = null, $maxLength = null)
     {
         if (!isset($_POST[$field]) && $required) {
@@ -247,5 +263,7 @@ class Brand
 
         return $success;
     }
+
+
 }
 ?>

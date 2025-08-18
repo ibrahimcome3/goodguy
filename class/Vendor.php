@@ -106,4 +106,85 @@ class Vendor
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    /**
+     * Get all users who are not currently registered as vendors
+     *
+     * @return array List of users not registered as vendors
+     */
+    public function getUsersNotVendors(): array
+    {
+        try {
+            // Query to get all users who don't have a vendor account
+            $sql = "SELECT c.customer_id, c.username, c.customer_email, c.first_name, c.last_name 
+                    FROM customers c
+                    LEFT JOIN vendors v ON c.customer_id = v.user_id
+                    WHERE v.vendor_id IS NULL
+                    ORDER BY c.username";
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute();
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error fetching non-vendor users: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Add a new vendor
+     *
+     * @param array $data Vendor data (user_id, business_name, contact_name, phone, address, status)
+     * @return int|false The new vendor ID if successful, false otherwise
+     */
+    public function addVendor(array $data)
+    {
+        try {
+            // Validate required fields
+            if (empty($data['user_id']) || empty($data['business_name'])) {
+                return false;
+            }
+
+            // Insert the new vendor
+            $sql = "INSERT INTO vendors (
+                        user_id, 
+                        business_name, 
+                        contact_name, 
+                        phone, 
+                        address, 
+                        status, 
+                        created_at, 
+                        updated_at
+                    ) VALUES (
+                        :user_id, 
+                        :business_name, 
+                        :contact_name, 
+                        :phone, 
+                        :address, 
+                        :status, 
+                        NOW(), 
+                        NOW()
+                    )";
+
+            $stmt = $this->pdo->prepare($sql);
+            $result = $stmt->execute([
+                ':user_id' => $data['user_id'],
+                ':business_name' => $data['business_name'],
+                ':contact_name' => $data['contact_name'] ?? null,
+                ':phone' => $data['phone'] ?? null,
+                ':address' => $data['address'] ?? null,
+                ':status' => $data['status'] ?? 'active'
+            ]);
+
+            if ($result) {
+                return $this->pdo->lastInsertId();
+            }
+
+            return false;
+        } catch (PDOException $e) {
+            error_log("Error adding vendor: " . $e->getMessage());
+            return false;
+        }
+    }
 }

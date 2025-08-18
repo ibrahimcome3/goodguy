@@ -81,15 +81,21 @@ class ProductItem
     }
     public function getAllProductsByVendorId($vendorId, $limit = null, $offset = null)
     {
-        // Join vendors table to get vendor info for each product
-        $sql = "SELECT pi.*, iii.image_path AS image, v.business_name, v.vendor_id, v.user_id
+        $sql = "SELECT 
+                    pi.*, 
+                    v.business_name, 
+                    v.vendor_id, 
+                    v.user_id,
+                    (
+                        SELECT image_path FROM product_images 
+                        WHERE product_id = pi.productID 
+                        ORDER BY p_imgeid ASC LIMIT 1
+                    ) AS product_image_path
                 FROM productitem pi
-                LEFT JOIN inventoryitem ii ON pi.productID = ii.productItemID
-                LEFT JOIN inventory_item_image iii ON ii.InventoryItemID = iii.inventory_item_id
                 LEFT JOIN vendors v ON pi.vendor_id = v.vendor_id
                 WHERE v.vendor_id = ?
                 GROUP BY pi.productID
-                ORDER BY pi.date_added DESC";
+                ORDER BY pi.productID DESC";
         $params = [$vendorId];
 
         if ($limit !== null && $offset !== null) {
@@ -133,6 +139,65 @@ class ProductItem
         }
         return false;
     }
+
+    /**
+     * Updates a product's details in the database.
+     * 
+     * @param array $data An associative array of product data including product_id
+     * @return boolean True on success, false on failure
+     */
+    public function updateProduct(array $data): bool
+    {
+
+
+        $sql = "UPDATE productitem SET 
+                    product_name = :product_name, 
+                    category = :category, 
+                    vendor_id = :vendor_id, 
+                    status = :status,
+                    brand_id = :brand_id,
+                    product_information = :product_information,
+                    shipping_returns = :shipping_returns,
+                    admin_id = :admin_id,
+                    updated_at = NOW()
+                WHERE productID = :product_id";
+
+        // try {
+        $stmt = $this->pdo->prepare($sql);
+
+        // Add admin_id to the data array if not already present
+        if (!isset($data['admin_id'])) {
+            $data['admin_id'] = isset($_SESSION['admin_id']) ? $_SESSION['admin_id'] : null;
+        }
+
+        // Map the form field names to database parameters
+        $params = [
+            ':product_name' => $data['product_name'],
+            ':category' => $data['category'],
+            ':vendor_id' => $data['vendor_id'],
+            ':status' => $data['status'],
+            ':brand_id' => $data['brand'],
+            ':product_information' => $data['product_information'],
+            ':shipping_returns' => $data['shipping_returns'],
+            ':admin_id' => $data['admin_id'],
+            ':product_id' => $data['product_id']
+        ];
+
+        return $stmt->execute($params);
+        // } catch (PDOException $e) {
+        //     error_log("Error updating product: " . $e->getMessage());
+        //     return false;
+        // }
+    }
+
+    /**
+     * Updates the core details of a product based on the provided data array.
+     * This corresponds to the fields in the edit-product.php form.
+     *
+     * @param array $data Associative array containing product data.
+     * @return bool True on success, false on failure.
+     */
+
 
     function makeInventoryItemDirectory($productId, $inventoryItemId)
     {
@@ -1056,15 +1121,16 @@ class ProductItem
                 pi.*, 
                 a.user_id AS admin_user_id, 
                 a.admin_id,
-                piimg.image_path AS product_image_path
+                (
+                    SELECT image_path FROM product_images 
+                    WHERE product_id = pi.productID 
+                    ORDER BY p_imgeid ASC LIMIT 1
+                ) AS product_image_path
             FROM productitem pi
             LEFT JOIN admins a ON pi.admin_id = a.admin_id
-            LEFT JOIN product_images piimg ON pi.productID = piimg.product_id AND piimg.p_imgeid = (
-                SELECT p_imgeid FROM product_images 
-                WHERE product_id = pi.productID 
-                ORDER BY p_imgeid ASC LIMIT 1
-            )
-            WHERE pi.admin_id = ?";
+            WHERE pi.admin_id = ?
+            GROUP BY pi.productID
+            ORDER BY pi.productID DESC";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([$adminId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1092,7 +1158,7 @@ class ProductItem
         FROM productitem pi
         LEFT JOIN vendors v ON pi.vendor_id = v.vendor_id
         GROUP BY pi.productID
-        ORDER BY pi.date_added DESC";
+        ORDER BY pi.productID DESC";
 
         $params = [];
 
@@ -1108,6 +1174,62 @@ class ProductItem
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Get all products filtered by category.
+     *
+     * @param int $categoryId
+     * @return array
+     */
+    public function getProductsByCategory(int $categoryId)
+    {
+        $sql = "SELECT 
+            pi.*, 
+            v.business_name,
+            v.vendor_id,
+            (
+                SELECT image_path FROM product_images 
+                WHERE product_id = pi.productID 
+                ORDER BY p_imgeid ASC LIMIT 1
+            ) AS product_image_path
+        FROM productitem pi
+        LEFT JOIN vendors v ON pi.vendor_id = v.vendor_id
+        WHERE pi.category = ?
+        GROUP BY pi.productID
+        ORDER BY pi.productID DESC";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$categoryId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Get all products filtered by category and vendor.
+     *
+     * @param int $categoryId
+     * @param int $vendorId
+     * @return array
+     */
+    public function getProductsByCategoryAndVendor(int $categoryId, int $vendorId)
+    {
+        $sql = "SELECT 
+            pi.*, 
+            v.business_name,
+            v.vendor_id,
+            (
+                SELECT image_path FROM product_images 
+                WHERE product_id = pi.productID 
+                ORDER BY p_imgeid ASC LIMIT 1
+            ) AS product_image_path
+        FROM productitem pi
+        LEFT JOIN vendors v ON pi.vendor_id = v.vendor_id
+        WHERE pi.category = ? AND pi.vendor_id = ?
+        GROUP BY pi.productID
+        ORDER BY pi.productID DESC";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$categoryId, $vendorId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 
     /**
      * Get the price range of inventory items for a product.
@@ -1149,7 +1271,7 @@ class ProductItem
     public function getInventoryItemsByProductId($productId)
     {
         $sql = "SELECT ii.*, (
-                SELECT * FROM inventory_item_image 
+                SELECT image_path FROM inventory_item_image 
                 WHERE inventory_item_id = ii.InventoryItemID AND is_primary = 1
                 LIMIT 1
             ) AS image_path
@@ -1248,6 +1370,35 @@ class ProductItem
         $min = number_format((float) $row['min_cost'], 2);
         $max = number_format((float) $row['max_cost'], 2);
         return $min === $max ? $min : "$min - $max";
+    }
+
+
+    /**
+     * Get the selling price range of inventory items for a product.
+     * Returns a formatted string like "$min - $max" or just "$price".
+     *
+     * @param int $productId The ID of the parent product.
+     * @return string A formatted price or price range.
+     */
+    public function getPriceRange(int $productId): string
+    {
+        $sql = "SELECT MIN(price) AS min_price, MAX(price) AS max_price FROM inventoryitem WHERE productItemID = ?";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$productId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($row && $row['min_price'] !== null) {
+            $minPrice = (float) $row['min_price'];
+            $maxPrice = (float) $row['max_price'];
+
+            if ($minPrice == $maxPrice) {
+                return '$' . number_format($minPrice, 2);
+            }
+            return '$' . number_format($minPrice, 2) . ' - $' . number_format($maxPrice, 2);
+        }
+
+        // Fallback if no variants or prices are set for the product
+        return '$0.00';
     }
 
 }
