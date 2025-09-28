@@ -84,16 +84,17 @@ function handleUpdateSku(PDO $pdo, int $inventoryItemId, int $productId): void
 
         // Note: The paths for JSON_REMOVE cannot be bound parameters.
         // We are constructing the SQL string, but using a helper to quote each path makes it safe.
-        $sql = "UPDATE inventoryitem SET sku = JSON_REMOVE(sku, {$jsonPathsString}) WHERE productItemID = ? AND inventoryitemID != ?";
+        $sql = "UPDATE inventoryitem SET sku = JSON_REMOVE(sku, {$jsonPathsString}) WHERE productItemID = ?";
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([$productId, $inventoryItemId]);
+        $stmt->execute([$productId]);
     }
+    $_SESSION['success_message'] = "SKU properties updated successfully.";
 }
 
 /**
  * Handles sharing a property with other items.
  */
-function handleShareProperty(PDO $pdo, array $currentSku): void
+function handleShareProperty(PDO $pdo, array $currentSku, int $productId): void
 {
     $propertyToShare = trim($_POST['share_property'] ?? '');
     $propertyValue = trim($_POST['share_property_value'] ?? '');
@@ -110,12 +111,13 @@ function handleShareProperty(PDO $pdo, array $currentSku): void
 
     // Use JSON_MERGE_PATCH to add/update the property for all selected items
     $placeholders = implode(',', array_fill(0, count($itemsToShareWith), '?'));
-    $sql = "UPDATE inventoryitem SET sku = JSON_MERGE_PATCH(sku, JSON_OBJECT(?, ?)) WHERE inventoryitemID IN ({$placeholders})";
+    $sql = "UPDATE inventoryitem SET sku = JSON_MERGE_PATCH(sku, JSON_OBJECT(?, ?)) WHERE inventoryitemID IN ({$placeholders}) AND productItemID = ?";
 
-    $params = array_merge([$propertyToShare, $propertyValue], $itemsToShareWith);
+    $params = array_merge([$propertyToShare, $propertyValue], $itemsToShareWith, [$productId]);
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
+    $_SESSION['success_message'] = "Property '{$propertyToShare}' shared successfully.";
 }
 
 // --- FORM SUBMISSION LOGIC ---
@@ -125,7 +127,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if ($action === 'update' || !isset($action) /* Fallback for original form */) {
         handleUpdateSku($pdo, $inventoryItemId, $productId);
     } elseif ($action === 'share') {
-        handleShareProperty($pdo, $skuArray);
+        handleShareProperty($pdo, $skuArray, $productId);
     }
 
     // Redirect to the same page to see changes and prevent form resubmission
@@ -137,7 +139,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 // Get other inventory items for the same product to display in the "share" section
 $otherInventoryItemDetails = $inventoryItemObj->getOtherInventoryItemsForProduct($productId, $inventoryItemId);
-$primaryImage = $inventoryItemObj->get_product_image($pdo, $inventoryItemId);
+// FIX: Corrected the method call by removing the redundant $pdo argument.
+$primaryImage = $inventoryItemObj->get_product_image($inventoryItemId);
 
 // --- HELPER FUNCTIONS FOR RENDERING ---
 
@@ -201,7 +204,7 @@ function render_share_item_card(int $otherItemId, array $otherDetails): void
             </div>
             <div class="card-footer bg-body-tertiary text-center pt-1 pb-1 border-top-0">
                 <div class="form-check d-inline-block">
-                    <input class="form-check-input" type="checkbox" name="share_with_items[]"
+                    <input class="form-check-input share-item-checkbox" type="checkbox" name="share_with_items[]"
                         id="share_with_<?= $otherItemId ?>" value="<?= $otherItemId ?>">
                     <label class="form-check-label small" for="share_with_<?= $otherItemId ?>">Share with this</label>
                 </div>
@@ -210,7 +213,6 @@ function render_share_item_card(int $otherItemId, array $otherDetails): void
     </div>
     <?php
 }
-
 ?>
 
 <!DOCTYPE html>
@@ -233,6 +235,13 @@ function render_share_item_card(int $otherItemId, array $otherDetails): void
         <?php include "includes/admin_navbar.php"; ?>
         <div class="content mt-5">
             <div class="container-small">
+                <?php
+                // IMPROVEMENT: Display success message from session
+                if (isset($_SESSION['success_message'])) {
+                    echo '<div class="alert alert-success alert-dismissible fade show" role="alert">' . htmlspecialchars($_SESSION['success_message']) . '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>';
+                    unset($_SESSION['success_message']);
+                }
+                ?>
                 <div class="card">
                     <div class="card-body">
                         <div class="d-flex align-items-center mb-3">
@@ -246,7 +255,9 @@ function render_share_item_card(int $otherItemId, array $otherDetails): void
                                 <p class="mb-0 text-body-tertiary">For Inventory Item ID: <?= $inventoryItemId ?></p>
                             </div>
                         </div>
-                        <form method="post" action="manage-sku-properties.php?inventoryItemId=<?= $inventoryItemId ?>">
+                        <form id="update-form" method="post"
+                            action="manage-sku-properties.php?inventoryItemId=<?= $inventoryItemId ?>">
+                            <input type="hidden" name="action" value="update">
                             <table class="table">
                                 <thead>
                                     <tr>
@@ -276,26 +287,28 @@ function render_share_item_card(int $otherItemId, array $otherDetails): void
                                 <input type="text" class="form-control" id="new_property_value"
                                     name="new_property_value">
                             </div>
-                            <button type="submit" name="action" value="update" class="btn btn-primary">Update
+                            <button type="submit" class="btn btn-primary">Update
                                 SKU</button>
-
+                        </form>
+                        <hr class="my-4">
+                        <form id="share-form" method="post"
+                            action="manage-sku-properties.php?inventoryItemId=<?= $inventoryItemId ?>">
+                            <input type="hidden" name="action" value="share">
                             <h3 class="mt-4">Share Property with Other Items</h3>
                             <div class="mb-3">
                                 <label for="share_property">Property to Share:</label>
                                 <select class="form-control" id="share_property" name="share_property">
                                     <option value="">Select a property</option>
-                                    <?php foreach ($skuArray as $key => $value): ?>
-                                        <?php if (!in_array($key, ['color', 'size'])): ?>
-                                            <option value="<?= htmlspecialchars($key) ?>"
-                                                data-value="<?= htmlspecialchars($value) ?>">
-                                                <?= htmlspecialchars($key) ?>
-                                            </option>
-                                        <?php endif; ?>
+                                    <?php foreach (get_dynamic_properties($skuArray) as $key => $value): ?>
+                                        <option value="<?= htmlspecialchars($key) ?>"
+                                            data-value="<?= htmlspecialchars($value) ?>">
+                                            <?= htmlspecialchars(ucfirst($key)) ?>
+                                        </option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
                             <div class="mb-3">
-                                <label for="share_property_value">Value to Share:</label>
+                                <label for="share_property_value">Value to Share (auto-filled from selection):</label>
                                 <input type="text" class="form-control" id="share_property_value"
                                     name="share_property_value">
                             </div>
@@ -312,7 +325,7 @@ function render_share_item_card(int $otherItemId, array $otherDetails): void
                                     <p>No other inventory items found for this product.</p>
                                 <?php endif; ?>
                             </div>
-                            <button type="submit" name="action" value="share" class="btn btn-secondary">Share
+                            <button type="submit" id="share-button" class="btn btn-secondary" disabled>Share
                                 Property</button>
                         </form>
                     </div>
@@ -321,12 +334,30 @@ function render_share_item_card(int $otherItemId, array $otherDetails): void
         </div>
     </main>
     <script>
-        $(document).ready(function () {
-            $('#share_property').change(function () {
-                const selectedValue = $(this).val();
-                const valueToShare = $(this).find('option:selected').data('value');
-                $('#share_property_value').val(valueToShare);
+        document.addEventListener('DOMContentLoaded', function () {
+            const sharePropertySelect = document.getElementById('share_property');
+            const shareValueInput = document.getElementById('share_property_value');
+            const shareButton = document.getElementById('share-button');
+            const shareCheckboxes = document.querySelectorAll('.share-item-checkbox');
+
+            function updateShareButtonState() {
+                const propertySelected = sharePropertySelect.value !== '';
+                const itemsSelected = document.querySelectorAll('.share-item-checkbox:checked').length > 0;
+                shareButton.disabled = !(propertySelected && itemsSelected);
+            }
+
+            sharePropertySelect.addEventListener('change', function () {
+                const selectedOption = this.options[this.selectedIndex];
+                shareValueInput.value = selectedOption.dataset.value || '';
+                updateShareButtonState();
             });
+
+            shareCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', updateShareButtonState);
+            });
+
+            // Initial check
+            updateShareButtonState();
         });
     </script>
 </body>

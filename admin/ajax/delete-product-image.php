@@ -1,10 +1,14 @@
 <?php
 require_once "../../includes.php";
+require_once __DIR__ . '/../../class/ProductItem.php'; // Make sure path is correct
 session_start();
+
+header('Content-Type: application/json');
 
 // Check if user is logged in
 if (empty($_SESSION['admin_id'])) {
-    echo json_encode(['success' => false, 'error' => 'Unauthorized access']);
+    http_response_code(401);
+    echo json_encode(['success' => false, 'errors' => ['Unauthorized access.']]);
     exit;
 }
 
@@ -12,52 +16,24 @@ if (empty($_SESSION['admin_id'])) {
 $json = file_get_contents('php://input');
 $data = json_decode($json, true);
 
-if (!$data || !isset($data['product_id']) || !isset($data['filename'])) {
-    echo json_encode(['success' => false, 'error' => 'Invalid request']);
+if (!$data || !isset($data['product_id']) || !is_numeric($data['product_id']) || !isset($data['filename'])) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'errors' => ['Invalid request. Product ID and filename are required.']]);
     exit;
 }
 
 $productId = (int) $data['product_id'];
 $filename = basename($data['filename']); // Sanitize filename
 
-// Check if the image is the primary image
-$stmt = $pdo->prepare("SELECT primary_image FROM productitem WHERE productID = :product_id");
-$stmt->execute([':product_id' => $productId]);
-$product = $stmt->fetch(PDO::FETCH_ASSOC);
+try {
+    $productItemObj = new ProductItem($pdo);
+    $result = $productItemObj->deleteProductImage($productId, $filename);
 
-if ($product && $product['primary_image'] == $filename) {
-    // If deleting the primary image, set primary_image to NULL
-    $updateStmt = $pdo->prepare("UPDATE productitem SET primary_image = NULL WHERE productID = :product_id");
-    $updateStmt->execute([':product_id' => $productId]);
+    http_response_code($result['success'] ? 200 : 400);
+    echo json_encode($result);
+
+} catch (Exception $e) {
+    http_response_code(500);
+    error_log("Image deletion failed for product ID {$productId}: " . $e->getMessage());
+    echo json_encode(['success' => false, 'errors' => ['An internal server error occurred.']]);
 }
-
-// Define file paths
-$imageDir = "../../products/product-{$productId}/product-{$productId}-image";
-$resizedDir = "{$imageDir}/resized";
-
-$originalFile = "{$imageDir}/{$filename}";
-$resizedFile = "{$resizedDir}/{$filename}";
-
-$success = true;
-$errors = [];
-
-// Delete resized image
-if (file_exists($resizedFile)) {
-    if (!unlink($resizedFile)) {
-        $success = false;
-        $errors[] = "Failed to delete resized image";
-    }
-}
-
-// Delete original image
-if (file_exists($originalFile)) {
-    if (!unlink($originalFile)) {
-        $success = false;
-        $errors[] = "Failed to delete original image";
-    }
-}
-
-echo json_encode([
-    'success' => $success,
-    'errors' => $errors
-]);

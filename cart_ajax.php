@@ -14,7 +14,7 @@ if (session_status() == PHP_SESSION_NONE) {
 $response = ['success' => false, 'message' => 'An error occurred.', 'cartCount' => 0];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($cart) && ($cart instanceof Cart)) {
-    $action = $_POST['action'] ?? 'add_item'; // Default action is to add
+    $action = $_POST['action'] ?? null;
 
     if ($action === 'add_item') {
         if (
@@ -49,6 +49,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($cart) && ($cart instanceof C
             } else {
                 // This branch might not be hit if removeItemByProductId always returns true
                 $response['message'] = 'Could not remove item from cart.';
+            }
+        } else {
+            $response['message'] = 'Invalid item ID provided for removal.';
+        }
+    } elseif ($action === 'update_item') {
+        if (isset($_POST['item_id'], $_POST['qty']) && is_numeric($_POST['item_id']) && is_numeric($_POST['qty'])) {
+            $productIdToUpdate = (int) $_POST['item_id'];
+            $newQuantity = (int) $_POST['qty'];
+            if ($cart->updateItemQuantity($productIdToUpdate, $newQuantity)) { // Assumes updateItemQuantity method exists
+                $response['success'] = true;
+                $response['message'] = 'Cart updated successfully!';
+            } else {
+                $response['message'] = 'Could not update item quantity.';
             }
         } else {
             $response['message'] = 'Invalid item ID provided for removal.';

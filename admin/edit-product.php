@@ -117,18 +117,22 @@ if (isset($_SESSION['flash_message'])) {
 
             <div class="row justify-content-center mb-5">
                 <div class="col-12 col-lg-11 col-xxl-10">
-                    <div class="">
+                    <div class="d-flex justify-content-between align-items-center">
                         <nav aria-label="breadcrumb">
-                            <ol class="breadcrumb  mb-2">
+                            <ol class="breadcrumb mb-2">
                                 <li class="breadcrumb-item"><a href="view-all-products.php">Products</a></li>
                                 <li class="breadcrumb-item active" aria-current="page">Edit Product</li>
                             </ol>
                         </nav>
-                        <h2 class="mb-1"><?= htmlspecialchars($product['product_name'] ?? 'Product') ?></h2>
-                        <p class="text-700 fs-7">Last updated:
-                            <?= date('M j, Y', strtotime($product['updated_at'] ?? 'now')) ?>
-                        </p>
+                        <!-- Add New Product Link -->
+                        <a href="add-product.php" class="btn btn-primary">
+                            <span class="fas fa-plus me-2"></span>Add New Product
+                        </a>
                     </div>
+                    <h2 class="mb-1"><?= htmlspecialchars($product['product_name'] ?? 'Product') ?></h2>
+                    <p class="text-700 fs-7">Last updated:
+                        <?= date('M j, Y', strtotime($product['updated_at'] ?? 'now')) ?>
+                    </p>
                 </div>
             </div>
 
@@ -663,80 +667,6 @@ if (isset($_SESSION['flash_message'])) {
                     }
                 });
             }
-
-            function handleFiles(files) {
-                const formData = new FormData();
-                formData.append('product_id', '<?= $productId ?>');
-
-                // Add loading indicator
-                const loadingAlert = document.createElement('div');
-                loadingAlert.className = 'alert alert-info';
-                loadingAlert.innerHTML = '<span class="fas fa-spinner fa-spin me-2"></span>Uploading images...';
-
-                const cardBody = document.querySelector('.dropzone-area').closest('.card-body');
-                cardBody.prepend(loadingAlert);
-
-                // Add all files to form data
-                for (let i = 0; i < files.length; i++) {
-                    formData.append('images[]', files[i]);
-                }
-
-                // Send AJAX request
-                fetch('ajax/upload-product-images.php', {
-                    method: 'POST',
-                    body: formData
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        // Remove loading indicator
-                        loadingAlert.remove();
-
-                        if (data.success) {
-                            // Show success message
-                            const successAlert = document.createElement('div');
-                            successAlert.className = 'alert alert-success alert-dismissible fade show';
-                            successAlert.innerHTML = `
-                <span class="fas fa-check-circle me-2"></span>
-                ${data.files.length} file(s) uploaded successfully.
-                <button class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            `;
-                            cardBody.prepend(successAlert);
-
-                            // Refresh the page after a short delay to show the new images
-                            setTimeout(() => {
-                                window.location.reload();
-                            }, 1500);
-                        } else {
-                            // Show error message
-                            const errorAlert = document.createElement('div');
-                            errorAlert.className = 'alert alert-danger alert-dismissible fade show';
-                            errorAlert.innerHTML = `
-                <span class="fas fa-exclamation-circle me-2"></span>
-                <strong>Upload failed:</strong>
-                <ul class="mb-0 mt-1">
-                    ${data.errors.map(err => `<li>${err}</li>`).join('')}
-                </ul>
-                <button class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            `;
-                            cardBody.prepend(errorAlert);
-                        }
-                    })
-                    .catch(error => {
-                        // Remove loading indicator
-                        loadingAlert.remove();
-
-                        // Show error message
-                        const errorAlert = document.createElement('div');
-                        errorAlert.className = 'alert alert-danger alert-dismissible fade show';
-                        errorAlert.innerHTML = `
-            <span class="fas fa-exclamation-circle me-2"></span>
-            <strong>Upload failed:</strong> ${error.message}
-            <button class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        `;
-                        cardBody.prepend(errorAlert);
-                    });
-            }
-
 
             function handleFiles(files) {
                 const formData = new FormData();

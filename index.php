@@ -370,7 +370,8 @@ try {
                         FROM
                             inventoryitem ii
                         JOIN productitem p ON ii.productItemID = p.productID
-                        JOIN categories cn ON p.category = cn.category_id
+                        LEFT JOIN product_categories pc ON p.productID = pc.product_id
+                        LEFT JOIN categories cn ON pc.category_id = cn.category_id
                         LEFT JOIN inventory_item_image iii ON ii.InventoryItemID = iii.inventory_item_id AND iii.is_primary = 1
 
                         LEFT JOIN promooffering po_item ON ii.InventoryItemID = po_item.inventory_item_id
@@ -382,6 +383,8 @@ try {
                         WHERE
                             ii.status = 'active'
                             AND iii.image_path IS NOT NULL AND iii.image_path != ''
+                        GROUP BY
+                            ii.InventoryItemID
                         ORDER BY
                             ii.date_added DESC
                         LIMIT :limit
@@ -426,8 +429,8 @@ try {
                                     </figure>
                                     <div class="product-body">
                                         <div class="product-cat font-weight-normal">
-                                            <a
-                                                href="category.php?catid=<?= $categoryId ?>"><?= htmlspecialchars($categoryName) ?></a>
+                                            <a href="shop.php?category=<?= $categoryId ?>">
+                                                <?= htmlspecialchars($categoryName) ?></a>
                                         </div>
                                         <h3 class="product-title truncate-2-lines">
                                             <a
@@ -493,7 +496,8 @@ try {
                         FROM
                             inventoryitem ii
                         JOIN productitem p ON ii.productItemID = p.productID
-                        JOIN categories cn ON p.category = cn.category_id
+                        JOIN product_categories pc ON p.productID = pc.product_id
+                        JOIN categories cn ON pc.category_id = cn.category_id
                         LEFT JOIN inventory_item_image iii ON ii.InventoryItemID = iii.inventory_item_id AND iii.is_primary = 1
 
                         LEFT JOIN promooffering po_item ON ii.InventoryItemID = po_item.inventory_item_id
@@ -523,6 +527,8 @@ try {
                                     WHERE grandparent.name = 'Electronics'
                                 ) AS electronics_subcategories
                             )
+                        GROUP BY
+                            ii.InventoryItemID
                         ORDER BY
                             ii.date_added DESC -- Or RAND() if you prefer random
                         LIMIT :limit
@@ -568,8 +574,8 @@ try {
                                         <div class="product-body">
                                             <div class="product-cat font-weight-normal">
                                                 <?php // Link to the specific sub-category if available, else Electronics ?>
-                                                <a
-                                                    href="category.php?catid=<?= $categoryId ?>"><?= htmlspecialchars($categoryName) ?></a>
+                                                <a href="shop.php?category=<?= $categoryId ?>">
+                                                    <?= htmlspecialchars($categoryName) ?></a>
                                             </div>
                                             <h3 class="product-title truncate-2-lines">
                                                 <a

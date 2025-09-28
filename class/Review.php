@@ -192,20 +192,18 @@ class Review
 
     try {
       // Get total number of approved reviews for this product
-      $sqlTotal = "SELECT COUNT(*) 
-                         FROM reviews 
-                         WHERE inventory_item_id = :item_id AND is_approved = 1";
+      $sqlTotal = "SELECT COUNT(*) FROM reviews WHERE inventory_item_id = :item_id AND status = 'approved'";
       $stmtTotal = $this->pdo->prepare($sqlTotal);
       $stmtTotal->bindParam(':item_id', $inventoryItemId, PDO::PARAM_INT);
       $stmtTotal->execute();
       $totalReviews = (int) $stmtTotal->fetchColumn();
 
       // Get reviews for the current page
-      $sqlPage = "SELECT r.*, c.customer_fname, c.customer_lname 
-                        FROM reviews r
-                        JOIN customer c ON r.customer_id = c.customer_id
-                        WHERE r.inventory_item_id = :item_id AND r.is_approved = 1
-                        ORDER BY r.review_date DESC
+      $sqlPage = "SELECT r.*, c.customer_fname, c.customer_lname
+                        FROM reviews r 
+                        JOIN customer c ON r.customer_id = c.customer_id 
+                        WHERE r.inventory_item_id = :item_id AND r.status = 'approved' 
+                        ORDER BY r.review_date DESC 
                         LIMIT :limit OFFSET :offset";
       $stmtPage = $this->pdo->prepare($sqlPage);
       $stmtPage->bindParam(':item_id', $inventoryItemId, PDO::PARAM_INT);

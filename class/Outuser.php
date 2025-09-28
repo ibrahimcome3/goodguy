@@ -12,57 +12,73 @@ class Outuser
 			return false;
 	}
 
-	public function update_password($pass)
+	public function update_password(PDO $pdo, $pass, $userId)
 	{
-		include "conn.php";
-		if (isset($_SESSION['password_reset']['uid'])) {
-			$pass = md5($pass);
-			$sql = "UPDATE `customer` SET `password`=  '$pass'";
-			$result = $mysqli->query($sql);
-			if ($result) {
-				return true;
-			} else
-				return false;
-		}
-
-	}
-
-	public function add_shipping_address($last_id)
-	{
-		include "conn.php";
-
-		$sql = "INSERT INTO `shipping_address`(`shipping_address_no`, `customer_id`, `address1`, `address2`, `state`, `city`, `zip`, ship_cost) VALUES (null, $last_id,'" . $_SESSION['registration']['streetaddress1'] . "','" . $_SESSION['registration']['streetaddress2'] . "','" . $_SESSION['registration']['state'] . "','" . $_SESSION['registration']['city'] . "', '" . $_SESSION['registration']['zip'] . "', '" . $_SESSION['registration']['shipment'] . "')";
-		if ($mysqli->query($sql)) {
-			return true;
-		} else
+		$hashed_password = password_hash($pass, PASSWORD_DEFAULT);
+		$sql = "UPDATE `customer` SET `password` = :password WHERE `customer_id` = :user_id";
+		try {
+			$stmt = $pdo->prepare($sql);
+			return $stmt->execute([':password' => $hashed_password, ':user_id' => $userId]);
+		} catch (PDOException $e) {
+			error_log("Password update failed: " . $e->getMessage());
 			return false;
-
-
+		}
 	}
 
-	function new_user()
+	public function add_shipping_address(PDO $pdo, $last_id)
 	{
-		include "conn.php";
-		$sql = "INSERT INTO `customer`(`customer_id`, `customer_fname`, `customer_lname`,  `customer_email`, `password`,  `customer_address1`, `customer_address2`, `customer_state`, `customer_phone`, `customer_zip`) VALUES (NULL, '" . $_SESSION['registration']['firstname'] . "', '" . $_SESSION['registration']['lastname'] . "', '" . $_SESSION['registration']['email'] . "', '" . md5($_SESSION['registration']['password']) . "', '" . $_SESSION['registration']['streetaddress1'] . "', '" . $_SESSION['registration']['streetaddress2'] . "',  '" . $_SESSION['registration']['state'] . "', '" . $_SESSION['registration']['phone'] . "','" . $_SESSION['registration']['zip'] . "');";
-
-
-		$result = $mysqli->query($sql);
-		$last_id = $mysqli->insert_id;
-
-		if ($result) {
-			return $last_id;
-
+		$sql = "INSERT INTO `shipping_address`(`customer_id`, `address1`, `address2`, `state`, `city`, `zip`, `shipping_area_id`) 
+                VALUES (:customer_id, :address1, :address2, :state, :city, :zip, :shipping_area_id)";
+		try {
+			$stmt = $pdo->prepare($sql);
+			$stmt->execute([
+				':customer_id' => $last_id,
+				':address1' => $_SESSION['registration']['streetaddress1'],
+				':address2' => $_SESSION['registration']['streetaddress2'],
+				':state' => $_SESSION['registration']['state'],
+				':city' => $_SESSION['registration']['city'],
+				':zip' => $_SESSION['registration']['zip'],
+				':shipping_area_id' => $_SESSION['registration']['shipment']
+			]);
+			return true;
+		} catch (PDOException $e) {
+			error_log("Shipping address insertion failed: " . $e->getMessage());
+			return false;
 		}
+	}
 
+	function new_user(PDO $pdo, $hashed_password)
+	{
+		$sql = "INSERT INTO `customer`(`customer_fname`, `customer_lname`, `customer_email`, `password`, `customer_address1`, `customer_address2`, `customer_state`, `customer_phone`, `customer_zip`) 
+                VALUES (:fname, :lname, :email, :password, :address1, :address2, :state, :phone, :zip)";
+		try {
+			$stmt = $pdo->prepare($sql);
+			$stmt->execute([
+				':fname' => $_SESSION['registration']['firstname'],
+				':lname' => $_SESSION['registration']['lastname'],
+				':email' => $_SESSION['registration']['email'],
+				':password' => $hashed_password,
+				':address1' => $_SESSION['registration']['streetaddress1'],
+				':address2' => $_SESSION['registration']['streetaddress2'],
+				':state' => $_SESSION['registration']['state'],
+				':phone' => $_SESSION['registration']['phone'],
+				':zip' => $_SESSION['registration']['zip']
+			]);
+			return $pdo->lastInsertId();
+		} catch (PDOException $e) {
+			error_log("User creation failed: " . $e->getMessage());
+			if ($e->errorInfo[1] == 1062) {
+				return "An account with this email already exists.";
+			}
+			return false;
+		}
 	}
 
 	function unset_session()
 	{
 		unset($_SESSION['registration']);
 		unset($_SESSION['registration_step']);
-		unset($_SESSION['r_email']); // If you're still using this
-		unset($_SESSION['registration']); // If you have other registration-related data in this array
-
+		unset($_SESSION['r_email']);
 	}
 
 	function check_email_account_exit($email)

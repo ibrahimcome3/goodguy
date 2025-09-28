@@ -142,7 +142,7 @@ try {
 												$itemPrice = $row['item_price'] ?? ($orders->get_order_item_price($inventoryItemId, $order_id_from_get) ?? 0);
 												$quantity = $row['quwantitiyofitem'] ?? 0;
 												$itemStatus = $row['status'] ?? 'N/A';
-												$productImage = $inventoryItemId ? $invt->get_product_image($pdo, $inventoryItemId) : 'assets/images/no-image-placeholder.png';
+												$productImage = $inventoryItemId ? $invt->get_product_image($inventoryItemId) : 'assets/images/no-image-placeholder.png';
 												$productIdForPromoCheck = $invt->getProductIdForInventoryItem($inventoryItemId);
 												?>
 												<tr>

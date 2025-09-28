@@ -9,7 +9,7 @@ if (session_status() == PHP_SESSION_NONE) {
 
 $_SESSION['return_to'] = $_SERVER['REQUEST_URI'];
 
-include "includes.php"; // Should provide $mysqli, $pdo, and class autoloading/definitions
+include "includes.php";
 
 // SECTION 2: INPUT PROCESSING & VALIDATION
 // -----------------------------------------------------------------------------
@@ -23,38 +23,26 @@ if ($currentInventoryItemId <= 0 || !$invt->check_item_in_existance($currentInve
 
 // SECTION 3: CORE DATA FETCHING
 // -----------------------------------------------------------------------------
-// Fetch main product and inventory details using prepared statements
-$sql_main_product = "SELECT pi.*, ii.* 
-                     FROM productitem pi 
-                     LEFT JOIN inventoryitem ii ON pi.productID = ii.productItemID 
-                     WHERE ii.InventoryItemID = ?";
-$stmt_main_product = $mysqli->prepare($sql_main_product);
+// Fetch main product and inventory details using a secure PDO prepared statement.
+$sql_main_product = "SELECT pi.*, ii.*
+                     FROM inventoryitem ii
+                     INNER JOIN productitem pi ON ii.productItemID = pi.productID
+                     WHERE ii.InventoryItemID = :itemid";
+$stmt_main_product = $pdo->prepare($sql_main_product);
+$stmt_main_product->execute([':itemid' => $currentInventoryItemId]);
+$row = $stmt_main_product->fetch(PDO::FETCH_ASSOC);
 
-if (!$stmt_main_product) {
-        // Log error and show user-friendly message
-        error_log("Prepare failed for main product query: " . $mysqli->error);
-        echo "An error occurred while fetching product details. Please try again later. <a href='index.php'>Return to homepage.</a>";
-        exit();
-}
-
-$stmt_main_product->bind_param("i", $currentInventoryItemId);
-$stmt_main_product->execute();
-$result_main_product = $stmt_main_product->get_result();
-
-if ($result_main_product->num_rows === 0) {
+if (!$row) {
         echo "Product details not found. <a href='index.php'>Click here to go to the home page.</a>";
         exit();
 }
-$row = $result_main_product->fetch_assoc(); // $row will contain all fetched data
-$stmt_main_product->close();
 
-// Extract key data into variables for easier use in the view (consistent with old $row usage)
-$category_id_from_inventory = $row['category']; // This is likely the category_id from inventoryitem
-$main_product_id_for_item = $row['productID'];   // This is productitem.productID (used as $pid and $icudrop previously)
+// Extract key data into variables for easier use in the view
+$main_product_id_for_item = $row['productID'];
 $product_info_text = $row['product_information'];
 $product_name_text = $row['product_name'];
 $shipping_returns_text = $row['shipping_returns'];
-$description_text = $row['description']; // Assuming 'description' from inventoryitem is the primary one
+$description_text = $row['description'];
 $cost_price = $row['cost'];
 
 // SECTION 4: SECONDARY DATA PREPARATION
@@ -69,18 +57,18 @@ if (isset($_SESSION['uid'])) {
 // Reviews
 $Orvi = new Review($pdo);
 
-// Toast Messages (for cart/wishlist actions)
-$toast_message_for_js = null;
-$toast_icon_class_for_js = null;
+// Alert Messages (for cart/wishlist actions)
+$alert_message_for_js = null;
+$alert_type_for_js = 'info'; // Default type
 if (isset($_GET['toast_action'])) {
         switch ($_GET['toast_action']) {
                 case 'cart_add_success':
-                        $toast_message_for_js = "Item successfully added to your cart!";
-                        $toast_icon_class_for_js = "fas fa-shopping-cart";
+                        $alert_message_for_js = "Item successfully added to your cart!";
+                        $alert_type_for_js = 'success';
                         break;
                 case 'wishlist_add_success':
-                        $toast_message_for_js = "Item added to your wishlist!";
-                        $toast_icon_class_for_js = "fas fa-heart";
+                        $alert_message_for_js = "Item added to your wishlist!";
+                        $alert_type_for_js = 'success';
                         break;
         }
 }
@@ -106,8 +94,15 @@ $sizeVariations = $var_obj->get_size_variations_for_product_from_sku($main_produ
 $is_new_product = in_array($currentInventoryItemId, $product_obj->get_all_product_items_that_are_less_than_one_month());
 
 // Related Categories for Display
-$cat_obj = new Category($pdo); // Changed $pdp to $pdo
-$related_categories_stmt = $cat_obj->get_related_categories($currentInventoryItemId);
+$cat_obj = new Category($pdo);
+// The function now returns the final array directly.
+$related_categories_array = $cat_obj->get_related_categories($currentInventoryItemId);
+
+// For elements that might need a single category ID (like related products JS)
+$primary_category_id = 0;
+if (!empty($related_categories_array)) {
+        $primary_category_id = $related_categories_array[0]['category_id'];
+}
 
 // Review Permissions
 $can_add_review = false;
@@ -122,29 +117,6 @@ if (isset($_SESSION['uid']) && $currentInventoryItemId > 0) {
         $review_product_id_for_link = $main_product_id_for_item;
         $redirect_url_for_review = urlencode("product-review.php?inventory-item=$currentInventoryItemId&product_id=$review_product_id_for_link");
         $has_reviewed_message = '<p class="text-muted small"><a href="login.php?redirect_url=' . $redirect_url_for_review . '">Login</a> to write a review.</p>';
-}
-
-// SECTION 5: HELPER FUNCTIONS (If specific to this page)
-// -----------------------------------------------------------------------------
-/**
- * Fetches related products.
- * Note: It's generally better to pass DB connection as a parameter.
- * This function might be for AJAX or a different part of the site if not directly used in this page's render.
- */
-function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
-{
-        // include "conn.php"; // Avoid include inside function
-        $sql = "SELECT * FROM `inventoryitem` WHERE `category` = ? AND InventoryItemID != ? LIMIT 5";
-        $stmt = $db_connection->prepare($sql);
-        if (!$stmt) {
-                error_log("Prepare failed for getrelatedproducts: " . $db_connection->error);
-                return null;
-        }
-        $stmt->bind_param("ii", $category_id, $exclude_item_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        // $stmt->close(); // Closing here would prevent fetching results if $result is returned directly
-        return $result; // The caller should close the statement after fetching if needed, or fetch all data here.
 }
 
 ?>
@@ -170,34 +142,55 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
         <link rel="stylesheet"
                 href="https://cdnjs.cloudflare.com/ajax/libs/simplePagination.js/1.6/simplePagination.css">
 
-
-        <!-- Plugins CSS File -->
         <link rel="stylesheet" href="assets/css/plugins/jquery.countdown.css">
-        <!-- Main CSS File -->
         <link rel="stylesheet" href="assets/css/demos/demo-13.css">
 
         <style>
-                /* --- Theme's SweetAlert2 Toast Styles (Example) --- */
-                .themed-toast-popup {
-                        background-color: #f0f0f0 !important;
-                        border-left: 3px solid #007bff !important;
-                        border-radius: 2px !important;
-                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
-                        padding: 0.55em 0.5em !important;
+                /* --- GitHub-like Toast Styles --- */
+                .github-toast-popup {
+                        background-color: #f6f8fa !important;
+                        color: #24292e !important;
+                        border-radius: 6px !important;
+                        border: 1px solid rgba(27, 31, 35, .15) !important;
+                        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1) !important;
+                        padding: 1rem !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        font-size: 14px !important;
                 }
 
-                .themed-toast-html-icon i {
-                        font-size: 1.2em;
-                        /* Adjust icon size in toast */
-                        color: #007bff;
-                        /* Match border or use another theme color */
+                .github-toast-html-icon {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        font-size: 1em !important;
+                        display: flex;
+                        align-items: center;
+                }
+
+                .github-toast-html-icon i.fas {
+                        font-size: 16px;
+                        /* Match font size */
                         margin-right: 8px;
+                        line-height: 1;
                 }
 
-                .themed-toast-html-icon {
-                        font-size: 0.95em;
-                        /* Adjust text size in toast */
+                .github-toast-success i.fas {
+                        color: #28a745;
                 }
+
+                .github-toast-error i.fas {
+                        color: #d73a49;
+                }
+
+                .github-toast-warning i.fas {
+                        color: #f9c513;
+                }
+
+                .github-toast-info i.fas {
+                        color: #0366d6;
+                }
+
+                /* --- End of GitHub-like Toast Styles --- */
 
                 .truncate {
                         overflow: hidden;
@@ -233,7 +226,7 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                         <ol class="breadcrumb">
                                                 <?php echo breadcrumbs(); ?>
                                         </ol>
-                                        <!-- Product Pager (Example, if needed)
+                                        <!--
                                         <nav class="product-pager ml-auto" aria-label="Product">
                                                 <a class="product-pager-link product-pager-prev" href="#"
                                                         aria-label="Previous" tabindex="-1">
@@ -242,12 +235,13 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                                 </a>
 
                                                 <a class="product-pager-link product-pager-next"
-                                                        href="#" aria-label="Next"
+                                                        href="product-detail.php?itemid=<?php +1 ?>" aria-label="Next"
                                                         tabindex="-1">
                                                         <span>Next</span>
                                                         <i class="icon-angle-right"></i>
                                                 </a>
-                                        </nav> -->
+                                        </nav>
+        -->
                                 </div><!-- End .container -->
                         </nav><!-- End .breadcrumb-nav -->
 
@@ -259,7 +253,7 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                                                 <div class="row">
                                                                         <div class="col-md-6 main-product-cover"
                                                                                 product-info="<?= $currentInventoryItemId ?>"
-                                                                                product-cat="<?= $category_id_from_inventory ?>">
+                                                                                product-cat="<?= $primary_category_id ?>">
                                                                                 <div class="product-gallery">
                                                                                         <figure
                                                                                                 class="product-main-image">
@@ -275,7 +269,9 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                                                                                 <?php } ?>
                                                                                                 <?php
                                                                                                 if ($product_obj->check_dirtory_resized_600($main_product_id_for_item, $currentInventoryItemId)) {
-                                                                                                        $pi = glob("products/product-$main_product_id_for_item/product-$main_product_id_for_item-image/inventory-$main_product_id_for_item-$currentInventoryItemId/resized_600/" . '*.{jpg,gif,png,jpeg}', GLOB_BRACE);
+                                                                                                        $i = $currentInventoryItemId;
+
+                                                                                                        $pi = glob("products/product-$main_product_id_for_item/product-$main_product_id_for_item-image/inventory-$main_product_id_for_item-$i/resized_600/" . '*.{jpg,gif,png,jpeg}', GLOB_BRACE);
 
                                                                                                         $p = $pi[0];
                                                                                                 } else {
@@ -342,6 +338,7 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                                                                         <div class="ratings-container">
 
                                                                                                 <div class="ratings">
+
                                                                                                         <div class="ratings-val"
                                                                                                                 style="width: <?= $Orvi->get_rating_($currentInventoryItemId) ?>%">
                                                                                                         </div>
@@ -357,13 +354,16 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                                                                         <!-- End .rating-container -->
                                                                                         <?php if ($is_on_promotion) { ?>
                                                                                                 <span class="product-price"
-                                                                                                        style="margin-bottom: 0px;">N<?= htmlspecialchars($display_price) ?></span>
+                                                                                                        style="margin-bottom: 0px;">
+                                                                                                        &#8358;<?= number_format(htmlspecialchars($display_price), 2) ?>
+                                                                                                </span>
                                                                                                 <span class="old-price">Was
-                                                                                                        N<?= htmlspecialchars($old_price) ?></span>
+                                                                                                        &#8358;<?= number_format(htmlspecialchars($old_price), 2) ?>
+                                                                                                </span>
                                                                                         <?php } else { ?>
                                                                                                 <div class="product-price">
                                                                                                         &#8358;
-                                                                                                        <?= htmlspecialchars($display_price) ?>
+                                                                                                        <?= number_format(htmlspecialchars($display_price), 2) ?>
                                                                                                 </div>
                                                                                                 <!-- End .product-price -->
                                                                                         <?php } ?>
@@ -422,7 +422,7 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                                                                                                                 foreach ($sizeVariations as $itemId => $size) {
                                                                                                                                         ?>
                                                                                                                                         <option
-                                                                                                                                                value="<?= htmlspecialchars($size) ?>">
+                                                                                                                                                value="<?= $size ?>">
                                                                                                                                                 <?= $size ?>
                                                                                                                                         </option>
                                                                                                                                         <?php
@@ -442,8 +442,6 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                                                                                 ?>
                                                                                                 <div
                                                                                                         class="details-filter-row details-row-size">
-                                                                                                        <?php
-                                                                                                        ?>
 
 
 
@@ -482,6 +480,7 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                                                                                                         <input type="submit"
                                                                                                                                 class="submit ubmit-cart btn-product btn-cart submit-cart"
                                                                                                                                 value="Add to Cart" />
+                                                                                                                        <!--  <a href="#" product-info="//$_GET['itemid']" class="submit-cart btn-product btn-cart submit-cart"><span>add to cart</span></a> -->
 
 
                                                                                                                 </div>
@@ -512,30 +511,30 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                                                                                         class="product-cat">
                                                                                                         <span>Category:</span>
                                                                                                         <?php
-                                                                                                        if ($related_categories_stmt && $related_categories_stmt->rowCount() > 0) {
+                                                                                                        // Check if the returned array is not empty.
+                                                                                                        if (!empty($related_categories_array)) {
+                                                                                                                $number_of_rows = count($related_categories_array);
                                                                                                                 $num_count = 1;
-                                                                                                                $number_of_rows = $related_categories_stmt->rowCount();
 
-                                                                                                                while ($row_cat = $related_categories_stmt->fetch(PDO::FETCH_ASSOC)) { ?>
-                                                                                                                        <a
-                                                                                                                                href="category.php?id=<?= htmlspecialchars($row_cat['category_id']) // Assuming you have a category page ?>"><?= htmlspecialchars($row_cat['categoryName']) ?></a>
-                                                                                                                        <?php
+                                                                                                                foreach ($related_categories_array as $cat_row) {
+                                                                                                                        // Link to shop.php instead of products.php
+                                                                                                                        echo '<a href="shop.php?category=' . htmlspecialchars($cat_row['category_id']) . '">' . htmlspecialchars($cat_row['name']) . '</a>';
                                                                                                                         if ($num_count < $number_of_rows) {
                                                                                                                                 echo ", ";
                                                                                                                         }
-                                                                                                                        ?>
-
-                                                                                                                        <?php $num_count++;
+                                                                                                                        $num_count++;
                                                                                                                 }
                                                                                                         } else {
-                                                                                                                // Handle the case where there are no related categories.
-                                                                                                                echo "N/A";
+                                                                                                                echo "Uncategorized";
                                                                                                         }
                                                                                                         ?>
+
                                                                                                 </div>
                                                                                                 <!-- End .product-cat -->
 
                                                                                                 <?php
+                                                                                                // This logic is already handled at the top of the file.
+                                                                                                // We can directly use the variables $can_add_review and $has_reviewed_message.
                                                                                                 if ($can_add_review):
                                                                                                         ?>
                                                                                                         <a href="product-review.php?inventory-item=<?= $currentInventoryItemId ?>&product_id=<?= $main_product_id_for_item ?>"
@@ -546,8 +545,6 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                                                                                 <?php else: ?>
                                                                                                         <?= $has_reviewed_message ?>
                                                                                                 <?php endif; ?>
-
-
                                                                                         </div>
                                                                                         <!-- End .product-details-footer -->
 
@@ -615,6 +612,9 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                                                                         </div><!-- End .reviews -->
                                                                 </div>
                                                         </div>
+
+                                                        <!--<h2 class="title text-center mb-4">You May Also Like</h2><!-- End .title text-center -->
+                                                        <?php //include "also-like.php" ?>
                                                 </div><!-- End .col-lg-9 -->
 
                                                 <aside class="col-lg-3">
@@ -632,6 +632,7 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
 
 
                                                                         <?php
+
                                                                         // $related_products_result = getrelatedproducts($category_id_from_inventory, $currentInventoryItemId, $mysqli);
                                                                         // Loop through $related_products_result if needed here, or handle via JS
                                                                         ?>
@@ -659,9 +660,9 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
         <!-- Mobile Menu -->
         <div class="mobile-menu-overlay"></div><!-- End .mobil-menu-overlay -->
 
-
+        <?php include "mobile-menue-index-page.php"; ?>
         <!-- Sign in / Register Modal -->
-
+        <?php include "login-modal.php"; ?>
 
         <!-- Plugins JS File -->
         <?php include "jsfile.php"; ?>
@@ -673,31 +674,44 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                 src="https://cdnjs.cloudflare.com/ajax/libs/simplePagination.js/1.6/jquery.simplePagination.min.js"></script>
 
         <script>
-
                 document.addEventListener('DOMContentLoaded', function () {
-                        <?php
-                        // Prepare HTML content for the toast
-                        $toast_html_content = '';
-                        if (isset($toast_message_for_js) && !empty($toast_message_for_js)) {
-                                if (isset($toast_icon_class_for_js) && !empty($toast_icon_class_for_js)) {
-                                        $toast_html_content .= '<i class="' . htmlspecialchars($toast_icon_class_for_js, ENT_QUOTES) . '"></i>&nbsp;';
-                                }
-                                $toast_html_content .= htmlspecialchars($toast_message_for_js, ENT_QUOTES);
-                        }
-
-                        if (!empty($toast_html_content)):
+                        <?php if (isset($alert_message_for_js) && !empty($alert_message_for_js)):
+                                // Prepare variables for JavaScript
+                                $alertType = addslashes($alert_type_for_js);
+                                $alertMessage = addslashes($alert_message_for_js);
                                 ?>
+                                const alertType = '<?= $alertType ?>';
+                                const alertMessage = '<?= $alertMessage ?>';
+
+                                let iconClass = 'fas fa-info-circle'; // Default icon
+                                let toastClass = 'github-toast-info';
+
+                                if (alertType === 'success') {
+                                        iconClass = 'fas fa-check-circle';
+                                        toastClass = 'github-toast-success';
+                                } else if (alertType === 'error') {
+                                        iconClass = 'fas fa-times-circle';
+                                        toastClass = 'github-toast-error';
+                                } else if (alertType === 'warning') {
+                                        iconClass = 'fas fa-exclamation-triangle';
+                                        toastClass = 'github-toast-warning';
+                                }
+
                                 Swal.fire({
                                         toast: true,
                                         position: 'top-end',
                                         showConfirmButton: false,
-                                        timer: 5000, // <<< Alert will disappear after 5 seconds
+                                        timer: 5000,
                                         timerProgressBar: true,
-                                        html: '<?= addslashes($toast_html_content) ?>',
-                                        title: false, // Set to false if 'html' provides all content
+                                        html: `<i class="${iconClass}"></i>&nbsp;&nbsp;${alertMessage}`,
                                         customClass: {
-                                                popup: 'themed-toast-popup',
-                                                htmlContainer: 'themed-toast-html-icon'
+                                                popup: `github-toast-popup ${toastClass}`,
+                                                htmlContainer: 'github-toast-html-icon'
+                                        },
+                                        showCloseButton: true,
+                                        didOpen: (toast) => {
+                                                toast.addEventListener('mouseenter', Swal.stopTimer)
+                                                toast.addEventListener('mouseleave', Swal.resumeTimer)
                                         }
                                 });
                         <?php endif; ?>
@@ -832,13 +846,31 @@ function getrelatedproducts($category_id, $exclude_item_id, $db_connection)
                 }
 
 
-
         </script>
 
 
 
 </body>
 <script src="assets/js/loadrelateditems.js"></script>
+<script type="text/javascript">
+        $(document).ready(function () {
+                $(".submit").click(function () {
+
+                        if ($('.size').length > 0) {
+                                var size = $('.size option:selected').val();
+                                if (size == "" || size == "#") {
+                                        Swal.fire('Error', 'Please select a size.', 'error');
+                                        return false;
+                                }
+                        }
+                });
+
+                // Auto-dismiss success alerts (like for review submissions) after 5 seconds.
+                $(".alert-success").delay(5000).slideUp(500, function () {
+                        $(this).remove();
+                });
+        });
+</script>
 
 
 

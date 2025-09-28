@@ -40,6 +40,30 @@ class Cart extends Promotion
     }
     return true;
   }
+
+  public function updateItemQuantity(int $productId, int $newQuantity): bool
+  {
+    if ($newQuantity <= 0) {
+      return $this->removeItemByProductId($productId);
+    }
+
+    if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) {
+      return false; // Cart is empty, nothing to update
+    }
+
+    $itemUpdated = false;
+    foreach ($_SESSION['cart'] as $key => &$item) {
+      if (is_array($item) && isset($item['inventory_product_id']) && $item['inventory_product_id'] == $productId) {
+        // For simplicity, this updates the first match. If you have size/color variants,
+        // you would need to match on those as well.
+        $item['quantity'] = $newQuantity;
+        $itemUpdated = true;
+        break; // Stop after updating the first match
+      }
+    }
+    unset($item); // Unset the reference
+    return $itemUpdated;
+  }
   // ... (rest of Cart class) ...
 
 

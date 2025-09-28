@@ -2,6 +2,7 @@
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
+
 require_once "includes.php"; // Main include file
 
 // Ensure user is logged in
@@ -49,14 +50,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             if ($phone_action === 'add_phone') {
                 $new_phone_number_input = filter_input(INPUT_POST, 'new_phone_number', FILTER_SANITIZE_STRING);
                 if (!empty($new_phone_number_input)) {
-                    if (preg_match('/^[0-9\-\+\s\(\)]{7,20}$/', $new_phone_number_input)) {
-                        if ($user->addPhoneNumber($user_id, $new_phone_number_input)) {
-                            $_SESSION['success_message'] = "Phone number added successfully.";
-                        } else {
-                            $_SESSION['error_message'] = "Failed to add phone number. It might already exist, you may have reached the maximum limit of 5 phone numbers, or an error occurred.";
-                        }
+                    // The addPhoneNumber method now returns the new phone_id on success or an error string
+                    $addResult = $user->addPhoneNumber($user_id, $new_phone_number_input);
+
+                    if (is_numeric($addResult) && $addResult > 0) {
+                        // On success, redirect to the verification page
+                        header("Location: verify-phone.php?phone_id=" . $addResult);
+                        exit();
                     } else {
-                        $_SESSION['error_message'] = "Invalid phone number format.";
+                        // If it's a string, it's an error message
+                        if (is_string($addResult)) {
+                            $_SESSION['error_message'] = $addResult;
+                        } else {
+                            $_SESSION['error_message'] = "Failed to add phone number. It might already exist or an error occurred.";
+                        }
                     }
                 } else {
                     $_SESSION['error_message'] = "Phone number cannot be empty.";
@@ -118,6 +125,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 try {
     $user_data = $user->getUserById($user_id); // Assuming this method exists in your User class
     if (!$user_data) {
+
         $_SESSION['error_message'] = "Could not retrieve your profile data.";
         header("Location: index.php"); // Or dashboard
         exit();
@@ -205,9 +213,29 @@ if (method_exists($user, 'getPhoneNumbersByUserId')) { // Check if method exists
                             </div>
 
                             <div class="form-group">
-                                <label for="email">Email Address <span class="text-danger">*</span></label>
-                                <input type="email" class="form-control" id="email" name="email"
-                                    value="<?= htmlspecialchars($user_data['email'] ?? ''); ?>" required>
+                                <label for="email">Email Address:</label>
+                                <div class="input-group">
+                                    <input type="email" class="form-control" id="email" name="email"
+                                        value="<?= htmlspecialchars($user_data['customer_email'] ?? ''); ?>" required>
+                                    <?php if ($user->isEmailVerified($user_id)): ?>
+                                        <div class="input-group-append">
+                                            <span class="input-group-text bg-success text-white">
+                                                <i class="icon-check"></i> Verified
+                                            </span>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="input-group-append">
+                                            <a href="verify_email.php" class="btn btn-warning"
+                                                title="Click to verify your email">
+                                                <i class="icon-exclamation-circle"></i> Verify Email
+                                            </a>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if (!$user->isEmailVerified($user_id)): ?>
+                                    <small class="form-text text-muted">Please verify your email address to unlock all account
+                                        features.</small>
+                                <?php endif; ?>
                             </div>
 
                             <div class="text-center">
@@ -240,14 +268,16 @@ if (method_exists($user, 'getPhoneNumbersByUserId')) { // Check if method exists
                                             <td><?= htmlspecialchars($phone['PhoneNumber']); ?></td>
                                             <td>
                                                 <?php if ($phone['default_']): ?>
-                                                    <span class="badge badge-success">Default</span>
+                                                    <span class="badge badge-success">Default</span> &nbsp;
                                                 <?php endif; ?>
-                                                <?php if (!$phone['is_active']): ?>
-                                                    <span class="badge badge-secondary">Inactive</span>
+                                                <?php if (!$phone['is_verified']): ?>
+                                                    <span class="badge badge-warning">Unverified</span>
+                                                <?php else: ?>
+                                                    <span class="badge badge-info">Verified</span>
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <?php if (!$phone['default_'] && $phone['is_active']): ?>
+                                                <?php if (!$phone['default_'] && $phone['is_verified']): ?>
                                                     <form action="edit_profile.php" method="POST" style="display: inline-block;">
                                                         <input type="hidden" name="csrf_token"
                                                             value="<?= htmlspecialchars($_SESSION['csrf_token']); ?>">
@@ -255,6 +285,12 @@ if (method_exists($user, 'getPhoneNumbersByUserId')) { // Check if method exists
                                                         <input type="hidden" name="phone_action" value="set_default_phone">
                                                         <button type="submit" class="btn btn-sm btn-info">Set as Default</button>
                                                     </form>
+                                                <?php endif; ?>
+                                                <?php if (!$phone['is_verified']): ?>
+                                                    <a href="verify-phone.php?phone_id=<?= $phone['phone_id']; ?>"
+                                                        class="btn btn-sm btn-success">
+                                                        Verify Now
+                                                    </a>
                                                 <?php endif; ?>
                                                 <form action="edit_profile.php" method="POST" style="display: inline-block;"
                                                     onsubmit="return confirm('Are you sure you want to delete this phone number?');">
@@ -283,10 +319,10 @@ if (method_exists($user, 'getPhoneNumbersByUserId')) { // Check if method exists
                                 <input type="tel" class="form-control" id="new_phone_number" name="new_phone_number"
                                     placeholder="Enter new phone number" required>
                             </div>
-                            <?php if ($user->countUserPhoneNumbers($user_id) < 5): ?>
-                                <button type="submit" class="btn btn-success">Add Phone</button>
+                            <?php if ($user->hasUnverifiedPhoneNumber($user_id)): ?>
+                                <p class="text-warning">You must verify your pending phone number before adding a new one.</p>
                             <?php else: ?>
-                                <p class="text-warning">You have reached the maximum limit of 5 phone numbers.</p>
+                                <button type="submit" class="btn btn-success">Add Phone</button>
                             <?php endif; ?>
                         </form>
 

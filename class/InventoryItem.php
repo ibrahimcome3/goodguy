@@ -192,6 +192,36 @@ class InventoryItem extends ProductItem
         }
     }
 
+    /**
+     * Fetches combined details for a product variant from the database.
+     *
+     * @param int $inventory_item_id The ID of the inventory item.
+     * @return array|false An associative array of product details or false if not found.
+     */
+    public function get_product_details($inventory_item_id)
+    {
+        // This query joins the inventory item with its parent product to get all details.
+        $sql = "SELECT
+                    inv.description,
+                    inv.cost,
+                    inv.price,
+                    inv.sku,
+                    inv.quantity,
+                    p.productID as parent_product_id
+                FROM inventoryitem AS inv
+                JOIN productitem AS p ON inv.productItemID = p.productID
+                WHERE inv.InventoryItemID = ?"; // Corrected to use inv.description
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$inventory_item_id]);
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error in get_product_details: " . $e->getMessage());
+            return false;
+        }
+    }
+
     // ... (rest of the methods, now using $this->pdo) ...
 
     function add_inventory_item()
@@ -356,9 +386,9 @@ class InventoryItem extends ProductItem
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    public function get_product_image($pdo, $inventory_item_id)
+    public function get_product_image($inventory_item_id)
     {
-        $stmt = $pdo->prepare("SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ? AND is_primary = 1 LIMIT 1");
+        $stmt = $this->pdo->prepare("SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ? AND is_primary = 1 LIMIT 1");
         $stmt->execute([$inventory_item_id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 

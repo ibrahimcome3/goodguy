@@ -17,7 +17,7 @@ $sort_by = isset($_GET['sort_by']) ? $_GET['sort_by'] : 'date_desc'; // Default 
 $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1; // Ensure page is at least 1
 $min_price_filter = isset($_GET['min_price']) && is_numeric($_GET['min_price']) ? (float) $_GET['min_price'] : null;
 $max_price_filter = isset($_GET['max_price']) && is_numeric($_GET['max_price']) ? (float) $_GET['max_price'] : null;
-$products_per_page = 12; // Number of products per page
+$products_per_page = 35; // Number of products per page
 $offset = ($page - 1) * $products_per_page;
 
 // --- Fetch Categories for Filter Sidebar ---
@@ -163,13 +163,17 @@ $base_sql = "
         ii.InventoryItemID, ii.cost, ii.description, ii.date_added,
         iii.image_path,
         p.productID,
-        cn.name AS cat_name, cn.category_id AS cat_id,
+        -- Get category data from categories table joined through product_categories
+        cat.name AS cat_name, 
+        cat.category_id AS cat_id,
         COALESCE(po_item.promoPrice, po_prod.promoPrice) AS promoPrice,
         COALESCE(po_item.regularPrice, po_prod.regularPrice) AS regularPrice
     FROM
         inventoryitem ii
     JOIN productitem p ON ii.productItemID = p.productID
-    JOIN categories cn ON p.category = cn.category_id
+    -- Join through product_categories to get category data
+    LEFT JOIN product_categories pc ON p.productID = pc.product_id
+    LEFT JOIN categories cat ON pc.category_id = cat.category_id
     LEFT JOIN inventory_item_image iii ON ii.InventoryItemID = iii.inventory_item_id AND iii.is_primary = 1
     LEFT JOIN promooffering po_item ON ii.InventoryItemID = po_item.inventory_item_id
                                     AND po_item.start_date <= NOW() AND po_item.end_date >= NOW()
@@ -187,8 +191,9 @@ if ($category_filter_identifier !== null) {
     if (!empty($category_ids_to_filter)) {
         // Create placeholders for IN clause (?, ?, ?)
         $in_placeholders = implode(',', array_fill(0, count($category_ids_to_filter), '?'));
-        $where_clauses[] = "cn.category_id IN ($in_placeholders)";
-        $params = array_merge($params, $category_ids_to_filter); // Add IDs to params array
+        // Use only the junction table for filtering since there's no column in productitem anymore
+        $where_clauses[] = "pc.category_id IN ($in_placeholders)";
+        $params = array_merge($params, $category_ids_to_filter);
     } else {
         // Category identifier provided but not found, show no results
         $where_clauses[] = "1 = 0"; // Force no results
@@ -210,6 +215,9 @@ if ($max_price_filter !== null) {
 
 // Combine WHERE clauses
 $sql = $base_sql . " WHERE " . implode(" AND ", $where_clauses);
+
+// Add GROUP BY to ensure each inventory item appears only once
+$sql .= " GROUP BY ii.InventoryItemID";
 
 // Sorting
 $order_by_sql = " ORDER BY ";
@@ -401,7 +409,8 @@ $total_pages = ceil($total_products / $products_per_page);
                                             $ratingWidth = $Orvi->get_rating_($itemId);
                                             $reviewCount = $Orvi->get_rating_review_number($itemId);
                                             ?>
-                                            <div class="col-6 col-md-4 col-lg-4"> <?php // Adjust grid columns as needed ?>
+                                            <div class="col-6 col-md-4 col-lg-3">
+                                                <?php // Changed col-lg-4 to col-lg-3 to show 4 products per row on large screens ?>
                                                 <div class="product product-7 text-center">
                                                     <figure class="product-media">
                                                         <?php if ($isPromo): ?><span

@@ -196,15 +196,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_cart'])) {
                                                         }
                                                         
                                                         try {
-                                                            $product_details = $invt->get_product_details($pdo, $product_id);
+                                                            $product_details = $invt->get_product_details($product_id);
                                                         } catch (Exception $e) {
                                                             error_log("Error fetching product details for ID {$product_id}: " . $e->getMessage());
                                                             echo "<tr><td colspan='5' class='text-danger'>Error loading product details for an item. It might have been removed.</td></tr>";
                                                             unset($_SESSION['cart'][$key]); // Remove problematic item
                                                             continue;
                                                         }
-
-
+ 
                                                         if (!$product_details) {
                                                             echo "<tr><td colspan='5' class='text-danger'>Product with ID {$product_id} not found. It may have been removed from the store.</td></tr>";
                                                             unset($_SESSION['cart'][$key]); // Remove item if product details not found
@@ -213,7 +212,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_cart'])) {
                                                         
                                                         $product_price = $product_details['cost'];
                                                         $product_name = $product_details['description'];
-                                                        $product_image = $invt->get_product_image($pdo, $product_id); // Assuming this returns a valid path or placeholder
+                                                        $product_image = $invt->get_product_image($product_id); // Assuming this returns a valid path or placeholder
 
                                                         $item_total = $product_price * $quantity;
                                                         $total_cost += $item_total;

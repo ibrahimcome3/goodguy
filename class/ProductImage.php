@@ -50,4 +50,29 @@ class ProductImage
         $stmt = $this->pdo->prepare("DELETE FROM product_images WHERE p_imgeid = ?");
         return $stmt->execute([$imageId]);
     }
+
+    function get_image($inventory_item_id)
+    {
+        // 1. Check for a dedicated thumbnail in the inventoryitem table first.
+        $stmt = $this->pdo->prepare("SELECT thumbnail FROM inventoryitem WHERE InventoryItemID = ?");
+        $stmt->execute([$inventory_item_id]);
+        $thumbnail = $stmt->fetchColumn();
+
+        // If a non-empty thumbnail path exists, use it.
+        if (!empty($thumbnail)) {
+            return $thumbnail;
+        }
+
+        // 2. If no thumbnail, fall back to the primary image in inventory_item_image.
+        $stmt = $this->pdo->prepare("SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ? AND `is_primary` = 1");
+        $stmt->execute([$inventory_item_id]);
+        $primaryImage = $stmt->fetchColumn();
+
+        if ($primaryImage) {
+            return $primaryImage;
+        }
+
+        // 3. If neither exists, return a default image.
+        return "e.jpg";
+    }
 }

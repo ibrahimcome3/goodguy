@@ -2,16 +2,182 @@
 
 class ProductItem
 {
-    private $timestamp;
-    protected $pdo; // Property to hold the PDO connection
+    protected $pdo;
 
-
-    function __construct(PDO $pdo) // Accept PDO connection in constructor
+    public function __construct($pdo)
     {
-        $this->pdo = $pdo; // Assign the passed PDO connection
-        $defaultTimeZone = 'UTC';
-        date_default_timezone_set($defaultTimeZone);
-        $this->timestamp = date('Y-m-d');
+        $this->pdo = $pdo;
+    }
+
+    /**
+     * Image utility function. Checks if a directory exists and creates it if not.
+     * Made static so it can be used without creating a ProductItem object.
+     *
+     * @param string $directoryPath The full path of the directory to check/create.
+     * @return bool True if the directory exists or was successfully created, false on failure.
+     */
+    public static function ensureDirectoryExists(string $directoryPath): bool
+    {
+        if (is_dir($directoryPath)) {
+            return true;
+        }
+        return @mkdir($directoryPath, 0777, true);
+    }
+
+    /**
+     * Image utility function. Resizes an image to a centered square canvas.
+     * Made static so it can be used without creating a ProductItem object.
+     *
+     * @param string $sourcePath Path to the original image.
+     * @param string $destPath Path to save the resized image.
+     * @param int $squareSize The width and height of the output square image.
+     * @return bool True on success, false on failure.
+     */
+    public static function resizeImage(string $sourcePath, string $destPath, int $squareSize): bool
+    {
+        [$sourceWidth, $sourceHeight, $sourceType] = getimagesize($sourcePath);
+        if ($sourceWidth === null)
+            return false;
+
+        $ratio = $sourceWidth / $sourceHeight;
+        if ($squareSize / $squareSize > $ratio) {
+            $newWidth = $squareSize * $ratio;
+            $newHeight = $squareSize;
+        } else {
+            $newHeight = $squareSize / $ratio;
+            $newWidth = $squareSize;
+        }
+
+        $destImage = imagecreatetruecolor($squareSize, $squareSize);
+        $white = imagecolorallocate($destImage, 255, 255, 255);
+        imagefill($destImage, 0, 0, $white);
+
+        switch ($sourceType) {
+            case IMAGETYPE_JPEG:
+                $sourceImage = imagecreatefromjpeg($sourcePath);
+                break;
+            case IMAGETYPE_PNG:
+                $sourceImage = imagecreatefrompng($sourcePath);
+                imagealphablending($destImage, true);
+                imagesavealpha($destImage, true);
+                break;
+            case IMAGETYPE_GIF:
+                $sourceImage = imagecreatefromgif($sourcePath);
+                break;
+            case IMAGETYPE_WEBP:
+                $sourceImage = imagecreatefromwebp($sourcePath);
+                imagealphablending($destImage, true);
+                imagesavealpha($destImage, true);
+                break;
+            default:
+                return false;
+        }
+
+        $dest_x = ($squareSize - $newWidth) / 2;
+        $dest_y = ($squareSize - $newHeight) / 2;
+
+        imagecopyresampled($destImage, $sourceImage, $dest_x, $dest_y, 0, 0, $newWidth, $newHeight, $sourceWidth, $sourceHeight);
+
+        $success = false;
+        switch ($sourceType) {
+            case IMAGETYPE_JPEG:
+                $success = imagejpeg($destImage, $destPath, 85);
+                break;
+            case IMAGETYPE_PNG:
+                $success = imagepng($destImage, $destPath, 6);
+                break;
+            case IMAGETYPE_GIF:
+                $success = imagegif($destImage, $destPath);
+                break;
+            case IMAGETYPE_WEBP:
+                $success = imagewebp($destImage, $destPath, 85);
+                break;
+        }
+
+        imagedestroy($sourceImage);
+        imagedestroy($destImage);
+
+        return $success;
+    }
+
+    /**
+     * Adds a new product and links it to one or more categories.
+     *
+     * @param array $data Associative array of product data.
+     *                    Expected keys: 'product_name', 'categories' (array), 'vendor_id', 
+     *                                   'collection_id', 'status', 'description'.
+     * @return int|false The ID of the newly created product, or false on failure.
+     */
+    public function addProduct(array $data)
+    {
+
+
+        // Ensure categories are provided and are in an array format.
+        if (empty($data['categories']) || !is_array($data['categories'])) {
+            error_log("ProductItem::addProduct error: No categories array provided.");
+            return false;
+        }
+
+        // Use the first category in the array as the primary category for the main table.
+        $primary_category_id = $data['categories'][0];
+
+        $sql = "INSERT INTO productitem (
+                    product_name, 
+                    vendor_id, 
+                    collection_id, 
+                    status,
+                    product_information, 
+                    date_added
+                ) VALUES (
+                    :product_name, 
+                    :vendor_id, 
+                    :collection_id, 
+                    :status, 
+                    :description, 
+                    NOW()
+                )";
+
+        //try {
+        // The calling script (add-product.php) should handle the overall transaction.
+        $stmt = $this->pdo->prepare($sql);
+
+        $params = [
+            ':product_name' => $data['product_name'],
+            ':vendor_id' => $data['vendor_id'],
+            ':collection_id' => $data['collection_id'] ?? null,
+            ':status' => $data['status'],
+            ':description' => $data['description']
+        ];
+
+        $stmt->execute($params);
+        $productId = $this->pdo->lastInsertId();
+
+        if (!$productId) {
+            return false; // Failed to insert the main product record.
+        }
+
+        // Now, insert all category associations into the junction table.
+        $sqlJunction = "INSERT INTO product_categories (product_id, category_id) VALUES (:product_id, :category_id)";
+        $stmtJunction = $this->pdo->prepare($sqlJunction);
+
+        foreach ($data['categories'] as $categoryId) {
+            if (!is_numeric($categoryId)) {
+                error_log("ProductItem::addProduct error: Invalid category ID.");
+                continue; // Skip invalid category IDs.
+            }
+            $stmtJunction->execute([
+                ':product_id' => $productId,
+                ':category_id' => (int) $categoryId
+            ]);
+        }
+
+        return $productId;
+
+        // } catch (PDOException $e) {
+        //     // Log the specific database error for debugging purposes.
+        //     error_log("Database error in ProductItem::addProduct: " . $e->getMessage());
+        //     return false;
+        // }
     }
 
 
@@ -122,22 +288,212 @@ class ProductItem
 
     }
 
-    public function getProductById($productId) // Removed $mysqli parameter
+    public function getProductById($id)
     {
-        $sql = "SELECT * FROM productitem WHERE productID = ?";
-        $stmt = $this->pdo->prepare($sql); // Use $this->pdo
-        if (!$stmt) {
-            error_log("Error preparing statement: " . implode(", ", $this->pdo->errorInfo()));
-            return false;
+        $stmt = $this->pdo->prepare("SELECT * FROM productitem WHERE productID = ?");
+        $stmt->execute([$id]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Gets all image records for a specific product ID.
+     * It ensures the primary image (defined in the productitem table) is listed first.
+     *
+     * @param int $productId The ID of the product.
+     * @return array An array of image records.
+     */
+    public function getImagesByProductId(int $productId): array
+    {
+        try {
+            // First, get the filename of the primary image from the productitem table.
+            $stmt = $this->pdo->prepare("SELECT primary_image FROM productitem WHERE productID = ?");
+            $stmt->execute([$productId]);
+            $primaryImageFile = $stmt->fetchColumn();
+
+            // Now, get all images, ordering by the primary image filename first.
+            $sql = "SELECT p_imgeid, image_path 
+                    FROM product_images 
+                    WHERE product_id = :product_id 
+                    ORDER BY 
+                        CASE 
+                            WHEN `image` = :primary_image THEN 0 
+                            ELSE 1 
+                        END, 
+                        p_imgeid ASC";
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([
+                ':product_id' => $productId,
+                ':primary_image' => $primaryImageFile
+            ]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        } catch (PDOException $e) {
+            error_log("Database error in ProductItem::getImagesByProductId: " . $e->getMessage());
+            return [];
         }
-        // $stmt->bind_param("i", $productId); // mysqli style
-        // $stmt->execute(); // mysqli style
-        $stmt->execute([$productId]); // PDO style
-        // $result = $stmt->get_result(); // mysqli style
-        if ($stmt->rowCount() > 0) { // PDO style
-            return $stmt->fetch(PDO::FETCH_ASSOC); // PDO style
+    }
+
+    /**
+     * Handles uploading multiple images for a product, resizing them, and saving them to the database.
+     * This is a reusable and robust method for handling product image uploads.
+     *
+     * @param int $productId The ID of the product to associate images with.
+     * @param array $files The $_FILES array for the uploaded images (e.g., $_FILES['images']).
+     * @return array An associative array with 'success' (bool), 'files' (array of uploaded filenames), and 'errors' (array of error messages).
+     */
+    public function uploadProductImages(int $productId, array $files): array
+    {
+        $uploadedFiles = [];
+        $errors = [];
+        $allowedTypes = [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_GIF, IMAGETYPE_WEBP];
+
+        // Define and ensure directories exist using the class's static method
+        $productDir = realpath(__DIR__ . "/../") . "/products/product-{$productId}";
+        $imageDir = "{$productDir}/product-{$productId}-image";
+        $resizedDir = "{$imageDir}/resized";
+
+        if (!self::ensureDirectoryExists($resizedDir)) {
+            return ['success' => false, 'files' => [], 'errors' => ["Failed to create required image directories."]];
         }
-        return false;
+
+        // Normalize the $_FILES array to handle multiple uploads consistently
+        $normalizedFiles = [];
+        if (isset($files['name']) && is_array($files['name'])) {
+            foreach ($files['name'] as $key => $name) {
+                if ($files['error'][$key] === UPLOAD_ERR_NO_FILE) {
+                    continue;
+                }
+                $normalizedFiles[] = [
+                    'name' => $name,
+                    'tmp_name' => $files['tmp_name'][$key],
+                    'error' => $files['error'][$key],
+                ];
+            }
+        }
+
+        if (empty($normalizedFiles)) {
+            return ['success' => false, 'files' => [], 'errors' => ["No files were uploaded."]];
+        }
+
+        foreach ($normalizedFiles as $file) {
+            if ($file['error'] !== UPLOAD_ERR_OK) {
+                $errors[] = "Upload error for {$file['name']}: Error code " . $file['error'];
+                continue;
+            }
+
+            $detectedType = @exif_imagetype($file['tmp_name']);
+            if (!in_array($detectedType, $allowedTypes)) {
+                $errors[] = "File type not allowed for {$file['name']}.";
+                continue;
+            }
+
+            $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+            $uniqueName = time() . '_' . uniqid() . '.' . $ext;
+
+            $originalPath = "{$imageDir}/{$uniqueName}";
+            $resizedPath = "{$resizedDir}/{$uniqueName}";
+
+            if (move_uploaded_file($file['tmp_name'], $originalPath)) {
+                if (self::resizeImage($originalPath, $resizedPath, 600)) {
+                    $dbPath = "products/product-{$productId}/product-{$productId}-image/resized/{$uniqueName}";
+                    $this->pdo->prepare("INSERT INTO product_images (product_id, image, image_path, created_at) VALUES (?, ?, ?, NOW())")->execute([$productId, $uniqueName, $dbPath]);
+                    $uploadedFiles[] = $uniqueName;
+                } else {
+                    $errors[] = "Failed to resize image {$uniqueName}.";
+                    @unlink($originalPath);
+                }
+            } else {
+                $errors[] = "Failed to move uploaded file {$file['name']}.";
+            }
+        }
+
+        return ['success' => empty($errors), 'files' => $uploadedFiles, 'errors' => $errors];
+    }
+
+    /**
+     * Deletes a product image from the database and filesystem.
+     * If the deleted image was the primary one, it promotes the next available image.
+     *
+     * @param int $productId The ID of the product.
+     * @param string $filename The filename of the image to delete.
+     * @return array An associative array with 'success' (bool) and 'errors' (array).
+     */
+    public function deleteProductImage(int $productId, string $filename): array
+    {
+        // 1. Get image details from the database to verify ownership and get ID.
+        $stmt = $this->pdo->prepare("SELECT p_imgeid FROM product_images WHERE product_id = ? AND image = ?");
+        $stmt->execute([$productId, $filename]);
+        $imageRecord = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$imageRecord) {
+            return ['success' => false, 'errors' => ['Image record not found in the database for this product.']];
+        }
+        $imageId = $imageRecord['p_imgeid'];
+
+        // 2. Check if it's the primary image for the product.
+        $product = $this->getProductById($productId);
+        $isPrimary = ($product && $product['primary_image'] === $filename);
+
+        $this->pdo->beginTransaction();
+
+        try {
+            // 3. Delete the database record.
+            $deleteStmt = $this->pdo->prepare("DELETE FROM product_images WHERE p_imgeid = ?");
+            $deleteStmt->execute([$imageId]);
+
+            // 4. If it was the primary image, find and set a new primary image.
+            if ($isPrimary) {
+                $nextPrimaryStmt = $this->pdo->prepare("SELECT image FROM product_images WHERE product_id = ? ORDER BY p_imgeid ASC LIMIT 1");
+                $nextPrimaryStmt->execute([$productId]);
+                $newPrimaryFilename = $nextPrimaryStmt->fetchColumn(); // Returns filename or false
+
+                // Update productitem with the new primary image, or NULL if no images are left.
+                $updateProductStmt = $this->pdo->prepare("UPDATE productitem SET primary_image = ? WHERE productID = ?");
+                $updateProductStmt->execute([$newPrimaryFilename ?: null, $productId]);
+            }
+
+            // 5. Delete the physical files.
+            $baseDir = realpath(__DIR__ . "/../");
+            $originalPath = "{$baseDir}/products/product-{$productId}/product-{$productId}-image/{$filename}";
+            $resizedPath = "{$baseDir}/products/product-{$productId}/product-{$productId}-image/resized/{$filename}";
+
+            if (file_exists($resizedPath)) {
+                @unlink($resizedPath);
+            }
+            if (file_exists($originalPath)) {
+                @unlink($originalPath);
+            }
+
+            $this->pdo->commit();
+            return ['success' => true, 'errors' => []];
+
+        } catch (Exception $e) {
+            $this->pdo->rollBack();
+            error_log("Error in deleteProductImage for product #{$productId}, file {$filename}: " . $e->getMessage());
+            return ['success' => false, 'errors' => ['A database error occurred.']];
+        }
+    }
+
+    public function getPriceRange($productId)
+    {
+        $sql = "SELECT MIN(price) AS min_price, MAX(price) AS max_price FROM inventoryitem WHERE productItemID = ?";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$productId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($row && $row['min_price'] !== null) {
+            $minPrice = (float) $row['min_price'];
+            $maxPrice = (float) $row['max_price'];
+
+            if ($minPrice == $maxPrice) {
+                return '$' . number_format($minPrice, 2);
+            }
+            return '$' . number_format($minPrice, 2) . ' - $' . number_format($maxPrice, 2);
+        }
+
+        // Fallback if no variants or prices are set for the product
+        return '$0.00';
     }
 
     /**
@@ -198,34 +554,32 @@ class ProductItem
      * @return bool True on success, false on failure.
      */
 
-
     function makeInventoryItemDirectory($productId, $inventoryItemId)
     {
         $productDir = "../products/product-" . $productId;
 
-        if (!is_dir($productDir)) {  //Check if the product directory exists
-            return false; // Or create it if you want: mkdir($productDir, 0777, true);
+        if (!is_dir($productDir)) {
+            return false;
         }
 
         $inventoryDir = $productDir . "/inventory-" . $productId . "-" . $inventoryItemId;
         $resizedDir = $inventoryDir . "/resized";
         $resized600Dir = $inventoryDir . "/resized_600";
-        echo $resizedDir;
-        echo $resized600Dir;
 
         if (!is_dir($inventoryDir)) {
             mkdir($inventoryDir, 0777, true);
-            if (!is_dir($resizedDir)) {   //Resized subdir
+
+            if (!is_dir($resizedDir)) {
                 mkdir($resizedDir, 0777, true);
             }
 
-            if (!is_dir($resized600Dir)) { //Resized 600 subdir
-                mkdir($resized600Dir, 0777, recursive: true);
+            if (!is_dir($resized600Dir)) {
+                mkdir($resized600Dir, 0777, true); // removed named parameter
             }
             return true;
         }
 
-
+        return true; // ensure a boolean is always returned
     }
     function getTotalProductCount()
     {
@@ -274,15 +628,27 @@ class ProductItem
 
     function get_image($inventory_item_id)
     {
-        $stmt = $this->pdo->prepare("select * from inventory_item_image where inventory_item_id = ? and `is_primary` = 1");
+        // 1. Check for a dedicated thumbnail in the inventoryitem table first.
+        $stmt = $this->pdo->prepare("SELECT thumbnail FROM inventoryitem WHERE InventoryItemID = ?");
         $stmt->execute([$inventory_item_id]);
-        $row = $stmt->fetch();
-        if ($stmt->rowCount() > 0)
-            return $row['image_path'];
-        else
-            return "e.jpg";
+        $thumbnail = $stmt->fetchColumn();
 
+        // If a non-empty thumbnail path exists, use it.
+        if (!empty($thumbnail)) {
+            return $thumbnail;
+        }
 
+        // 2. If no thumbnail, fall back to the primary image in inventory_item_image.
+        $stmt = $this->pdo->prepare("SELECT image_path FROM inventory_item_image WHERE inventory_item_id = ? AND `is_primary` = 1");
+        $stmt->execute([$inventory_item_id]);
+        $primaryImage = $stmt->fetchColumn();
+
+        if ($primaryImage) {
+            return $primaryImage;
+        }
+
+        // 3. If neither exists, return a default image.
+        return "e.jpg";
     }
     function getbrand()
     {
@@ -763,57 +1129,58 @@ class ProductItem
 
 
     //Improved image resizing function; handles more image types
-    function resizeImage($source, $destination, $width, $height)
-    {
-        list($originalWidth, $originalHeight, $imageType) = getimagesize($source);
-        $image = null;
+    // function resizeImage($source, $destination, $width, $height)
+    // {
+    //     list($originalWidth, $originalHeight, $imageType) = getimagesize($source);
+    //     $image = null;
 
-        switch ($imageType) {
-            case IMAGETYPE_JPEG:
-                $image = imagecreatefromjpeg($source);
-                break;
-            case IMAGETYPE_PNG:
-                $image = imagecreatefrompng($source);
-                // Handle transparency for PNG to JPEG conversion
-                // Create a new true color image with a white background
-                $bg = imagecreatetruecolor($originalWidth, $originalHeight);
-                $white = imagecolorallocate($bg, 255, 255, 255);
-                imagefill($bg, 0, 0, $white);
-                imagecopy($bg, $image, 0, 0, 0, 0, $originalWidth, $originalHeight);
-                imagedestroy($image); // Free original PNG resource
-                $image = $bg; // Use the image with white background
-                break;
-            case IMAGETYPE_GIF:
-                $image = imagecreatefromgif($source);
-                break;
-            default:
-                error_log("Unsupported image type for resizing: " . image_type_to_mime_type($imageType) . " for source: " . $source);
-                return false; // Unsupported image type
-        }
+    //     switch ($imageType) {
+    //         case IMAGETYPE_JPEG:
+    //             $image = imagecreatefromjpeg($source);
+    //             break;
+    //         case IMAGETYPE_PNG:
+    //             $image = imagecreatefrompng($source);
+    //             // Handle transparency for PNG to JPEG conversion
+    //             // Create a new true color image with a white background
+    //             $bg = imagecreatetruecolor($originalWidth, $originalHeight);
+    //             $white = imagecolorallocate($bg, 255, 255, 255);
+    //             imagefill($bg, 0, 0, $white);
+    //             imagecopy($bg, $image, 0, 0, 0, 0, $originalWidth, $originalHeight);
+    //             imagedestroy($image); // Free original PNG resource
+    //             $image = $bg; // Use the image with white background
+    //             break;
+    //         case IMAGETYPE_GIF:
+    //             $image = imagecreatefromgif($source);
+    //             break;
+    //         default:
+    //             error_log("Unsupported image type for resizing: " . image_type_to_mime_type($imageType) . " for source: " . $source);
+    //             return false; // Unsupported image type
+    //     }
 
 
-        $aspect_ratio = $originalWidth / $originalHeight;
-        if ($width / $height > $aspect_ratio) {
-            $width = $height * $aspect_ratio;
-        } else {
-            $height = $width / $aspect_ratio;
-        }
-        $resizedImage = imagecreatetruecolor($height, $height);
-        $x = ($width / 2) - ($width / 2);
-        $y = ($height / 2) - ($height / 2);
-        $color = imagecolorallocate($resizedImage, 255, 255, 255);
-        imagefill($resizedImage, 0, 0, $color);
-        imagecopyresampled($resizedImage, $image, $x, $y, 0, 0, $width, $height, $originalWidth, $originalHeight);
-        imagejpeg($resizedImage, $destination, 100); // Save as JPEG
-        imagedestroy($resizedImage);
-        return true;
-    }
+    //     $aspect_ratio = $originalWidth / $originalHeight;
+    //     if ($width / $height > $aspect_ratio) {
+    //         $width = $height * $aspect_ratio;
+    //     } else {
+    //         $height = $width / $aspect_ratio;
+    //     }
+    //     $resizedImage = imagecreatetruecolor($height, $height);
+    //     $x = ($width / 2) - ($width / 2);
+    //     $y = ($height / 2) - ($height / 2);
+    //     $color = imagecolorallocate($resizedImage, 255, 255, 255);
+    //     imagefill($resizedImage, 0, 0, $color);
+    //     imagecopyresampled($resizedImage, $image, $x, $y, 0, 0, $width, $height, $originalWidth, $originalHeight);
+    //     imagejpeg($resizedImage, $destination, 100); // Save as JPEG
+    //     imagedestroy($resizedImage);
+    //     return true;
+    // }
 
 
 
 
     function imageprocessorforproductInInventory1($product_item, $file, $i, $c = 0, $last_id = 0)
     {
+
         // $product_item = 140;
         // $file = $_FILES['image'];
         // $i = 0;
@@ -1380,26 +1747,155 @@ class ProductItem
      * @param int $productId The ID of the parent product.
      * @return string A formatted price or price range.
      */
-    public function getPriceRange(int $productId): string
+    // public function getPriceRange(int $productId): string
+    // {
+    //     $sql = "SELECT MIN(price) AS min_price, MAX(price) AS max_price FROM inventoryitem WHERE productItemID = ?";
+    //     $stmt = $this->pdo->prepare($sql);
+    //     $stmt->execute([$productId]);
+    //     $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    //     if ($row && $row['min_price'] !== null) {
+    //         $minPrice = (float) $row['min_price'];
+    //         $maxPrice = (float) $row['max_price'];
+
+    //         if ($minPrice == $maxPrice) {
+    //             return '$' . number_format($minPrice, 2);
+    //         }
+    //         return '$' . number_format($minPrice, 2) . ' - $' . number_format($maxPrice, 2);
+    //     }
+
+    //     // Fallback if no variants or prices are set for the product
+    //     return '$0.00';
+    // }
+
+    /**
+     * Registers a phone number for a customer in the phonenumber table.
+     * Can set the number as default and active.
+     *
+     * @param int $customerId The customer ID to associate with this phone number
+     * @param string $phoneNumber The phone number to register (should be sanitized/validated before calling)
+     * @param bool $isDefault Whether this phone number should be the default one (true) or not (false)
+     * @param bool $isActive Whether this phone number is active (true) or not (false)
+     * @return int|false The ID of the newly registered phone number, or false on failure
+     */
+    public function registerPhoneNumber(int $customerId, string $phoneNumber, bool $isDefault = false, bool $isActive = true)
     {
-        $sql = "SELECT MIN(price) AS min_price, MAX(price) AS max_price FROM inventoryitem WHERE productItemID = ?";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$productId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if ($row && $row['min_price'] !== null) {
-            $minPrice = (float) $row['min_price'];
-            $maxPrice = (float) $row['max_price'];
-
-            if ($minPrice == $maxPrice) {
-                return '$' . number_format($minPrice, 2);
+        try {
+            // If this is going to be the default phone, un-set any existing default phones
+            if ($isDefault) {
+                $resetDefaultStmt = $this->pdo->prepare("
+                    UPDATE phonenumber 
+                    SET default_ = 0 
+                    WHERE CustomerID = ? AND default_ = 1
+                ");
+                $resetDefaultStmt->execute([$customerId]);
             }
-            return '$' . number_format($minPrice, 2) . ' - $' . number_format($maxPrice, 2);
-        }
 
-        // Fallback if no variants or prices are set for the product
-        return '$0.00';
+            // Insert the new phone number
+            $insertStmt = $this->pdo->prepare("
+                INSERT INTO phonenumber (CustomerID, PhoneNumber, default_, is_active)
+                VALUES (?, ?, ?, ?)
+            ");
+
+            $defaultValue = $isDefault ? 1 : 0;
+            $activeValue = $isActive ? 1 : 0;
+
+            $insertStmt->execute([
+                $customerId,
+                $phoneNumber,
+                $defaultValue,
+                $activeValue
+            ]);
+
+            return $this->pdo->lastInsertId();
+        } catch (PDOException $e) {
+            error_log("Error registering phone number: " . $e->getMessage());
+            return false;
+        }
     }
 
+    /**
+     * Gets all phone numbers associated with a customer.
+     *
+     * @param int $customerId The customer ID to find phone numbers for
+     * @return array An array of phone number records
+     */
+    public function getCustomerPhoneNumbers(int $customerId): array
+    {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT phone_id, CustomerID, PhoneNumber, default_, is_active 
+                FROM phonenumber 
+                WHERE CustomerID = ?
+                ORDER BY default_ DESC, is_active DESC, phone_id ASC
+            ");
+            $stmt->execute([$customerId]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error fetching customer phone numbers: " . $e->getMessage());
+            return [];
+        }
+
+    }
+
+    /**
+     * Updates an existing phone number record.
+     *
+     * @param int $phoneId The ID of the phone number to update
+     * @param array $data Associative array with keys 'PhoneNumber', 'default_', and/or 'is_active'
+     * @return bool True on success, false on failure
+     */
+    public function updatePhoneNumber(int $phoneId, array $data): bool
+    {
+        try {
+            // If setting this as default, first unset any existing defaults
+            if (isset($data['default_']) && $data['default_'] == 1) {
+                // First get the customer ID
+                $stmt = $this->pdo->prepare("SELECT CustomerID FROM phonenumber WHERE phone_id = ?");
+                $stmt->execute([$phoneId]);
+                $customerId = $stmt->fetchColumn();
+
+                if ($customerId) {
+                    $resetStmt = $this->pdo->prepare("
+                        UPDATE phonenumber 
+                        SET default_ = 0 
+                        WHERE CustomerID = ? AND default_ = 1 AND phone_id != ?
+                    ");
+                    $resetStmt->execute([$customerId, $phoneId]);
+                }
+            }
+
+            // Build the update SQL dynamically based on provided fields
+            $sql = "UPDATE phonenumber SET ";
+            $params = [];
+
+            if (isset($data['PhoneNumber'])) {
+                $sql .= "PhoneNumber = ?, ";
+                $params[] = $data['PhoneNumber'];
+            }
+
+            if (isset($data['default_'])) {
+                $sql .= "default_ = ?, ";
+                $params[] = $data['default_'];
+            }
+
+            if (isset($data['is_active'])) {
+                $sql .= "is_active = ?, ";
+                $params[] = $data['is_active'];
+            }
+
+            // Remove trailing comma and space
+            $sql = rtrim($sql, ', ');
+
+            $sql .= " WHERE phone_id = ?";
+            $params[] = $phoneId;
+
+            $stmt = $this->pdo->prepare($sql);
+            return $stmt->execute($params);
+        } catch (PDOException $e) {
+            error_log("Error updating phone number: " . $e->getMessage());
+            return false;
+        }
+    }
 }
 ?>

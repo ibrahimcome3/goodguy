@@ -879,6 +879,12 @@
 <link href="phoenix-v1.20.1/public/assets/css/user-rtl.min.css" type="text/css" rel="stylesheet" id="user-style-rtl"
     disabled="true">
 <link href="phoenix-v1.20.1/public/assets/css/user.min.css" type="text/css" rel="stylesheet" id="user-style-default">
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    integrity="sha512-DTOQO9RWCH3ppGqcWaEA1B4PZf0fE6Wc1B+...YOURHASH..." crossorigin="anonymous"
+    referrerpolicy="no-referrer" />
+<!-- If using Bootstrap Icons too (optional) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
 <script>
     var phoenixIsRTL = window.config.config.phoenixIsRTL;
     if (phoenixIsRTL) {

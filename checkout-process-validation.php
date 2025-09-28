@@ -199,8 +199,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                                 <?php foreach ($cartItems as $item) { ?>
                                     <tr>
                                         <td>
-                                            <?php if (!empty($invt->get_product_image($pdo, $item['product']['InventoryItemID']))): ?>
-                                                <img src="<?= $invt->get_product_image($pdo, $item['product']['InventoryItemID']) ?>"
+                                            <?php if (!empty($invt->get_product_image($item['product']['InventoryItemID']))): ?>
+                                                <img src="<?= $invt->get_product_image($item['product']['InventoryItemID']) ?>"
                                                     alt="<?= htmlspecialchars($item['product']['description']) ?>"
                                                     style="width: 60px; height: 60px; object-fit: cover; display: block;">
                                                 <!-- Added display: block for better centering if padding is on td -->

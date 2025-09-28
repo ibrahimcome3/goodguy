@@ -4,130 +4,175 @@ class Vendor
 {
     private $pdo;
 
+    /**
+     * Constructor for the Vendor class.
+     *
+     * @param PDO $pdo The PDO database connection object.
+     */
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
     }
 
     /**
-     * Fetches a vendor's profile by their user ID.
+     * Fetches a vendor's profile by their user ID. Returns false if not found.
      *
-     * @param integer $userId
+     * @param int $userId
      * @return array|false
      */
     public function getVendorByUserId(int $userId)
     {
-        $sql = "SELECT * FROM vendors WHERE user_id = :user_id";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute(['user_id' => $userId]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * Inserts a new vendor into the database.
-     *
-     * @param array $vendorData
-     * @return mixed The new vendor ID on success, 'duplicated' if exists, or false on failure.
-     */
-    public function insertVendor(array $vendorData): mixed
-    {
-        if ($this->getVendorByUserId($vendorData['user_id'])) {
-            return "duplicated";
+        try {
+            $sql = "SELECT * FROM vendors WHERE user_id = :user_id";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([':user_id' => $userId]);
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error fetching vendor by user ID {$userId}: " . $e->getMessage());
+            return false;
         }
-
-        $sql = "INSERT INTO vendors (user_id, contact_name, business_name, business_email, business_phone, business_address, description, status)
-            VALUES (:user_id, :contact_name, :business_name, :business_email, :business_phone, :business_address, :description, :status)";
-
-        $stmt = $this->pdo->prepare($sql);
-
-        $params = [
-            ':user_id' => $vendorData['user_id'],
-            ':contact_name' => $vendorData['contact_name'],
-            ':business_name' => $vendorData['business_name'],
-            ':business_email' => $vendorData['business_email'],
-            ':business_phone' => $vendorData['business_phone'] ?? null,
-            ':business_address' => $vendorData['business_address'] ?? null,
-            ':description' => $vendorData['description'] ?? null,
-            ':status' => $vendorData['status'] ?? 'pending',
-        ];
-
-        if ($stmt->execute($params)) {
-            return $this->pdo->lastInsertId();
-        }
-
-        return false;
     }
 
     /**
-     * Updates a vendor's business name and description.
+     * Fetches a vendor's profile by their vendor ID. Returns false if not found.
      *
-     * @param integer $userId
-     * @param string $businessName
-     * @param string $description
-     * @return boolean
+     * @param int $vendorId
+     * @return array|false
      */
-    public function updateVendorDetails(int $userId, string $businessName, string $description): bool
-    {
-        $sql = "UPDATE vendors SET business_name = :business_name, description = :description WHERE user_id = :user_id";
-        $stmt = $this->pdo->prepare($sql);
-        return $stmt->execute([
-            ':business_name' => $businessName,
-            ':description' => $description,
-            ':user_id' => $userId
-        ]);
-    }
-
-    /**
-     * Updates a vendor's status.
-     *
-     * @param integer $vendorId
-     * @param string $status
-     * @return boolean
-     */
-    public function updateVendorStatus(int $vendorId, string $status): bool
-    {
-        $sql = "UPDATE vendors SET status = :status WHERE vendor_id = :vendor_id";
-        $stmt = $this->pdo->prepare($sql);
-        return $stmt->execute([':status' => $status, ':vendor_id' => $vendorId]);
-    }
-
-    public function getVendorById($vendorId)
-    {
-        $sql = "SELECT * FROM vendors WHERE vendor_id = ?";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$vendorId]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
-    }
-
-    public function getAllVendors()
-    {
-        $sql = "SELECT * FROM vendors ORDER BY business_name ASC";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute();
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * Get all users who are not currently registered as vendors
-     *
-     * @return array List of users not registered as vendors
-     */
-    public function getUsersNotVendors(): array
+    public function getVendorById(int $vendorId)
     {
         try {
-            // Query to get all users who don't have a vendor account
-            $sql = "SELECT c.customer_id, c.username, c.customer_email, c.first_name, c.last_name 
-                    FROM customers c
-                    LEFT JOIN vendors v ON c.customer_id = v.user_id
-                    WHERE v.vendor_id IS NULL
-                    ORDER BY c.username";
+            $sql = "SELECT * FROM vendors WHERE vendor_id = :vendor_id";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([':vendor_id' => $vendorId]);
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error fetching vendor by ID {$vendorId}: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Fetches a single vendor's details by their vendor ID, including user info.
+     *
+     * @param int $vendorId
+     * @return array|false
+     */
+    public function getVendorDetailsById(int $vendorId)
+    {
+        try {
+            $sql = "SELECT v.*, c.username, c.customer_email, c.customer_fname, c.customer_lname
+                    FROM vendors v
+                    LEFT JOIN customer c ON v.user_id = c.customer_id
+                    WHERE v.vendor_id = :vendor_id";
 
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute();
+            $stmt->execute([':vendor_id' => $vendorId]);
 
+            $vendor = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($vendor) {
+                // Ensure all fields that should be strings are strings
+                $stringFields = ['business_name', 'contact_name', 'business_phone', 'business_address', 'status'];
+                foreach ($stringFields as $field) {
+                    // Convert any null values to empty strings
+                    if (isset($vendor[$field]) && $vendor[$field] === null) {
+                        $vendor[$field] = '';
+                    }
+
+                    // Convert any array values to strings
+                    if (isset($vendor[$field]) && is_array($vendor[$field])) {
+                        $vendor[$field] = implode(", ", $vendor[$field]);
+                    }
+                }
+            }
+
+            return $vendor ?: false;
+        } catch (PDOException $e) {
+            error_log("Error fetching vendor details: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Fetches all vendors, optionally with pagination and search.
+     * Joins with the customer table to get user details.
+     * @param string $searchTerm
+     * @param int $limit
+     * @param int $offset
+     * @return array
+     */
+    public function getPaginatedVendors(string $searchTerm = '', int $limit = 15, int $offset = 0): array
+    {
+        $sql = "SELECT v.*, c.username, c.customer_email 
+                FROM vendors v
+                JOIN customer c ON v.user_id = c.customer_id";
+
+        $params = [];
+        if (!empty($searchTerm)) {
+            $sql .= " WHERE v.business_name LIKE :searchTerm OR c.username LIKE :searchTerm OR c.customer_email LIKE :searchTerm";
+            $params[':searchTerm'] = "%$searchTerm%";
+        }
+
+        $sql .= " ORDER BY v.created_at DESC LIMIT :limit OFFSET :offset";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            if (!empty($searchTerm)) {
+                $stmt->bindValue(':searchTerm', $params[':searchTerm']);
+            }
+            $stmt->execute();
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
-            error_log("Error fetching non-vendor users: " . $e->getMessage());
+            error_log("Error fetching paginated vendors: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Counts the total number of vendors, optionally filtered by a search term.
+     * @param string $searchTerm
+     * @return int
+     */
+    public function getVendorsCount(string $searchTerm = ''): int
+    {
+        $sql = "SELECT COUNT(v.vendor_id) 
+                FROM vendors v
+                JOIN customer c ON v.user_id = c.customer_id";
+
+        $params = [];
+        if (!empty($searchTerm)) {
+            $sql .= " WHERE v.business_name LIKE :searchTerm OR c.username LIKE :searchTerm OR c.customer_email LIKE :searchTerm";
+            $params[':searchTerm'] = "%$searchTerm%";
+        }
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            if (!empty($searchTerm)) {
+                $stmt->bindValue(':searchTerm', $params[':searchTerm']);
+            }
+            $stmt->execute();
+            return (int) $stmt->fetchColumn();
+        } catch (PDOException $e) {
+            error_log("Error counting vendors: " . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * Fetches all vendors for dropdowns or lists.
+     * @return array
+     */
+    public function getAllVendors(): array
+    {
+        try {
+            $sql = "SELECT vendor_id, business_name FROM vendors ORDER BY business_name ASC";
+            $stmt = $this->pdo->query($sql);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error fetching all vendors: " . $e->getMessage());
             return [];
         }
     }
@@ -138,7 +183,7 @@ class Vendor
      * @param array $data Vendor data (user_id, business_name, contact_name, phone, address, status)
      * @return int|false The new vendor ID if successful, false otherwise
      */
-    public function addVendor(array $data)
+    public function addVendor(array $data): int|false
     {
         try {
             // Validate required fields
@@ -151,8 +196,8 @@ class Vendor
                         user_id, 
                         business_name, 
                         contact_name, 
-                        phone, 
-                        address, 
+                        business_phone, 
+                        business_address, 
                         status, 
                         created_at, 
                         updated_at
@@ -168,7 +213,7 @@ class Vendor
                     )";
 
             $stmt = $this->pdo->prepare($sql);
-            $result = $stmt->execute([
+            $stmt->execute([
                 ':user_id' => $data['user_id'],
                 ':business_name' => $data['business_name'],
                 ':contact_name' => $data['contact_name'] ?? null,
@@ -177,14 +222,50 @@ class Vendor
                 ':status' => $data['status'] ?? 'active'
             ]);
 
-            if ($result) {
-                return $this->pdo->lastInsertId();
-            }
+            return (int) $this->pdo->lastInsertId();
 
-            return false;
         } catch (PDOException $e) {
             error_log("Error adding vendor: " . $e->getMessage());
             return false;
         }
     }
+
+    /**
+     * Updates a vendor's status.
+     *
+     * @param int $vendorId
+     * @param string $status
+     * @return bool
+     */
+    public function updateVendorStatus(int $vendorId, string $status): bool
+    {
+        $allowed_statuses = ['active', 'inactive', 'pending', 'suspended'];
+        if (!in_array($status, $allowed_statuses)) {
+            return false;
+        }
+        $sql = "UPDATE vendors SET status = :status WHERE vendor_id = :vendor_id";
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute([':status' => $status, ':vendor_id' => $vendorId]);
+    }
+
+    /**
+     * Deletes a vendor.
+     *
+     * @param int $vendorId
+     * @return bool
+     */
+    public function deleteVendor(int $vendorId): bool
+    {
+        // Add checks here, e.g., cannot delete if they have products.
+        // For now, just a simple delete.
+        try {
+            $stmt = $this->pdo->prepare("DELETE FROM vendors WHERE vendor_id = :vendor_id");
+            return $stmt->execute([':vendor_id' => $vendorId]);
+        } catch (PDOException $e) {
+            // Catch foreign key constraint violations
+            error_log("Error deleting vendor ID {$vendorId}: " . $e->getMessage());
+            return false;
+        }
+    }
+
 }

@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Fetch users who are not yet vendors to populate the dropdown
 // Note: This assumes a method `getUsersNotVendors()` exists in your User class.
-$users = $vendorObj->getUsersNotVendors();
+$users = $userObj->getUsersNotVendors();
 
 // Display session flash message if it exists
 if (isset($_SESSION['flash_message'])) {

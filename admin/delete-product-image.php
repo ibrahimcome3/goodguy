@@ -1,10 +1,10 @@
 <?php
 
+session_start();
 header('Content-Type: application/json');
 include "../includes.php";
 require_once __DIR__ . '/../class/InventoryItem.php';
 
-session_start();
 if (empty($_SESSION['admin_id'])) {
     http_response_code(401); // Unauthorized
     echo json_encode(['error' => 'You must be logged in to perform this action.']);

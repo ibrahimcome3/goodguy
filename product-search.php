@@ -1,6 +1,15 @@
 <?php
+// filepath: c:\wamp64\www\goodguy\product-search.php
 session_start(); // Ensure session is started for cart and other functionalities
 require_once "includes.php";
+
+// Make sure critical objects are instantiated
+if (!isset($promotion)) {
+    $promotion = new Promotion($pdo);
+}
+if (!isset($Orvi)) {
+    $Orvi = new Review($pdo);
+}
 
 // --- Input and Pagination Setup ---
 $searchQuery = isset($_GET['q']) ? trim($_GET['q']) : '';
@@ -19,8 +28,9 @@ if (!empty($searchQuery)) {
     $sql_count = "SELECT COUNT(DISTINCT ii.InventoryItemID) as c
                   FROM inventoryitem ii
                   JOIN productitem pi ON ii.productItemID = pi.productID
-                  LEFT JOIN categories cat ON pi.category = cat.category_id
-                  LEFT JOIN brand b ON pi.brand = b.brandID
+                  LEFT JOIN product_categories pc ON pi.productID = pc.product_id
+                  LEFT JOIN categories cat ON pc.category_id = cat.category_id
+                  LEFT JOIN brand b ON pi.brand_id = b.brand_id
                   WHERE (LOWER(ii.barcode) LIKE :term_bc
                          OR LOWER(ii.description) LIKE :term_desc
                          OR LOWER(pi.product_name) LIKE :term_pn
@@ -38,10 +48,6 @@ if (!empty($searchQuery)) {
         ]);
         $total_rows_result = $stmt_count->fetch(PDO::FETCH_ASSOC);
 
-        // Corrected debug output (optional, can be removed)
-        // echo "<h1>Count: " . ($total_rows_result['c'] ?? 0) . "</h1>";
-        // exit;
-
         if ($total_rows_result) {
             $total_rows = (int) $total_rows_result['c'];
         }
@@ -54,20 +60,25 @@ if (!empty($searchQuery)) {
     // --- Fetch Products for the Current Page (PDO Prepared Statement) ---
     if ($total_rows > 0) {
         $sql_results = "SELECT ii.*, pi.product_name, pi.productID as baseProductID, 
-                               b.Name, cat.name as category_name, cat.category_id as cat_id_for_link,
+                               b.Name as brand_name, 
+                               cat.name as category_name, 
+                               cat.category_id as cat_id_for_link,
                                img.image_path as primary_image_path
                         FROM inventoryitem ii
                         JOIN productitem pi ON ii.productItemID = pi.productID
-                        LEFT JOIN categories cat ON pi.category = cat.category_id
-                        LEFT JOIN brand b ON pi.brand = b.brandID
+                        LEFT JOIN product_categories pc ON pi.productID = pc.product_id
+                        LEFT JOIN categories cat ON pc.category_id = cat.category_id
+                        LEFT JOIN brand b ON pi.brand_id = b.brand_id
                         LEFT JOIN inventory_item_image img ON ii.InventoryItemID = img.inventory_item_id AND img.is_primary = 1
                         WHERE (LOWER(ii.barcode) LIKE :term_bc_res
                                OR LOWER(ii.description) LIKE :term_desc_res
                                OR LOWER(pi.product_name) LIKE :term_pn_res
                                OR LOWER(cat.name) LIKE :term_cat_res
                                OR LOWER(b.Name) LIKE :term_brand_res)
-                        ORDER BY ii.date_added DESC -- Or a relevance score if using full-text search
-                        LIMIT :limit_val OFFSET :offset_val"; // Use unique names for limit/offset too
+                        GROUP BY ii.InventoryItemID, pi.product_name, b.Name, cat.name, cat.category_id, img.image_path
+                        ORDER BY ii.date_added DESC
+                        LIMIT " . (int) $no_of_records_per_page . " OFFSET " . (int) $offset;
+
         try {
             $stmt_results = $pdo->prepare($sql_results);
             $stmt_results->execute([
@@ -75,11 +86,9 @@ if (!empty($searchQuery)) {
                 ':term_desc_res' => $searchTerm,
                 ':term_pn_res' => $searchTerm,
                 ':term_cat_res' => $searchTerm,
-                ':term_brand_res' => $searchTerm,
-                ':offset_val' => $offset,
-                ':limit_val' => $no_of_records_per_page,
+                ':term_brand_res' => $searchTerm
             ]);
-            $products_rs = $stmt_results; // Keep as PDOStatement to fetch in loop
+            $products_rs = $stmt_results;
         } catch (PDOException $e) {
             error_log("Error fetching search results: " . $e->getMessage());
             // Handle error
@@ -91,23 +100,16 @@ if (!empty($searchQuery)) {
 $prev_page = $pageno - 1;
 $next_page = $pageno + 1;
 
-if (isset($_GET['pageno'])) {
-    $pageno = $_GET['pageno'];
-} else {
-    $pageno = 1;
-}
+// Remove redundant pagination code
 ?>
 <!DOCTYPE html>
 <html lang="en">
 
-
-
 <head>
-
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Search</title>
+    <title>Search Results: <?= htmlspecialchars($searchQuery) ?> - GoodGuy</title>
     <?php include "htlm-includes.php/metadata.php"; ?>
 
     <!-- Plugins CSS File -->
@@ -136,7 +138,6 @@ if (isset($_GET['pageno'])) {
     </style>
 </head>
 
-
 <body>
     <div class="page-wrapper">
         <?php include "header_main.php" ?>
@@ -159,48 +160,26 @@ if (isset($_GET['pageno'])) {
                         echo "<div class='text-center my-5'><p>No results found for your search term: <b>" . htmlspecialchars($searchQuery) . "</b></p> <a href='index.php' class='btn btn-primary'>Try another search or Go to Homepage</a></div>";
                     } ?>
                     <div class="row">
-                        <div class="col-lg-9">
+                        <div class="col-lg-12">
                             <div class="toolbox">
                                 <div class="toolbox-left">
                                     <div class="toolbox-info">
 
                                         <?php
                                         $displayed_items = min($total_rows, $pageno * $no_of_records_per_page);
-                                        //echo "Display results " . $displayed_items . "/" . $total_rows;
                                         ?>
                                         Showing <span><?= $displayed_items ?> of <?= $total_rows ?></span> search
                                         results
                                     </div><!-- End .toolbox-info -->
                                 </div><!-- End .toolbox-left -->
-                                <!--
-                                <div class="toolbox-right">
-                                    <div class="toolbox-sort">
-                                        <label for="sortby">Sort by:</label>
-                                        <div class="select-custom">
-                                            <select name="sortby" id="sortby" class="form-control">
-                                                <option value="popularity" selected="selected">Most Popular</option>
-                                                <option value="rating">Most Rated</option>
-                                                <option value="date">Date</option>
-                                            </select>
-                                        </div>
-                                    </div><!-- End .toolbox-sort -->
-
-                                <!-- </div><!-- End .toolbox-right -->
-
                             </div><!-- End .toolbox -->
-                            <?php
-                            // Objects likely already instantiated in includes.php or at the top
-                            // $product_obj = new ProductItem($pdo);
-                            // $promotion = new Promotion($pdo);
-                            // $Orvi = new Review($pdo); // For reviews
-                            ?>
+
                             <div class="products mb-3">
                                 <div class="row justify-content-center">
                                     <?php
                                     if ($products_rs) { // Check if $products_rs is not null
                                         while ($row = $products_rs->fetch(PDO::FETCH_ASSOC)) {
                                             $itemId = $row['InventoryItemID'];
-                                            //echo $row['primary_image_path'];
                                             $imagePath = !empty($row['primary_image_path']) && file_exists(ltrim($row['primary_image_path'], './')) ? htmlspecialchars(ltrim($row['primary_image_path'], './')) : 'assets/images/products/default-product.png';
                                             $productName = htmlspecialchars($row['product_name'] ?? $row['description']); // Fallback to description
                                             $categoryName = htmlspecialchars($row['category_name'] ?? 'Uncategorized');
@@ -216,13 +195,13 @@ if (isset($_GET['pageno'])) {
                                                 $oldPrice = $promotion->get_regular_price($itemId);
                                             }
                                             ?>
-                                            <div class="col-6 col-md-4 col-lg-4 col-xl-3">
+                                            <div class="col-6 col-sm-6 col-md-4 col-lg-4 col-xl-3">
                                                 <div class="product product-7 text-center">
                                                     <figure class="product-media">
                                                         <?php if ($isPromo) { ?>
                                                             <span class="product-label label-sale">Sale</span>
                                                         <?php } ?>
-                                                        <?php if ($isNew) { // Assuming $isNew is determined earlier ?>
+                                                        <?php if ($isNew) { ?>
                                                             <span class="product-label label-top">NEW</span>
                                                         <?php } ?>
                                                         <a href="product-detail.php?itemid=<?= $itemId ?>">
@@ -242,14 +221,13 @@ if (isset($_GET['pageno'])) {
                                                             <a href="#" class="submit-cart btn-product btn-cart"
                                                                 product-info="<?= $row['InventoryItemID'] ?>"><span>add to
                                                                     cart</span></a>
-                                                            <!-- Ensure product-info has the correct ID -->
                                                         </div><!-- End .product-action -->
                                                     </figure><!-- End .product-media -->
 
                                                     <div class="product-body">
                                                         <div class="product-cat text-center">
                                                             <a
-                                                                href="category.php?id=<?= $categoryIdForLink ?>"><?= $categoryName ?></a>
+                                                                href="shop.php?category=<?= $categoryIdForLink ?>"><?= $categoryName ?></a>
                                                         </div><!-- End .product-cat -->
                                                         <h3 class="product-title truncate"><a
                                                                 href="product-detail.php?itemid=<?= $itemId ?>"><?= $productName ?></a>
@@ -262,13 +240,10 @@ if (isset($_GET['pageno'])) {
                                                                 <span class="old-price">Was
                                                                     &#8358;<?= number_format($oldPrice, 2) ?></span>
                                                             <?php else: ?>
-                                                                <span
-                                                                    class="price">&#8358;<?= number_format($displayPrice, 2) ?></span>
+                                                                &#8358;<?= number_format($row['cost'], 2) ?>
                                                             <?php endif; ?>
                                                         </div><!-- End .product-price -->
-                                                        <?php
-                                                        // $Orvi should be available from includes.php
-                                                        ?>
+
                                                         <div class="ratings-container">
                                                             <div class="ratings">
                                                                 <div class="ratings-val"
@@ -287,14 +262,8 @@ if (isset($_GET['pageno'])) {
                                         } // end while
                                     } // end if ($products_rs)
                                     ?>
-
-
                                 </div><!-- End .row -->
-
-
-
                             </div><!-- End .products -->
-
 
                             <nav aria-label="Page navigation">
                                 <ul class="pagination justify-content-center">
@@ -359,14 +328,9 @@ if (isset($_GET['pageno'])) {
     <div class="mobile-menu-overlay"></div><!-- End .mobil-menu-overlay -->
 
     <?php include "mobile-menue-index-page.php"; ?>
+
     <!-- Sign in / Register Modal -->
     <?php include "login-modal.php"; ?>
-
-
-
-
-
-    <!-- Main JS File -->
 
     <!-- Plugins JS File -->
     <script src="assets/js/jquery.min.js"></script>
@@ -384,13 +348,7 @@ if (isset($_GET['pageno'])) {
     <script src="assets/js/main.js"></script>
     <script src="assets/js/demos/demo-13.js"></script>
     <script src="js/add-to-cart.js"></script>
-    <?php // Added add-to-cart.js ?>
-    <?php // Assuming login.js is still needed ?>
-
-    <!-- Main JS File -->
-
+    <script src="js/login.js"></script>
 </body>
-
-
 
 </html>

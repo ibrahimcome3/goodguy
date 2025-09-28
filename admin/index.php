@@ -1,92 +1,316 @@
 <?php
-// Include common admin header (session start, login check, variable setup, and navbar)
-include 'includes/admin_header.php';
-// The variables $admin_username and $is_super_admin are now available from admin_header.php
+session_start();
+require_once "../includes.php";
+require_once __DIR__ . '/../class/Order.php';
+require_once __DIR__ . '/../class/User.php';
+require_once __DIR__ . '/../class/ProductItem.php';
+require_once __DIR__ . '/../class/Vendor.php';
+
+// --- Authentication & Authorization ---
+if (empty($_SESSION['admin_id'])) {
+    header("Location: admin_login.php");
+    exit();
+}
+
+// Instantiate objects
+$orderObj = new Order($pdo);
+$userObj = new User($pdo);
+$productObj = new ProductItem($pdo);
+$vendorObj = new Vendor($pdo);
+
+// --- Fetch Dashboard Data ---
+$totalOrders = $orderObj->getTotalOrderCount();
+$pendingOrders = $orderObj->getTotalOrderCount('pending');
+$totalUsers = $userObj->getTotalUserCount();
+$totalProducts = $productObj->getTotalProductCount();
+$totalVendors = $vendorObj->getVendorsCount();
+
+// Fetch recent orders
+$recentOrders = $orderObj->getRecentOrders(8);
+
+// Helper function for status badge
+function getOrderStatusBadgeClass($status)
+{
+    switch (strtolower($status)) {
+        case 'completed':
+        case 'delivered':
+            return 'badge-phoenix-success';
+        case 'processing':
+        case 'shipped':
+            return 'badge-phoenix-info';
+        case 'pending':
+            return 'badge-phoenix-warning';
+        case 'cancelled':
+        case 'failed':
+            return 'badge-phoenix-danger';
+        default:
+            return 'badge-phoenix-secondary';
+    }
+}
+
+// --- Chart Data Preparation ---
+$chartData = [];
+// For the sake of example, let's generate some dummy data for the last 30 days
+for ($i = 30; $i > 0; $i--) {
+    $chartData[] = rand(0, 10); // Random order count between 0 and 10
+}
+
+// Fetch daily order counts (last 30 days) for chart
+$dailyRows = $pdo->query("
+    SELECT DATE(COALESCE( order_date_created)) AS d, COUNT(*) AS c
+    FROM lm_orders
+    WHERE COALESCE( order_date_created) >= (CURDATE() - INTERVAL 29 DAY)
+    GROUP BY DATE(COALESCE(order_date_created))
+    ORDER BY d ASC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+$chartLabels = [];
+$chartData = [];
+$dayMap = [];
+foreach ($dailyRows as $r) {
+    $dayMap[$r['d']] = (int) $r['c'];
+}
+for ($i = 29; $i >= 0; $i--) {
+    $day = date('Y-m-d', strtotime("-$i day"));
+    $chartLabels[] = date('M j', strtotime($day));
+    $chartData[] = $dayMap[$day] ?? 0;
+}
 ?>
+<!DOCTYPE html>
+<html lang="en-US" dir="ltr">
 
-<div class="container-fluid">
-    <div class="row">
-        <?php include 'includes/admin_sidebar.php'; ?>
+<head>
+    <meta charset="utf-8">
+    <title>Admin Dashboard</title>
+    <?php include 'admin-header.php'; ?>
+    <?php include 'admin-include.php'; ?>
+</head>
 
-        <!-- Page Content -->
-        <main role="main" class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
-            <div
-                class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                <h1 class="h2">Dashboard</h1>
-                <div class="btn-toolbar mb-2 mb-md-0">
-                    <div class="btn-group me-2">
-                        <button type="button" class="btn btn-sm btn-outline-secondary">Share</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary">Export</button>
-                    </div>
-                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle">
-                        <i class="bi bi-calendar3"></i> This week
-                    </button>
-                </div>
-            </div>
-
-            <!-- Example Dashboard Widgets/Cards -->
-            <div class="row">
-                <div class="col-md-4 mb-3">
-                    <div class="card text-white bg-primary">
-                        <div class="card-body">
-                            <h5 class="card-title"><i class="bi bi-cart-check-fill"></i> New Orders</h5>
-                            <p class="card-text">XX</p> <!-- Replace XX with dynamic data -->
-                            <a href="order_manager.php?status=pending" class="text-white">View Details <i
-                                    class="bi bi-arrow-right-circle"></i></a>
+<body>
+    <main class="main" id="top">
+        <?php include "includes/admin_navbar.php"; ?>
+        <div class="content">
+            <div class="pb-5">
+                <div class="row g-4">
+                    <div class="col-12 col-xxl-6">
+                        <div class="mb-8">
+                            <h2 class="mb-2">Admin Dashboard</h2>
+                            <h5 class="text-body-tertiary fw-semibold">Here's what's going on at your store right now.
+                            </h5>
+                        </div>
+                        <div class="row align-items-center g-4">
+                            <!-- Total Orders Card -->
+                            <div class="col-12 col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between">
+                                            <div>
+                                                <h5 class="mb-1">Total Orders</h5>
+                                                <h6 class="text-body-tertiary">All time</h6>
+                                            </div>
+                                            <h4><?= number_format($totalOrders) ?></h4>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Pending Orders Card -->
+                            <div class="col-12 col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between">
+                                            <div>
+                                                <h5 class="mb-1">Pending Orders</h5>
+                                                <h6 class="text-body-tertiary">Awaiting processing</h6>
+                                            </div>
+                                            <h4 class="text-warning"><?= number_format($pendingOrders) ?></h4>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Total Users Card -->
+                            <div class="col-12 col-md-4">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between">
+                                            <div>
+                                                <h5 class="mb-1">Total Users</h5>
+                                            </div>
+                                            <h4><?= number_format($totalUsers) ?></h4>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Total Products Card -->
+                            <div class="col-12 col-md-4">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between">
+                                            <div>
+                                                <h5 class="mb-1">Total Products</h5>
+                                            </div>
+                                            <h4><?= number_format($totalProducts) ?></h4>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Total Vendors Card -->
+                            <div class="col-12 col-md-4">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between">
+                                            <div>
+                                                <h5 class="mb-1">Total Vendors</h5>
+                                            </div>
+                                            <h4><?= number_format($totalVendors) ?></h4>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-4 mb-3">
-                    <div class="card text-white bg-success">
-                        <div class="card-body">
-                            <h5 class="card-title"><i class="bi bi-people-fill"></i> Registered Users</h5>
-                            <p class="card-text">YY</p> <!-- Replace YY with dynamic data -->
-                            <a href="customer_manager.php" class="text-white">View Details <i
-                                    class="bi bi-arrow-right-circle"></i></a>
+            </div>
+
+            <!-- Recent Orders Table (centered) -->
+            <div class="mx-auto mt-6" style="max-width: 1100px;">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h3 class="mb-0">Recent Orders</h3>
+                            <a href="manage_orders.php" class="btn btn-link px-0">View all orders
+                                <span class="fas fa-chevron-right ms-1 fs-10"></span>
+                            </a>
                         </div>
-                    </div>
-                </div>
-                <div class="col-md-4 mb-3">
-                    <div class="card text-white bg-info">
-                        <div class="card-body">
-                            <h5 class="card-title"><i class="bi bi-box-seam"></i> Total Products</h5>
-                            <p class="card-text">ZZ</p> <!-- Replace ZZ with dynamic data -->
-                            <a href="product_manager.php" class="text-white">View Details <i
-                                    class="bi bi-arrow-right-circle"></i></a>
+                        <div class="table-responsive">
+                            <table class="table table-hover fs-9 mb-0 text-center">
+                                <thead>
+                                    <tr>
+                                        <th class="sort border-top" scope="col" data-sort="order_id">ORDER ID</th>
+                                        <th class="sort border-top" scope="col" data-sort="customer">CUSTOMER</th>
+                                        <th class="sort border-top" scope="col" data-sort="date">DATE</th>
+                                        <th class="sort border-top text-end" scope="col" data-sort="total">TOTAL</th>
+                                        <th class="sort border-top text-center" scope="col" data-sort="status">STATUS
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="list">
+                                    <?php if (empty($recentOrders)): ?>
+                                        <tr>
+                                            <td colspan="5" class="text-center py-4">No recent orders found.</td>
+                                        </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($recentOrders as $order): ?>
+                                            <tr>
+                                                <td class="order_id align-middle">
+                                                    <a class="fw-semi-bold"
+                                                        href="view_order_details.php?order_id=<?= $order['order_id'] ?>">#<?= $order['order_id'] ?></a>
+                                                </td>
+                                                <td class="customer align-middle">
+                                                    <a class="text-body-emphasis fw-semi-bold"
+                                                        href="view-customer.php?id=<?= $order['customer_id'] ?? '' ?>">
+                                                        <?= htmlspecialchars(($order['customer_fname'] ?? '') . ' ' . ($order['customer_lname'] ?? '')) ?>
+                                                    </a>
+                                                </td>
+                                                <td class="date align-middle">
+                                                    <?= date('M d, Y, g:i A', strtotime($order['order_date_created'])) ?>
+                                                </td>
+                                                <td class="total align-middle text-end">
+                                                    &#8358;<?= number_format((float) $order['order_total'], 2) ?>
+                                                </td>
+                                                <td class="status align-middle text-center">
+                                                    <span
+                                                        class="badge <?= getOrderStatusBadgeClass($order['order_status']) ?>"><?= ucfirst(htmlspecialchars($order['order_status'])) ?></span>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- You can add charts or more detailed reports here -->
-            <h2>Recent Activity</h2>
-            <div class="table-responsive">
-                <table class="table table-striped table-sm">
-                    <thead>
-                        <tr>
-                            <th scope="col">#</th>
-                            <th scope="col">Activity</th>
-                            <th scope="col">User</th>
-                            <th scope="col">Timestamp</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>1</td>
-                            <td>New product added</td>
-                            <td>AdminUser1</td>
-                            <td>2023-10-27 10:00</td>
-                        </tr>
-                        <!-- Add more rows dynamically -->
-                    </tbody>
-                </table>
+            <!-- Orders Chart (Last 30 Days) -->
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Orders (Last 30 Days)</h5>
+                    <span class="text-body-tertiary small">Total: <?= number_format(array_sum($chartData)) ?></span>
+                </div>
+                <div class="card-body">
+                    <canvas id="ordersChart" height="110"></canvas>
+                </div>
             </div>
-        </main>
-    </div>
-</div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<!-- <script src="script.js"></script> --> <!-- Your custom JavaScript if needed -->
+            <?php include 'includes/admin_footer.php'; ?>
+        </div>
+    </main>
+    <!-- ===============================================-->
+    <!--    JavaScripts-->
+    <!-- ===============================================-->
+    <script src="phoenix-v1.20.1/public/vendors/popper/popper.min.js"></script>
+    <script src="phoenix-v1.20.1/public/vendors/bootstrap/bootstrap.min.js"></script>
+    <script src="phoenix-v1.20.1/public/vendors/anchorjs/anchor.min.js"></script>
+    <script src="phoenix-v1.20.1/public/vendors/is/is.min.js"></script>
+    <script src="phoenix-v1.20.1/public/vendors/fontawesome/all.min.js"></script>
+    <script src="phoenix-v1.20.1/public/vendors/lodash/lodash.min.js"></script>
+    <script src="phoenix-v1.20.1/public/vendors/list.js/list.min.js"></script>
+    <script src="phoenix-v1.20.1/public/vendors/feather-icons/feather.min.js"></script>
+    <script src="phoenix-v1.20.1/public/vendors/dayjs/dayjs.min.js"></script>
+    <script src="phoenix-v1.20.1/public/assets/js/phoenix.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        (function () {
+            const ctx = document.getElementById('ordersChart');
+            if (!ctx) return;
+            const dataLabels = <?= json_encode($chartLabels) ?>;
+            const dataValues = <?= json_encode($chartData) ?>;
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dataLabels,
+                    datasets: [{
+                        label: 'Orders',
+                        data: dataValues,
+                        tension: 0.3,
+                        fill: true,
+                        borderColor: '#4e73df',
+                        backgroundColor: 'rgba(78,115,223,0.15)',
+                        pointRadius: 3,
+                        pointBackgroundColor: '#4e73df',
+                        pointBorderColor: '#fff',
+                        pointHoverRadius: 5,
+                        pointHoverBackgroundColor: '#2e59d9',
+                        pointHoverBorderColor: '#fff',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function (ctx) { return ' ' + ctx.parsed.y + ' orders'; }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        }
+                    }
+                }
+            });
+        })();
+    </script>
 </body>
 
 </html>

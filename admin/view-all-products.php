@@ -59,9 +59,36 @@ if ($viewType === 'mine' && $myVendorId) {
 // Get lists for dropdowns
 $allCategories = $categoryObj->getAllCategories();
 $allVendors = $vendorObj->getAllVendors();
+$vendorCache = [];
 
 // Count products
 $displayedProductCount = count($products);
+
+// --- Page Title Logic ---
+$pageHeader = "Products";
+$pageHeaderCount = $totalProducts;
+
+if ($vendorFilter) {
+    $filteredVendor = $vendorObj->getVendorById($vendorFilter);
+
+    if ($filteredVendor) {
+        $pageHeader = "Products from " . htmlspecialchars($filteredVendor['business_name']);
+        $pageHeaderCount = $displayedProductCount;
+    }
+}
+
+if ($categoryFilter) {
+    $filteredCategory = $categoryObj->getCategoryById($categoryFilter);
+    if ($filteredCategory) {
+        // If we are already filtering by vendor, append the category. Otherwise, set it as the main filter.
+        if ($vendorFilter) {
+            $pageHeader .= " in " . htmlspecialchars($filteredCategory['name']);
+        } else {
+            $pageHeader = "Products in " . htmlspecialchars($filteredCategory['name']);
+            $pageHeaderCount = $displayedProductCount;
+        }
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -85,8 +112,8 @@ $displayedProductCount = count($products);
             <div class="mb-9">
                 <div class="row g-3 mb-4">
                     <div class="col-auto">
-                        <h2 class="mb-0">Products <span
-                                class="text-body-tertiary fw-normal">(<?= $totalProducts ?>)</span></h2>
+                        <h2 class="mb-0"><?= $pageHeader ?> <span
+                                class="text-body-tertiary fw-normal">(<?= $pageHeaderCount ?>)</span></h2>
                     </div>
                 </div>
                 <ul class="nav nav-links mb-3 mb-lg-2 mx-n3">
@@ -296,10 +323,26 @@ $displayedProductCount = count($products);
                                                 </td>
                                                 <td class="vendor align-middle text-start fw-semibold ps-4">
                                                     <?php
-                                                    $vendorInfo = $vendorObj->getVendorById($product['vendor_id'] ?? null);
-                                                    echo '<a href="vendor-profile.php?id=' . ($vendorInfo['vendor_id'] ?? '') . '">' .
-                                                        htmlspecialchars($vendorInfo['business_name'] ?? 'Admin Product') .
-                                                        '</a>';
+                                                    $vendorName = 'Admin Product';
+                                                    $vendorLink = '#';
+                                                    $currentVendorId = $product['vendor_id'] ?? null;
+
+                                                    if ($currentVendorId) {
+                                                        // Use a cache to avoid repeated DB calls for the same vendor in the loop
+                                                        if (!isset($vendorCache[$currentVendorId])) {
+                                                            $vendorCache[$currentVendorId] = $vendorObj->getVendorById((int) $currentVendorId);
+                                                        }
+                                                        $vendorInfo = $vendorCache[$currentVendorId];
+
+                                                        if ($vendorInfo) { // Check if vendor was found
+                                                            $vendorName = $vendorInfo['business_name'];
+                                                            $vendorLink = 'view-vendor.php?id=' . (int) $vendorInfo['vendor_id'];
+                                                        } else {
+                                                            $vendorName = 'Unknown Vendor'; // Vendor ID exists but not found in DB
+                                                        }
+                                                    }
+
+                                                    echo '<a href="' . $vendorLink . '">' . htmlspecialchars($vendorName) . '</a>';
                                                     ?>
                                                 </td>
                                                 <td

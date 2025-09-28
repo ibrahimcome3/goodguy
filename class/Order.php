@@ -373,6 +373,40 @@ class Order
         return $stmt->execute(); // Return true on success, false on failure
     }
 
+    public function updateOrderItemQuantityPDO(int $orderItemId, int $quantity): bool
+    {
+        // First, get the order ID from the order item ID.
+        $orderIdStmt = $this->pdo->prepare("SELECT orderID FROM lm_order_line WHERE order_item_id = :order_item_id");
+        $orderIdStmt->execute([':order_item_id' => $orderItemId]);
+        $orderId = $orderIdStmt->fetchColumn();
+
+        if (!$orderId) {
+            return false; // Item not found
+        }
+
+        // If quantity is zero or less, remove the item.
+        if ($quantity <= 0) {
+            return $this->removeItemFromOrder($orderId, $orderItemId);
+        }
+
+        $sql = "UPDATE lm_order_line SET quwantitiyofitem = :quantity WHERE order_item_id = :order_item_id";
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([
+                ':quantity' => $quantity,
+                ':order_item_id' => $orderItemId
+            ]);
+
+            // After updating, we must recalculate the order total.
+            $this->recalculateOrderTotal($orderId);
+
+            return true;
+        } catch (PDOException $e) {
+            error_log("Error updating order item quantity: " . $e->getMessage());
+            return false;
+        }
+    }
+
     public function deleteOrderItem($mysqli, $orderItemId)
     {
         $stmt = $mysqli->prepare("DELETE FROM lm_order_line WHERE order_item_id = ?");
@@ -710,9 +744,9 @@ class Order
         }
 
         // *** ADJUST table ('states') and column names ('state_id', 'state_name', 'shipping_address_no') as necessary ***
-        $sql = "SELECT s.state_name
+        $sql = "SELECT s.state_name 
                 FROM shipping_address sa
-                INNER JOIN states s ON sa.state_id = s.state_id
+                INNER JOIN shipping_state s ON sa.state = s.state_id
                 WHERE sa.shipping_address_no = :address_id
                 LIMIT 1";
 
@@ -746,7 +780,7 @@ class Order
             return null;
         }
         // *** ADJUST table ('states') and column names ('state_id', 'state_name') if necessary ***
-        $sql = "SELECT state_name FROM states WHERE state_id = :state_id LIMIT 1";
+        $sql = "SELECT state_name FROM shipping_state WHERE state_id = :state_id LIMIT 1";
         try {
             $stmt = $this->pdo->prepare($sql);
             $stmt->bindParam(':state_id', $stateId, PDO::PARAM_INT);
@@ -840,20 +874,16 @@ class Order
             $orderItems = []; // Proceed with empty items or return false based on preference
         }
 
-        // 3. Fetch customer details
-        // Ensure User class is available and $this->pdo is set in Order constructor
-        $userInstance = new User($this->pdo); // Or however you access User methods
-        $customerDetails = $userInstance->getUserById($orderDetails['customer_id']); // Assumes user_id is in orderDetails and User::getUserById exists
-
-        if (!$customerDetails || empty($customerDetails['customer_email'])) {
+        // 3. Get customer details from the already-fetched order details
+        if (empty($orderDetails['customer_email'])) {
             error_log("sendInvoiceEmail: Could not fetch customer email for user ID {$orderDetails['customer_id']}");
             return false;
         }
-        $customerEmail = $customerDetails['customer_email'];
-        $customerName = trim(($customerDetails['customer_fname'] ?? '') . ' ' . ($customerDetails['customer_lname'] ?? 'Customer'));
-        if (empty($customerName))
+        $customerEmail = $orderDetails['customer_email'];
+        $customerName = $orderDetails['customer_name'] ?? 'Valued Customer';
+        if (empty(trim($customerName))) {
             $customerName = 'Valued Customer';
-
+        }
 
         // 4. Fetch shipping address details
         $shippingAddress = null;
@@ -925,7 +955,7 @@ class Order
         $body .= "<table style='width: 100%; max-width: 300px; margin-left: auto; border-collapse: collapse;'>";
         $body .= "<tr><td style='padding: 8px; text-align: right;'>Subtotal:</td><td style='padding: 8px; text-align: right; font-weight: bold;'>&#8358;" . number_format($orderDetails['order_subtotal'], 2) . "</td></tr>";
         $body .= "<tr><td style='padding: 8px; text-align: right;'>Shipping:</td><td style='padding: 8px; text-align: right; font-weight: bold;'>&#8358;" . number_format($orderDetails['shipping_cost'], 2) . "</td></tr>";
-        $body .= "<tr><td style='padding: 8px; text-align: right; font-weight: bold; border-top: 1px solid #ddd;'>Total:</td><td style='padding: 8px; text-align: right; font-weight: bold; border-top: 1px solid #ddd;'>&#8358;" . number_format($orderDetails['order_total'], 2) . "</td></tr>";
+        $body .= "<tr><td style='padding: 8px; text-align: right; font-weight: bold; border-top: 1px solid #ddd;'>Total:</td><td style='padding: 8px; text-align: right; font-weight: bold; border-top: 1px solid #ddd;'>&#8358;" . number_format($grandTotal, 2) . "</td></tr>";
         $body .= "</table>";
 
         $body .= "<hr style='border: 0; border-top: 1px solid #eee; margin-top: 20px;'>";
@@ -1017,18 +1047,16 @@ class Order
             $orderItems = [];
         }
 
-        // 3. Fetch customer details
-        $userInstance = new User($this->pdo);
-        $customerDetails = $userInstance->getUserById($orderDetails['customer_id']);
-
-        if (!$customerDetails || empty($customerDetails['customer_email'])) { // Assuming email is customer_email from your User::getUserById
+        // 3. Get customer details from the already-fetched order details
+        if (empty($orderDetails['customer_email'])) {
             error_log("sendPaymentReceiptEmail: Could not fetch customer email for user ID {$orderDetails['customer_id']}");
             return false;
         }
-        $customerEmail = $customerDetails['customer_email'];
-        $customerName = trim(($customerDetails['customer_fname'] ?? '') . ' ' . ($customerDetails['customer_lname'] ?? 'Customer'));
-        if (empty($customerName))
+        $customerEmail = $orderDetails['customer_email'];
+        $customerName = $orderDetails['customer_name'] ?? 'Valued Customer';
+        if (empty(trim($customerName))) {
             $customerName = 'Valued Customer';
+        }
 
         // 4. Fetch shipping address details (optional for receipt, but good for consistency)
         $shippingAddress = null;
@@ -1133,6 +1161,32 @@ class Order
         } catch (PDOException $e) {
             error_log("Error updating order status for order ID {$orderId}: " . $e->getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Get total number of orders (optionally filtered by status).
+     *
+     * @param string|null $statusFilter Optional order_status to filter.
+     * @return int
+     */
+    public function getTotalOrderCount($statusFilter = null): int
+    {
+        $sql = "SELECT COUNT(*) FROM lm_orders";
+        $params = [];
+
+        if (!empty($statusFilter)) {
+            $sql .= " WHERE order_status = :status";
+            $params[':status'] = $statusFilter;
+        }
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            return (int) $stmt->fetchColumn();
+        } catch (PDOException $e) {
+            error_log("Database error in getTotalOrderCount: " . $e->getMessage());
+            return 0;
         }
     }
 
@@ -1266,6 +1320,236 @@ class Order
         }
     }
 
+    /**
+     * Fetch recent orders (most recent first).
+     * @param int $limit Max rows (default 10)
+     * @param string|null $status Optional order_status filter
+     * @return array
+     */
+    public function getRecentOrders(int $limit = 10, $status = null): array
+    {
+        if ($limit <= 0) {
+            $limit = 10;
+        } elseif ($limit > 100) {
+            $limit = 100; // safety cap
+        }
+
+        $sql = "SELECT o.order_id,
+                      
+                       o.order_status,
+                       o.total_amount,
+                       o.subtotal_amount,
+                       o.tax_amount,
+                       o.shipping_amount,
+                       o.created_at,
+                       o.updated_at,
+                       o.customer_id
+                FROM lm_orders o";
+        $params = [];
+
+        if (!empty($status)) {
+            $sql .= " WHERE o.order_status = :status";
+            $params[':status'] = $status;
+        }
+
+        $sql .= " ORDER BY o.created_at DESC LIMIT {$limit}";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (PDOException $e) {
+            error_log("Error in getRecentOrders: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Gets a paginated list of all orders, with optional filtering and searching.
+     *
+     * @param string $searchTerm
+     * @param string|null $statusFilter
+     * @param int $limit
+     * @param int $offset
+     * @return array
+     */
+    public function getPaginatedOrders(string $searchTerm = '', ?string $statusFilter = null, int $limit = 15, int $offset = 0): array
+    {
+        $sql = "SELECT o.*, CONCAT(c.customer_fname, ' ', c.customer_lname) as customer_name, c.customer_email
+                FROM `lm_orders` o
+                LEFT JOIN customer c ON o.customer_id = c.customer_id";
+
+        $whereClauses = [];
+
+        if (!empty($statusFilter)) {
+            $whereClauses[] = "o.order_status = :status";
+        }
+
+        if (!empty($searchTerm)) {
+            $whereClauses[] = "(o.order_id LIKE :searchTerm OR CONCAT(c.customer_fname, ' ', c.customer_lname) LIKE :searchTerm OR c.customer_email LIKE :searchTerm)";
+        }
+
+        if (!empty($whereClauses)) {
+            $sql .= " WHERE " . implode(" AND ", $whereClauses);
+        }
+
+        $sql .= " ORDER BY o.order_date_created DESC LIMIT :limit OFFSET :offset";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+
+            if (!empty($statusFilter)) {
+                $stmt->bindValue(':status', $statusFilter, PDO::PARAM_STR);
+            }
+            if (!empty($searchTerm)) {
+                $stmt->bindValue(':searchTerm', "%{$searchTerm}%", PDO::PARAM_STR);
+            }
+
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (PDOException $e) {
+            error_log("Error in getPaginatedOrders: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Removes an item from an order and updates order totals.
+     *
+     * @param int $orderId The ID of the order.
+     * @param int $orderItemId The ID of the order line item to remove.
+     * @return bool True on success, false on failure.
+     */
+    public function removeItemFromOrder(int $orderId, int $orderItemId): bool
+    {
+        // 1. Get item details to adjust totals
+        $itemSql = "SELECT item_price, quwantitiyofitem FROM lm_order_line WHERE order_item_id = :order_item_id AND orderID = :order_id";
+        $itemStmt = $this->pdo->prepare($itemSql);
+        $itemStmt->execute([':order_item_id' => $orderItemId, ':order_id' => $orderId]);
+        $item = $itemStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$item) {
+            // Item not found or doesn't belong to this order
+            return false;
+        }
+
+        $this->pdo->beginTransaction();
+
+        try {
+            // 2. Delete the item
+            $deleteSql = "DELETE FROM lm_order_line WHERE order_item_id = :order_item_id";
+            $deleteStmt = $this->pdo->prepare($deleteSql);
+            $deleteStmt->execute([':order_item_id' => $orderItemId]);
+
+            // 3. Recalculate and update order totals
+            $itemTotal = (float) $item['item_price'] * (int) $item['quwantitiyofitem'];
+
+            $updateSql = "UPDATE lm_orders
+                          SET order_subtotal = order_subtotal - :item_total,
+                              order_total = order_total - :item_total,
+                              order_total_items = order_total_items - 1
+                          WHERE order_id = :order_id";
+            $updateStmt = $this->pdo->prepare($updateSql);
+            $updateStmt->execute([':item_total' => $itemTotal, ':order_id' => $orderId]);
+
+            // 4. If last item, cancel order
+            if ($this->count_order_item_from_an_order($orderId) === 0) {
+                $this->updateOrderStatus($orderId, 'cancelled');
+            }
+
+            $this->pdo->commit();
+            return true;
+        } catch (Exception $e) {
+            $this->pdo->rollBack();
+            error_log("Error removing item from order: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Adds an item to an existing order. If the item is already in the order,
+     * it updates the quantity. It then recalculates the order total.
+     *
+     * @param int $orderId The ID of the order to add the item to.
+     * @param int $inventoryItemId The ID of the inventory item to add.
+     * @param int $quantity The quantity to add.
+     * @return bool|string True on success, or an error message string on failure.
+     */
+    public function addItemToOrder(int $orderId, int $inventoryItemId, int $quantity)
+    {
+        // 1. Get inventory item details to ensure it exists and get its price.
+        $itemStmt = $this->pdo->prepare("SELECT cost FROM inventoryitem WHERE InventoryItemID = ? AND status = 'active'");
+        $itemStmt->execute([$inventoryItemId]);
+        $item = $itemStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$item) {
+            return "Product not found or is not active.";
+        }
+        $price = (float) $item['cost'];
+
+        // 2. Check if the item is already in the order.
+        $checkStmt = $this->pdo->prepare(
+            "SELECT order_item_id, quwantitiyofitem FROM lm_order_line WHERE orderID = ? AND InventoryItemID = ?"
+        );
+        $checkStmt->execute([$orderId, $inventoryItemId]);
+        $existingItem = $checkStmt->fetch(PDO::FETCH_ASSOC);
+
+        $this->pdo->beginTransaction();
+
+        try {
+            if ($existingItem) {
+                // Item exists, so update the quantity.
+                $newQuantity = $existingItem['quwantitiyofitem'] + $quantity;
+                $updateStmt = $this->pdo->prepare(
+                    "UPDATE lm_order_line SET quwantitiyofitem = ? WHERE order_item_id = ?"
+                );
+                $updateStmt->execute([$newQuantity, $existingItem['order_item_id']]);
+            } else {
+                // Item does not exist, so insert a new row.
+                $insertStmt = $this->pdo->prepare(
+                    "INSERT INTO lm_order_line (orderID, InventoryItemID, item_price, quwantitiyofitem, status) 
+                     VALUES (?, ?, ?, ?, ?)"
+                );
+                $status = 'processing'; // Default status for a newly added item.
+                $insertStmt->execute([$orderId, $inventoryItemId, $price, $quantity, $status]);
+            }
+
+            // 3. Recalculate and update the order's totals.
+            $this->recalculateOrderTotal($orderId);
+
+            $this->pdo->commit();
+            return true;
+
+        } catch (Exception $e) {
+            $this->pdo->rollBack();
+            error_log("Error in addItemToOrder for order #{$orderId}: " . $e->getMessage());
+            return "Database error while adding item.";
+        }
+    }
+
+    /**
+     * Recalculates subtotal and total for an order and updates the database.
+     *
+     * @param int $orderId
+     * @return bool
+     */
+    public function recalculateOrderTotal(int $orderId): bool
+    {
+        // 1. Calculate the new subtotal from all items in the order.
+        $subtotalStmt = $this->pdo->prepare("SELECT SUM(item_price * quwantitiyofitem) FROM lm_order_line WHERE orderID = ?");
+        $subtotalStmt->execute([$orderId]);
+        $subtotal = (float) $subtotalStmt->fetchColumn();
+
+        // 2. Get current shipping cost from the order.
+        $order = $this->getOrderDetails($orderId);
+        $shipping = (float) ($order['shipping_cost'] ?? 0);
+        $total = $subtotal + $shipping;
+
+        // 3. Update the order with the new totals.
+        return $this->updateOrderCosts($orderId, $subtotal, $shipping, $total);
+    }
 }
 
 

@@ -118,7 +118,7 @@ if (isset($_SESSION['uid'])) {
                                                 <figure class="product-media">
                                                     <a
                                                         href="product-detail.php?itemid=<?= htmlspecialchars($row['InventoryItemID']) ?>">
-                                                        <img src="<?= htmlspecialchars($invt->get_product_image($pdo, $row['InventoryItemID'])) ?>"
+                                                        <img src="<?= htmlspecialchars($invt->get_product_image($row['InventoryItemID'])) ?>"
                                                             alt="Product image">
                                                     </a>
                                                 </figure>

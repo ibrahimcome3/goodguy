@@ -2,31 +2,20 @@
 
 class Category
 {
-      protected $pdo; // Property to hold the PDO connection
+      protected $pdo;
       private $timestamp;
       private $parentIDS;
 
-      function __construct(PDO $pdo) // Accept PDO connection in constructor
+      function __construct(PDO $pdo)
       {
-            $this->pdo = $pdo; // Assign the passed PDO connection
-            $defaultTimeZone = 'UTC';
-            date_default_timezone_set($defaultTimeZone);
+            $this->pdo = $pdo;
+            date_default_timezone_set('UTC');
             $this->timestamp = date('Y-m-d');
-
-            //var_dump( $this->parentIDS);
       }
 
-
-
-
-
-
       /**
-       * Fetches all direct subcategories for a given parent category ID.
-       * This method is used in `manage_categories.php` to check if a category can be safely deleted.
-       *
-       * @param int $parentId The ID of the parent category.
-       * @return array An array of subcategory records. Returns an empty array if none are found or on error.
+       * @param int $parentId
+       * @return array
        */
       public function getSubcategories(int $parentId): array
       {
@@ -38,7 +27,13 @@ class Category
                   return [];
             }
       }
-      public function getDirectSubcategoriesByParentId(int $parentId): PDOStatement|false
+
+      /**
+       * Return PDOStatement or false (no union type for PHP <8)
+       * @param int $parentId
+       * @return PDOStatement|false
+       */
+      public function getDirectSubcategoriesByParentId(int $parentId) /* no union type */
       {
             try {
                   $sql = "SELECT * FROM categories WHERE parent_id = :parent_id";
@@ -54,8 +49,6 @@ class Category
 
       public function getCategoryNameById(int $categoryId): ?string
       {
-            // Assuming you are migrating to the 'categories' table.
-            // If 'category_new' is still needed, use that table name.
             $sql = "SELECT name FROM categories WHERE category_id = :category_id";
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute([':category_id' => $categoryId]);
@@ -74,15 +67,7 @@ class Category
             return $stmt->fetchColumn() ?: 'Unknown Category';
       }
 
-      /**
-       * Fetches related categories based on a product's category path.
-       * Note: This method seems to rely on an older table 'category_new' and a 'cat_path' column.
-       * This logic might need updating for the new 'categories' table structure.
-       *
-       * @param int $productId
-       * @return PDOStatement|null
-       */
-      public function getRelatedCategories(int $productId): ?PDOStatement
+      public function getRelatedCategories(int $productId) /* was ?PDOStatement */
       {
             $sql = "SELECT cat_path FROM category_new WHERE cat_id = (SELECT `category` FROM productitem WHERE `productID` = ?)";
             $stmt = $this->pdo->prepare($sql);
@@ -90,8 +75,6 @@ class Category
             $row = $stmt->fetch();
 
             if ($row && isset($row['cat_path'])) {
-                  // The original logic for string replacement seems specific and might need review.
-                  // This implementation fixes the SQL injection and double-fetch bug.
                   $string_to_be_sa = "\\" . $productId;
                   $search_string = str_replace($string_to_be_sa, '', $row['cat_path']);
 
@@ -100,11 +83,47 @@ class Category
                   $stmt_related->execute(['\\' . $search_string . '%']);
                   return $stmt_related;
             }
-
             return null;
       }
 
-      public function getCategorySpecific(string $cat): PDOStatement|false
+      /**
+       * Gets all categories related to a product, starting from an inventory item ID.
+       * It first finds the primary category on the product, then finds all categories
+       * from the product_categories junction table, and returns the unique combined list.
+       *
+       * @param int $inventoryItemId The ID of the inventory item.
+       * @return array An array of category details, or an empty array on failure.
+       */
+      public function get_related_categories(int $inventoryItemId): array
+      {
+            try {
+                  // A single, efficient query to get all categories for a given inventory item,
+                  // respecting the new database schema where categories are in `product_categories`.
+                  $sql = "SELECT c.category_id, c.name
+                          FROM inventoryitem AS ii
+                          INNER JOIN productitem AS pi ON ii.productItemID = pi.productID
+                          INNER JOIN product_categories AS pc ON pi.productID = pc.product_id
+                          INNER JOIN categories AS c ON pc.category_id = c.category_id
+                          WHERE ii.InventoryItemID = :inventory_item_id
+                          ORDER BY c.name ASC";
+
+                  $stmt = $this->pdo->prepare($sql);
+                  $stmt->execute([':inventory_item_id' => $inventoryItemId]);
+
+                  return $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            } catch (PDOException $e) {
+                  // Log the error and return an empty array so the calling code doesn't break.
+                  error_log("Database error in Category::get_related_categories: " . $e->getMessage());
+                  return [];
+            }
+      }
+
+      /**
+       * @param string $cat
+       * @return PDOStatement|false
+       */
+      public function getCategorySpecific(string $cat) /* removed union type */
       {
             $sql = "SELECT * FROM category_new WHERE JSON_EXTRACT(`json_`, '$.roots[0]') = ? AND depth != 1";
             $stmt = $this->pdo->prepare($sql);
@@ -128,10 +147,6 @@ class Category
             return (int) $stmt->fetchColumn();
       }
 
-      //SELECT * FROM `variation` left join variation_option on variation.`vid` = variation_option.`variation_id` where category_id = 1
-
-
-
       public function getCategoryById($categoryId)
       {
             if (!$categoryId) {
@@ -148,20 +163,12 @@ class Category
             }
       }
 
-
-      /**
-       * Gets the total number of products associated with a specific category.
-       *
-       * @param int $categoryId The ID of the category.
-       * @return int The number of products in that category.
-       */
       public function getProductCount(int $categoryId): int
       {
             if ($categoryId <= 0) {
                   return 0;
             }
             try {
-                  // Assumes the 'productitem' table has a 'category' column storing the category_id
                   $sql = "SELECT COUNT(*) FROM productitem WHERE category = :category_id";
                   $stmt = $this->pdo->prepare($sql);
                   $stmt->bindParam(':category_id', $categoryId, PDO::PARAM_INT);
@@ -169,16 +176,10 @@ class Category
                   return (int) $stmt->fetchColumn();
             } catch (PDOException $e) {
                   error_log("Error fetching product count for category ID {$categoryId}: " . $e->getMessage());
-                  return 0; // Return 0 on error
+                  return 0;
             }
       }
 
-      /**
-       * Gets product counts for multiple categories in a single query to avoid N+1 issues.
-       *
-       * @param array $categoryIds An array of category IDs.
-       * @return array An associative array mapping category_id to product_count.
-       */
       public function getProductCountsForCategories(array $categoryIds): array
       {
             if (empty($categoryIds)) {
@@ -194,12 +195,6 @@ class Category
             return $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
       }
 
-      /**
-       * Gets the total number of direct subcategories for a given parent ID.
-       *
-       * @param int $categoryId The ID of the parent category.
-       * @return int The number of direct subcategories.
-       */
       public function getSubcategoryCount(int $categoryId): int
       {
             if ($categoryId <= 0) {
@@ -213,15 +208,12 @@ class Category
                   return (int) $stmt->fetchColumn();
             } catch (PDOException $e) {
                   error_log("Error fetching subcategory count for parent ID {$categoryId}: " . $e->getMessage());
-                  return 0; // Return 0 on error
+                  return 0;
             }
       }
 
       /**
-       * Deletes a category from the database.
-       *
-       * @param int $categoryId The ID of the category to delete.
-       * @return bool True on success, false on failure.
+       * @return bool
        */
       public function deleteCategory(int $categoryId): bool
       {
@@ -234,21 +226,15 @@ class Category
                   $stmt->bindParam(':category_id', $categoryId, PDO::PARAM_INT);
                   return $stmt->execute();
             } catch (PDOException $e) {
-                  // This will catch foreign key constraint violations if a category is still in use
                   error_log("Error deleting category ID {$categoryId}: " . $e->getMessage());
                   return false;
             }
       }
 
       /**
-       * Adds a new category to the database.
-       *
-       * @param string $name The name of the category.
-       * @param string $description The description of the category.
-       * @param int|null $parentId The ID of the parent category, or null for a top-level category.
-       * @return int|false The ID of the newly created category, or false on failure.
+       * @return int|false
        */
-      public function addCategory(string $name, string $description = '', ?int $parentId = null): int|false
+      public function addCategory(string $name, string $description = '', ?int $parentId = null)
       {
             if (empty(trim($name))) {
                   return false;
@@ -260,7 +246,6 @@ class Category
                   if ($parentCategory) {
                         $level = $parentCategory['level'] + 1;
                   } else {
-                        // Invalid parent ID provided, treat as top-level
                         $parentId = null;
                   }
             }
@@ -285,22 +270,11 @@ class Category
             }
       }
 
-      /**
-       * Updates an existing category.
-       *
-       * @param int $categoryId The ID of the category to update.
-       * @param string $name The new name for the category.
-       * @param string $description The new description.
-       * @param int|null $parentId The new parent ID.
-       * @return bool True on success, false on failure.
-       */
       public function updateCategory(int $categoryId, string $name, string $description = '', ?int $parentId = null): bool
       {
             if (empty(trim($name)) || $categoryId <= 0) {
                   return false;
             }
-
-            // Prevent setting category as its own parent
             if ($categoryId === $parentId) {
                   return false;
             }
@@ -328,12 +302,9 @@ class Category
       }
 
       /**
-       * Toggles the active status of a category and returns the new status.
-       *
-       * @param int $categoryId The ID of the category to toggle.
-       * @return int|false The new status (0 or 1) on success, false on failure.
+       * @return int|false new status or false
        */
-      public function toggleCategoryStatus(int $categoryId): int|false
+      public function toggleCategoryStatus(int $categoryId)
       {
             if ($categoryId <= 0) {
                   return false;
@@ -341,24 +312,22 @@ class Category
             try {
                   $this->pdo->beginTransaction();
 
-                  // Get current status
                   $stmt = $this->pdo->prepare("SELECT active FROM categories WHERE category_id = :category_id FOR UPDATE");
                   $stmt->execute([':category_id' => $categoryId]);
                   $currentStatus = $stmt->fetchColumn();
 
                   if ($currentStatus === false) {
                         $this->pdo->rollBack();
-                        return false; // Category not found
+                        return false;
                   }
 
                   $newStatus = $currentStatus == 1 ? 0 : 1;
 
-                  // Update to new status
                   $updateStmt = $this->pdo->prepare("UPDATE categories SET active = :new_status WHERE category_id = :category_id");
                   $updateStmt->execute([':new_status' => $newStatus, ':category_id' => $categoryId]);
 
                   $this->pdo->commit();
-                  return $newStatus;
+                  return (int) $newStatus;
             } catch (PDOException $e) {
                   if ($this->pdo->inTransaction()) {
                         $this->pdo->rollBack();
@@ -368,35 +337,19 @@ class Category
             }
       }
 
-      /**
-       * Fetches top-level parent categories.
-       * These are categories where level is 1 and parent_id is NULL.
-       *
-       * @return PDOStatement|false The PDOStatement object on success, or false on failure.
-       */
       public function getTopLevelParentCategories()
       {
             try {
                   $sql = "SELECT `category_id`, `name`, `parent_id`, `level`, `owner_id` FROM `categories` WHERE `level` = 0 AND `parent_id` IS NULL";
-                  $stmt = $this->pdo->query($sql);
-                  return $stmt;
+                  return $this->pdo->query($sql);
             } catch (PDOException $e) {
                   error_log("Error fetching top-level parent categories: " . $e->getMessage());
                   return false;
             }
       }
 
-
-      /**
-       * Get all categories (full info) for a given product ID.
-       * Uses product_categories and categories tables.
-       *
-       * @param int $productId
-       * @return array
-       */
       public function getAllCategoriesOfProduct($productId)
       {
-            // Get all category_ids for the product
             $sql = "SELECT category_id FROM product_categories WHERE product_id = ?";
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute([$productId]);
@@ -404,53 +357,36 @@ class Category
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                   $categoryIds[] = $row['category_id'];
             }
-
             if (empty($categoryIds)) {
                   return [];
             }
-
-            // Get all category info for those IDs
             $in = str_repeat('?,', count($categoryIds) - 1) . '?';
             $sql = "SELECT category_id, name, parent_id, level, owner_id, icon_class FROM categories WHERE category_id IN ($in)";
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute($categoryIds);
-
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
       }
-
-
 
       public function getAllCategories()
       {
-            $sql = "SELECT * FROM categories ORDER BY name ASC";
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute();
+            $stmt = $this->pdo->query("SELECT * FROM categories ORDER BY name ASC");
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
       }
 
-      /**
-       * Get all categories with their depth level in the hierarchy
-       *
-       * @return array Array of categories with depth information
-       */
       public function getAllCategoriesWithDepth(): array
       {
             try {
-                  // Fetch all categories and group them by parent_id in PHP for efficient tree building
                   $sql = "SELECT category_id, name, description, parent_id, active, level FROM categories ORDER BY name ASC";
                   $stmt = $this->pdo->query($sql);
 
                   $categoriesByParent = [];
                   while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                        // Use an empty string as the key for top-level categories (where parent_id is NULL)
                         $key = $row['parent_id'] ?? '';
                         $categoriesByParent[$key][] = $row;
                   }
 
                   $sortedCategories = [];
-                  // Start building the sorted array from the root (null parent_id)
                   $this->buildSortedCategoryArray($categoriesByParent, $sortedCategories, null, 0);
-
                   return $sortedCategories;
             } catch (PDOException $e) {
                   error_log("Error fetching categories with depth: " . $e->getMessage());
@@ -458,31 +394,41 @@ class Category
             }
       }
 
-      /**
-       * More efficient helper to build a flattened, sorted category tree with depth information.
-       *
-       * @param array $categoriesByParent Categories grouped by their parent_id
-       * @param array &$result Output array to store the result
-       * @param int|null $parentId Parent category ID to start from
-       * @param int $depth Current depth level
-       */
       private function buildSortedCategoryArray(array $categoriesByParent, array &$result, ?int $parentId, int $depth = 0): void
       {
             $key = $parentId ?? '';
             if (!isset($categoriesByParent[$key])) {
                   return;
             }
-
             foreach ($categoriesByParent[$key] as $category) {
-                  $category['depth'] = $depth; // Use the calculated depth
+                  $category['depth'] = $depth;
                   $result[] = $category;
                   $this->buildSortedCategoryArray($categoriesByParent, $result, $category['category_id'], $depth + 1);
             }
       }
+
+      /**
+       * Gets all categories associated with a specific product ID.
+       *
+       * @param int $productId The ID of the product.
+       * @return array An array of categories associated with the product.
+       */
+      public function getCategoriesByProductId(int $productId): array
+      {
+            $sql = "SELECT c.category_id, c.name 
+                FROM categories c
+                JOIN product_categories pc ON c.category_id = pc.category_id
+                WHERE pc.product_id = ?";
+
+            try {
+                  $stmt = $this->pdo->prepare($sql);
+                  $stmt->execute([$productId]);
+                  return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (PDOException $e) {
+                  error_log("Database error in Category::getCategoriesByProductId: " . $e->getMessage());
+                  return [];
+            }
+      }
 }
-
-
-
-
 
 ?>
