@@ -29,9 +29,9 @@ $message = '';
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = [
-        'product_id' => (int) $productId, // Add product_id to the data array
+        'product_id' => (int) $productId,
         'product_name' => trim($_POST['product_name'] ?? ''),
-        'category' => (int) ($_POST['category'] ?? 0),
+        'categories' => isset($_POST['category']) ? array_map('intval', $_POST['category']) : [],
         'vendor_id' => (int) ($_POST['vendor_id'] ?? 0),
         'status' => trim($_POST['status'] ?? 'draft'),
         'brand' => (int) ($_POST['brand'] ?? 0),
@@ -40,8 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'admin_id' => $_SESSION['admin_id'] ?? null
     ];
 
-    if (empty($data['product_name']) || empty($data['category'])) {
-        $message = '<div class="alert alert-danger">Product Name and Category are required.</div>';
+    if (empty($data['product_name']) || empty($data['categories'])) {
+        $message = '<div class="alert alert-danger">Product Name and at least one Category are required.</div>';
     } else {
         if ($productItemObj->updateProduct($data)) {
             $_SESSION['flash_message'] = 'Product updated successfully!';
@@ -63,6 +63,9 @@ if (!$product) {
 $allCategories = $categoryObj->getAllCategories();
 $allVendors = $vendorObj->getAllVendors();
 $allBrands = $brandObj->getAllBrands();
+
+// Fetch the product's currently assigned categories
+$assignedCategoryIds = $productItemObj->getProductCategoryIds($productId);
 
 $stmt_policies = $pdo->query("SELECT shipping_policy_id, shipping_policy FROM shipping_policy ORDER BY shipping_policy_id ASC");
 $allReturnPolicies = $stmt_policies->fetchAll(PDO::FETCH_ASSOC);
@@ -326,10 +329,14 @@ if (isset($_SESSION['flash_message'])) {
 
                                         <div class="col-12 col-md-6 col-lg-4">
                                             <label class="form-label fw-semi-bold" for="category">Category</label>
-                                            <select class="form-select" id="category" name="category" required>
+                                            <select class="form-select" id="category" name="category[]" required
+                                                multiple>
                                                 <option value="">Select a category</option>
                                                 <?php foreach ($allCategories as $cat): ?>
-                                                    <option value="<?= $cat['category_id'] ?>" <?= ($product['category_id'] ?? 0) == $cat['category_id'] ? 'selected' : '' ?>>
+                                                    <?php
+                                                    $isSelected = in_array($cat['category_id'], $assignedCategoryIds);
+                                                    ?>
+                                                    <option value="<?= $cat['category_id'] ?>" <?= $isSelected ? 'selected' : '' ?>>
                                                         <?= htmlspecialchars($cat['name']) ?>
                                                     </option>
                                                 <?php endforeach; ?>
@@ -525,7 +532,9 @@ if (isset($_SESSION['flash_message'])) {
                 category: {
                     removeItemButton: true,
                     placeholder: true,
-                    placeholderValue: 'Select a category'
+                    placeholderValue: 'Select categories',
+                    maxItemCount: -1, // No limit on selections
+                    duplicateItemsAllowed: false
                 },
                 brand: {
                     removeItemButton: true,

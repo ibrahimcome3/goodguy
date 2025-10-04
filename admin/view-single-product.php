@@ -47,7 +47,7 @@ if (!$productId) {
             $pageData['vendor'] = $vendorObj->getVendorById($product['vendor_id']);
             $pageData['categories'] = $categoryObj->getCategoriesByProductId($productId);
             $pageData['baseImages'] = $productItemObj->getImagesByProductId($productId);
-            var_dump($pageData['baseImages']);
+            //var_dump($pageData['baseImages']);
             //exit;
             $pageData['variants'] = $variantObj->getVariantsByProductId($productId);
             $pageData['priceRange'] = $productItemObj->getPriceRange($productId);
@@ -237,7 +237,7 @@ if (!$productId) {
         </div>
     </main>
 
-    <?php include 'includes/admin-footer.php'; ?>
+    <?php include __DIR__ . '/includes/admin_footer.php'; ?>
     <script src="https://unpkg.com/swiper/swiper-bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/glightbox/dist/js/glightbox.min.js"></script>
     <script>

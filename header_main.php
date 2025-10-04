@@ -139,6 +139,34 @@ try {
         overflow-y: auto;
         /* Show scrollbar only when needed */
     }
+
+    /* Logo Styling */
+    .logo {
+        display: block;
+        text-decoration: none;
+    }
+
+    .logo img {
+        transition: transform 0.2s ease;
+    }
+
+    .logo:hover img {
+        transform: scale(1.05);
+    }
+
+    .header-left {
+        min-width: 200px;
+    }
+
+    @media (max-width: 767px) {
+        .logo img {
+            height: 40px !important;
+        }
+
+        .logo span {
+            font-size: 1.2rem !important;
+        }
+    }
 </style>
 <header class="header header-10 header-intro-clearance">
     <div class="header-top">
@@ -187,13 +215,10 @@ try {
                 </button>
 
                 <a href="index.php" class="logo">
-                    <div class="h-100 d-flex align-items-center justify-content-center">
-                        <div style="color: red"><img src="assets/images/goodguy.svg" alt="goodguyng.com logo"
-                                width="30"></div>
-                        <div
-                            style="margin-left: 10px; font-size: 20px; color: black; margin-top:-8px; font-weight: bold;">
-                            <?= htmlspecialchars($storeName) ?>.com
-                        </div>
+                    <div class="h-100 d-flex align-items-center">
+                        <img src="assets/logo/logo_new.png" alt="goodguyng.com logo"
+                            style="height: 50px; width: auto; object-fit: contain;">
+
                     </div>
                 </a>
             </div><!-- End .header-left -->

@@ -17,6 +17,8 @@ $sort_by = isset($_GET['sort_by']) ? $_GET['sort_by'] : 'date_desc'; // Default 
 $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1; // Ensure page is at least 1
 $min_price_filter = isset($_GET['min_price']) && is_numeric($_GET['min_price']) ? (float) $_GET['min_price'] : null;
 $max_price_filter = isset($_GET['max_price']) && is_numeric($_GET['max_price']) ? (float) $_GET['max_price'] : null;
+$stock_status_filter = 'in_stock'; // Hardcode to 'in_stock' for customers
+$product_status_filter = 'active'; // Hardcode to 'active' for customers
 $products_per_page = 35; // Number of products per page
 $offset = ($page - 1) * $products_per_page;
 
@@ -158,21 +160,41 @@ function getCategoryAndDescendantIds(PDO $pdo, $identifier): array
 
 // --- Build Product Query ---
 $params = [];
+$join_type = "LEFT JOIN"; // Default to LEFT JOIN
+$where_clauses = ["iii.image_path IS NOT NULL AND iii.image_path != ''"];
+$category_ids_to_filter = [];
+
+// Category Filtering
+if ($category_filter_identifier !== null) {
+    $category_ids_to_filter = getCategoryAndDescendantIds($pdo, $category_filter_identifier);
+    if (!empty($category_ids_to_filter)) {
+        $join_type = "JOIN"; // Change to INNER JOIN when filtering by category
+        // Create placeholders for IN clause (?, ?, ?)
+        $in_placeholders = implode(',', array_fill(0, count($category_ids_to_filter), '?'));
+        $where_clauses[] = "pc.category_id IN ($in_placeholders)";
+        $params = array_merge($params, $category_ids_to_filter);
+    } else {
+        // Category identifier provided but not found, show no results
+        $where_clauses[] = "1 = 0"; // Force no results
+    }
+}
+
 $base_sql = "
-    SELECT SQL_CALC_FOUND_ROWS -- Important for getting total count without a separate query
+    SELECT SQL_CALC_FOUND_ROWS
         ii.InventoryItemID, ii.cost, ii.description, ii.date_added,
         iii.image_path,
         p.productID,
         -- Get category data from categories table joined through product_categories
         cat.name AS cat_name, 
         cat.category_id AS cat_id,
+        ii.quantityOnHand,
         COALESCE(po_item.promoPrice, po_prod.promoPrice) AS promoPrice,
         COALESCE(po_item.regularPrice, po_prod.regularPrice) AS regularPrice
     FROM
         inventoryitem ii
     JOIN productitem p ON ii.productItemID = p.productID
     -- Join through product_categories to get category data
-    LEFT JOIN product_categories pc ON p.productID = pc.product_id
+    {$join_type} product_categories pc ON p.productID = pc.product_id
     LEFT JOIN categories cat ON pc.category_id = cat.category_id
     LEFT JOIN inventory_item_image iii ON ii.InventoryItemID = iii.inventory_item_id AND iii.is_primary = 1
     LEFT JOIN promooffering po_item ON ii.InventoryItemID = po_item.inventory_item_id
@@ -181,24 +203,6 @@ $base_sql = "
                                     AND po_prod.inventory_item_id IS NULL
                                     AND po_prod.start_date <= NOW() AND po_prod.end_date >= NOW()
 ";
-
-$where_clauses = ["ii.status = 'active'", "iii.image_path IS NOT NULL AND iii.image_path != ''"];
-$category_ids_to_filter = [];
-
-// Category Filtering
-if ($category_filter_identifier !== null) {
-    $category_ids_to_filter = getCategoryAndDescendantIds($pdo, $category_filter_identifier);
-    if (!empty($category_ids_to_filter)) {
-        // Create placeholders for IN clause (?, ?, ?)
-        $in_placeholders = implode(',', array_fill(0, count($category_ids_to_filter), '?'));
-        // Use only the junction table for filtering since there's no column in productitem anymore
-        $where_clauses[] = "pc.category_id IN ($in_placeholders)";
-        $params = array_merge($params, $category_ids_to_filter);
-    } else {
-        // Category identifier provided but not found, show no results
-        $where_clauses[] = "1 = 0"; // Force no results
-    }
-}
 
 // Price Filtering
 $price_column_sql = "COALESCE(po_item.promoPrice, po_prod.promoPrice, ii.cost)"; // Use COALESCE for effective price
@@ -210,6 +214,24 @@ if ($max_price_filter !== null) {
     $where_clauses[] = "$price_column_sql <= ?";
     $params[] = $max_price_filter;
 }
+
+// Stock Status Filtering
+if ($stock_status_filter === 'in_stock') {
+    $where_clauses[] = "ii.quantityOnHand > 0";
+} elseif ($stock_status_filter === 'out_of_stock') {
+    $where_clauses[] = "ii.quantityOnHand <= 0";
+}
+// No clause needed for 'all'
+
+// Product Status Filtering
+if ($product_status_filter === 'active') {
+    $where_clauses[] = "ii.status = 'active'";
+} elseif ($product_status_filter === 'inactive') {
+    $where_clauses[] = "ii.status = 'inactive'";
+}
+// No clause needed for 'all'
+
+
 
 
 
@@ -241,8 +263,10 @@ switch ($sort_by) {
 }
 $sql .= $order_by_sql;
 
+
 // Pagination
 $sql .= " LIMIT ? OFFSET ?";
+
 $params[] = $products_per_page;
 $params[] = $offset;
 
@@ -352,14 +376,7 @@ $total_pages = ceil($total_products / $products_per_page);
                     <ol class="breadcrumb">
                         <li class="breadcrumb-item"><a href="index.php">Home</a></li>
                         <li class="breadcrumb-item active" aria-current="page">Shop</li>
-                        <?php
-                        // Optional: Add breadcrumb for category if filtered
-                        if ($category_filter_identifier && !empty($category_ids_to_filter)) {
-                            // You might want to fetch the actual name of the filtered category here
-                            // For simplicity, using the identifier provided
-                            echo '<li class="breadcrumb-item active" aria-current="page">' . htmlspecialchars(is_numeric($category_filter_identifier) ? 'Category ' . $category_filter_identifier : $category_filter_identifier) . '</li>';
-                        }
-                        ?>
+
                     </ol>
                 </div><!-- End .container -->
             </nav><!-- End .breadcrumb-nav -->
@@ -406,6 +423,7 @@ $total_pages = ceil($total_products / $products_per_page);
                                             $categoryId = $row['cat_id'];
                                             $isPromo = !empty($row['promoPrice']);
                                             $isNew = (strtotime($row['date_added']) > strtotime('-30 days'));
+                                            $isInStock = ($row['quantityOnHand'] ?? 0) > 0;
                                             $ratingWidth = $Orvi->get_rating_($itemId);
                                             $reviewCount = $Orvi->get_rating_review_number($itemId);
                                             ?>
@@ -414,6 +432,10 @@ $total_pages = ceil($total_products / $products_per_page);
                                                 <div class="product product-7 text-center">
                                                     <figure class="product-media">
                                                         <?php if ($isPromo): ?><span
+                                                                class="product-label label-sale">Sale</span><?php endif; ?>
+                                                        <?php if (!$isInStock): ?><span class="product-label label-out">Out of
+                                                                Stock</span><?php endif; ?>
+                                                        <?php if ($isNew): ?><span
                                                                 class="product-label label-sale">Sale</span><?php endif; ?>
                                                         <?php if ($isNew): ?><span
                                                                 class="product-label label-new">New</span><?php endif; ?>
@@ -428,9 +450,14 @@ $total_pages = ceil($total_products / $products_per_page);
                                                                 title="Add to Wishlist"><span>add to wishlist</span></a>
                                                         </div>
                                                         <div class="product-action">
-                                                            <a href="#" product-info="<?= $itemId ?>"
-                                                                class="submit-cart btn-product btn-cart"
-                                                                title="Add to cart"><span>add to cart</span></a>
+                                                            <?php if ($isInStock): ?>
+                                                                <a href="#" product-info="<?= $itemId ?>"
+                                                                    class="submit-cart btn-product btn-cart"
+                                                                    title="Add to cart"><span>add to cart</span></a>
+                                                            <?php else: ?>
+                                                                <a href="#" class="btn-product btn-cart disabled"
+                                                                    style="cursor: not-allowed;"><span>Out of Stock</span></a>
+                                                            <?php endif; ?>
                                                         </div>
                                                     </figure>
                                                     <div class="product-body">
@@ -482,6 +509,12 @@ $total_pages = ceil($total_products / $products_per_page);
                                                 $current_filters_for_pagination['sort_by'] = $sort_by;
                                             if ($min_price_filter !== null)
                                                 $current_filters_for_pagination['min_price'] = $min_price_filter;
+                                            if ($max_price_filter !== null)
+                                                $current_filters_for_pagination['max_price'] = $max_price_filter;
+                                            if ($stock_status_filter)
+                                                $current_filters_for_pagination['stock_status'] = $stock_status_filter;
+                                            if ($product_status_filter)
+                                                $current_filters_for_pagination['product_status'] = $product_status_filter;
                                             if ($max_price_filter !== null)
                                                 $current_filters_for_pagination['max_price'] = $max_price_filter;
                                             ?>
@@ -545,6 +578,12 @@ $total_pages = ceil($total_products / $products_per_page);
                                                     $current_filters_for_category['min_price'] = $min_price_filter;
                                                 if ($max_price_filter !== null)
                                                     $current_filters_for_category['max_price'] = $max_price_filter;
+                                                if ($stock_status_filter)
+                                                    $current_filters_for_category['stock_status'] = $stock_status_filter;
+                                                if ($product_status_filter)
+                                                    $current_filters_for_category['product_status'] = $product_status_filter;
+                                                if ($max_price_filter !== null)
+                                                    $current_filters_for_category['max_price'] = $max_price_filter;
                                                 // Render the nested list
                                                 renderCategoryFilter($category_tree, $category_filter_identifier, $current_filters_for_category);
                                                 ?>
@@ -573,6 +612,11 @@ $total_pages = ceil($total_products / $products_per_page);
                                                     <input type="hidden" name="sort_by"
                                                         value="<?= htmlspecialchars($sort_by) ?>">
                                                 <?php endif; ?>
+                                                <?php if ($stock_status_filter): ?>
+                                                    <input type="hidden" name="stock_status"
+                                                        value="<?= htmlspecialchars($stock_status_filter) ?>">
+                                                <?php endif; ?>
+
                                                 <input type="hidden" name="page" value="1">
                                                 <?php // Reset page on filter change ?>
 

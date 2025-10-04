@@ -284,11 +284,20 @@ if ($categoryFilter) {
                                                     </div>
                                                 </td>
                                                 <td class="align-middle white-space-nowrap py-0">
-
                                                     <a class="d-block border border-translucent rounded-2"
                                                         href="view-single-product.php?id=<?= $product['productID'] ?>">
-                                                        <img src="<?= htmlspecialchars($product["product_image_path"]) ?>"
-                                                            alt="" width="53">
+                                                        <?php
+                                                        $imagePath = $product["product_image_path"] ?? null;
+                                                        // Check if image exists and is valid
+                                                        if (!empty($imagePath) && file_exists("../" . $imagePath)) {
+                                                            echo '<img src="../' . htmlspecialchars($imagePath) . '" alt="' .
+                                                                htmlspecialchars($product["product_name"]) . '" width="53" height="53" style="object-fit: cover;">';
+                                                        } else {
+                                                            // Use default image
+                                                            echo '<img src="../e.jpg" alt="' .
+                                                                htmlspecialchars($product["product_name"]) . '" width="53" height="53" style="object-fit: cover;">';
+                                                        }
+                                                        ?>
                                                     </a>
                                                 </td>
                                                 <td class="product align-middle ps-4">

@@ -1926,4 +1926,31 @@ class User
    //    // Return original if can't format
    //    return $phoneNumber;
    // }
+
+   /**
+    * Gets the primary active phone number for a customer
+    * 
+    * @param int $customerId The ID of the customer
+    * @return string|null Returns the phone number or null if not found
+    */
+   public function getPrimaryActivePhoneNumber(int $customerId): ?string
+   {
+      try {
+         $sql = "SELECT customer_phone 
+                FROM customer 
+                WHERE customer_id = ? 
+                AND customer_phone IS NOT NULL 
+                AND customer_phone != ''
+                LIMIT 1";
+
+         $stmt = $this->pdo->prepare($sql);
+         $stmt->execute([$customerId]);
+
+         $result = $stmt->fetch(PDO::FETCH_COLUMN);
+         return $result ?: null;
+      } catch (PDOException $e) {
+         error_log("Error getting primary phone number: " . $e->getMessage());
+         return null;
+      }
+   }
 }

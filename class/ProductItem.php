@@ -296,6 +296,26 @@ class ProductItem
     }
 
     /**
+     * Gets all category IDs for a specific product from the junction table.
+     *
+     * @param int $productId The ID of the product.
+     * @return array An array of category IDs.
+     */
+    public function getProductCategoryIds(int $productId): array
+    {
+        $sql = "SELECT category_id FROM product_categories WHERE product_id = :product_id";
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([':product_id' => $productId]);
+            // Fetch all category_id values into a single flat array
+            return $stmt->fetchAll(PDO::FETCH_COLUMN);
+        } catch (PDOException $e) {
+            error_log("Error fetching product category IDs: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
      * Gets all image records for a specific product ID.
      * It ensures the primary image (defined in the productitem table) is listed first.
      *
@@ -504,46 +524,60 @@ class ProductItem
      */
     public function updateProduct(array $data): bool
     {
+        try {
+            $this->pdo->beginTransaction();
 
+            // 1. Update the main productitem table (excluding category)
+            $sql = "UPDATE productitem SET 
+                        product_name = :product_name, 
+                        vendor_id = :vendor_id, 
+                        status = :status,
+                        brand_id = :brand_id,
+                        product_information = :product_information,
+                        shipping_returns = :shipping_returns,
+                        admin_id = :admin_id,
+                        updated_at = NOW()
+                    WHERE productID = :product_id";
 
-        $sql = "UPDATE productitem SET 
-                    product_name = :product_name, 
-                    category = :category, 
-                    vendor_id = :vendor_id, 
-                    status = :status,
-                    brand_id = :brand_id,
-                    product_information = :product_information,
-                    shipping_returns = :shipping_returns,
-                    admin_id = :admin_id,
-                    updated_at = NOW()
-                WHERE productID = :product_id";
+            $stmt = $this->pdo->prepare($sql);
 
-        // try {
-        $stmt = $this->pdo->prepare($sql);
+            $params = [
+                ':product_name' => $data['product_name'],
+                ':vendor_id' => $data['vendor_id'],
+                ':status' => $data['status'],
+                ':brand_id' => $data['brand'],
+                ':product_information' => $data['product_information'],
+                ':shipping_returns' => $data['shipping_returns'],
+                ':admin_id' => $data['admin_id'] ?? null,
+                ':product_id' => $data['product_id']
+            ];
 
-        // Add admin_id to the data array if not already present
-        if (!isset($data['admin_id'])) {
-            $data['admin_id'] = isset($_SESSION['admin_id']) ? $_SESSION['admin_id'] : null;
+            $stmt->execute($params);
+
+            // 2. Update the product_categories junction table
+            $productId = $data['product_id'];
+            $categoryIds = $data['categories'] ?? [];
+
+            // First, remove all existing category associations for this product
+            $deleteStmt = $this->pdo->prepare("DELETE FROM product_categories WHERE product_id = :product_id");
+            $deleteStmt->execute([':product_id' => $productId]);
+
+            // Then, insert the new category associations
+            if (!empty($categoryIds)) {
+                $insertSql = "INSERT INTO product_categories (product_id, category_id) VALUES (:product_id, :category_id)";
+                $insertStmt = $this->pdo->prepare($insertSql);
+                foreach ($categoryIds as $categoryId) {
+                    $insertStmt->execute([':product_id' => $productId, ':category_id' => $categoryId]);
+                }
+            }
+
+            $this->pdo->commit();
+            return true;
+        } catch (PDOException $e) {
+            $this->pdo->rollBack();
+            error_log("Error updating product: " . $e->getMessage());
+            return false;
         }
-
-        // Map the form field names to database parameters
-        $params = [
-            ':product_name' => $data['product_name'],
-            ':category' => $data['category'],
-            ':vendor_id' => $data['vendor_id'],
-            ':status' => $data['status'],
-            ':brand_id' => $data['brand'],
-            ':product_information' => $data['product_information'],
-            ':shipping_returns' => $data['shipping_returns'],
-            ':admin_id' => $data['admin_id'],
-            ':product_id' => $data['product_id']
-        ];
-
-        return $stmt->execute($params);
-        // } catch (PDOException $e) {
-        //     error_log("Error updating product: " . $e->getMessage());
-        //     return false;
-        // }
     }
 
     /**
