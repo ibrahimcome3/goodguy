@@ -30,7 +30,7 @@ try {
      die("Database connection failed in includes.php. Please check server logs. PDO Error: " . htmlspecialchars($e->getMessage()));
 }
 
-require_once 'class/Conn.php'; // Make sure Conn.php is included first
+
 require_once 'class/InventoryItem.php'; // Include InventoryItem.php BEFORE instantiation
 require_once 'class/Category.php';
 require_once 'class/Review.php';
