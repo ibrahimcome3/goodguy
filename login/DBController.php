@@ -4,9 +4,9 @@ class DBController
 
 
  private $host = "localhost";
-    private $user = "root" ?? 'u633821528_goodguyng';
-    private $password = "" ?? 'PPassword12@';
-    private $database = "lm_test" ?? 'u633821528_goodguyng';
+    private $user =  'u633821528_goodguyng';
+    private $password =  'PPassword12@';
+    private $database =  'u633821528_goodguyng';
     private $conn;
 
     function __construct()
