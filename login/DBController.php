@@ -1,10 +1,12 @@
 <?php
 class DBController
 {
-    private $host = "localhost";
-    private $user = "root";
-    private $password = "";
-    private $database = "lm_test";
+
+
+ private $host = "localhost";
+    private $user = "root" ?? 'u633821528_goodguyng';
+    private $password = "" ?? 'PPassword12@';
+    private $database = "lm_test" ?? 'u633821528_goodguyng';
     private $conn;
 
     function __construct()
