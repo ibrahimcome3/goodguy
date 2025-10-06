@@ -7,7 +7,6 @@ require_once "login/Util.php"; // Your utility functions
 
 // Instantiate classes
 $auth = new Auth();
-$db_handle = new DBController(); // Assuming this is your database class
 $util = new Util();
 
 $current_time = time();
