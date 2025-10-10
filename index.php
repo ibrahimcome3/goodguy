@@ -22,9 +22,10 @@ try {
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Welcome to GoodGuyng.com</title> <?php // More descriptive title ?>
+    <title>Welcome to GoodGuyng.com</title>
     <?php include "htlm-includes.php/metadata.php"; ?>
-    <link rel="stylesheet" href="node_modules/swiper/swiper.min.css" />
+    x and
+    <link rel="stylesheet" href="node_modules/swiper/swiper-bundle.min.css">
 
 
     <!-- Plugins CSS File -->
@@ -75,7 +76,7 @@ try {
 
         /* Optional: Subtle hover effect */
         .product:hover {
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
             transform: translateY(-2px);
             transition: all 0.2s ease-in-out;
         }
@@ -90,79 +91,64 @@ try {
             color: #c96;
         }
 
-        .intro-slide .intro-content {
-            background-color: rgba(0, 0, 0, 0.6);
-            /* Semi-transparent black background - adjust color and opacity */
-            padding: 20px 30px;
-            /* Add some padding around the text */
-            border-radius: 5px;
-            /* Optional: rounded corners */
-            display: inline-block;
-            /* Make the background only as wide as needed, or remove for full width */
-            color: #fff;
-            /* Ensure text inside is white */
-            max-width: 90%;
-            /* Prevent it getting too wide on large screens */
+        .intro-slide {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
         }
 
-        /* Ensure text elements inside are white */
-        .intro-slide .intro-content h1,
-        .intro-slide .intro-content h3,
-        .intro-slide .intro-content .intro-price span,
-        .intro-slide .intro-content .intro-price sup,
-        .intro-slide .intro-content a.btn {
-            color: #fff;
-            text-shadow: none;
-            /* Shadow might not be needed with a background */
+        .intro-slide::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(109, 108, 108, 0.4);
+            /* Dark overlay for better text readability */
+            z-index: 1;
         }
 
-        /* Make primary subtitle stand out if needed */
-        .intro-slide .intro-content .intro-subtitle.text-primary {
-            color: #facc15;
-            /* Example: Yellow */
+        .intro-content {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            padding: 2rem;
         }
 
-        /* Adjust button style if needed */
-        .intro-slide .intro-content a.btn-primary {
-            background-color: #fff;
-            color: #333;
-            border-color: #fff;
-        }
-
-        .intro-slide .intro-content a.btn-primary:hover {
-            background-color: #eee;
-            border-color: #eee;
-            color: #333;
-        }
-
-        /* Increase size of the main promotional price */
-        .intro-slide .intro-content .intro-price .text-third {
+        .intro-title {
             font-size: 3rem;
-            /* Adjust this value */
+            font-weight: 700;
+
+        }
+
+        .intro-subtitle {
+            font-size: 1.5rem;
             font-weight: 600;
-            line-height: 1.1;
+            color: #c96 !important;
         }
 
-        /* Increase size and add strikethrough to the regular (old) price */
-        .intro-slide .intro-content .intro-price .intro-old-price {
-            font-size: 2rem;
-            /* Adjust this value */
-            font-weight: 400;
-            vertical-align: middle;
-            margin-right: 8px;
-            line-height: 1;
-            text-decoration: line-through;
-            /* This adds the strikethrough */
-            color: #ccc;
-            /* Optional: Makes the old price lighter grey */
+        .intro-text {
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
         }
 
-        /* Optional: Adjust spacing around the price container if needed */
-        .intro-slide .intro-content .intro-price {
-            margin-top: 1rem;
-            margin-bottom: 1.5rem;
-        }
+        @media (max-width: 768px) {
+            .intro-title {
+                font-size: 2rem;
+            }
 
+            .intro-subtitle {
+                font-size: 1.2rem;
+            }
+
+            .intro-slide {
+                min-height: 300px;
+            }
+        }
 
         /* --- Category Block Icon Styling --- */
         .cat-block figure {
@@ -258,6 +244,232 @@ try {
             background: #08C;
             /* Example color for active pagination dot */
         }
+
+        .cat-group-card {
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+            padding: 16px 18px 14px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .cat-group-card .group-title {
+            font-size: 1.25rem;
+            margin: 0 0 12px;
+            font-weight: 600;
+        }
+
+        .cat-mini-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px 14px;
+            flex-grow: 1;
+        }
+
+        .cat-mini {
+            text-decoration: none;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .cat-mini .thumb {
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            background: #f7f7f7;
+            border: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border-radius: 4px;
+        }
+
+        .cat-mini img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: cover;
+        }
+
+        .thumb-fallback {
+            font-size: 1.6rem;
+            font-weight: 600;
+            color: #000000ff;
+        }
+
+        .cat-mini .label {
+            font-size: .8rem;
+            line-height: 1.1;
+            color: #000000ff;
+            font-weight: 500;
+            display: inline-block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .cat-mini:hover .label {
+            color: #c96;
+        }
+
+        .see-more-link {
+            margin-top: 14px;
+            font-size: .85rem;
+            color: #007185;
+            text-decoration: none;
+        }
+
+        .see-more-link:hover {
+            text-decoration: underline;
+        }
+
+        .categoryGroupSwiper .swiper-slide {
+            width: auto;
+        }
+
+        .categoryGroupSwiper .swiper-button-prev,
+        .categoryGroupSwiper .swiper-button-next {
+            color: #333;
+        }
+
+        @media (min-width: 768px) {
+            .cat-group-card {
+                padding: 18px 20px 16px;
+            }
+
+            .cat-mini .label {
+                font-size: .82rem;
+            }
+        }
+
+        .cat-individual-card {
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            padding: 20px 15px;
+            height: 100%;
+            text-align: center;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .cat-individual-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .cat-individual-link {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            height: 100%;
+        }
+
+        .cat-individual-thumb {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 15px;
+            border-radius: 50%;
+            background: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+
+        .cat-individual-card:hover .cat-individual-thumb {
+            border-color: #c96;
+            background: #fff5f5;
+        }
+
+        .cat-individual-thumb img {
+            max-width: 60px;
+            max-height: 60px;
+            object-fit: contain;
+        }
+
+        .thumb-fallback {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .cat-individual-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 0 0 10px;
+            color: #333;
+            line-height: 1.3;
+        }
+
+        .shop-now-text {
+            font-size: 0.9rem;
+            color: #c96;
+            font-weight: 500;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .cat-individual-card:hover .shop-now-text {
+            opacity: 1;
+        }
+
+        .cat-individual-card:hover .cat-individual-title {
+            color: #c96;
+        }
+
+        .categoryIndividualSwiper .swiper-slide {
+            height: auto;
+        }
+
+        .categoryIndividualSwiper .swiper-button-prev,
+        .categoryIndividualSwiper .swiper-button-next {
+            color: #c96;
+            background: #fff;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            margin-top: -20px;
+        }
+
+        .categoryIndividualSwiper .swiper-button-prev:after,
+        .categoryIndividualSwiper .swiper-button-next:after {
+            font-size: 16px;
+        }
+
+        .categoryIndividualSwiper .swiper-pagination-bullet {
+            background: #c96;
+            opacity: 0.3;
+        }
+
+        .categoryIndividualSwiper .swiper-pagination-bullet-active {
+            opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+            .cat-individual-card {
+                padding: 15px 10px;
+            }
+
+            .cat-individual-thumb {
+                width: 60px;
+                height: 60px;
+            }
+
+            .cat-individual-thumb img {
+                max-width: 45px;
+                max-height: 45px;
+            }
+
+            .cat-individual-title {
+                font-size: 1rem;
+            }
+        }
     </style>
 
 </head>
@@ -272,77 +484,125 @@ try {
 
         <main class="main">
 
-            <!-- New Swiper Slider Section -->
-            <div class="container new-slider-section mt-5 mb-5">
-
-                <!-- Slider main container -->
-                <div class="swiper myNewSwiper">
-                    <!-- Additional required wrapper -->
+            <div class="intro-slider-container mb-5">
+                <div class="intro-slider swiper-container swiper-theme nav-inner pg-inner" data-swiper-options='{
+                        "slidesPerView": 1,
+                        "spaceBetween": 0,
+                        "loop": true,
+                        "nav": false,
+                        "autoplay": {
+                            "delay": 6000,
+                            "disableOnInteraction": false
+                        },
+                        "pagination": {
+                            "el": ".swiper-pagination",
+                            "clickable": true
+                        },
+                        "navigation": {
+                            "nextEl": ".swiper-button-next",
+                            "prevEl": ".swiper-button-prev"
+                        }
+                    }'>
                     <div class="swiper-wrapper">
-                        <!-- Slides -->
+                        <div class="swiper-slide intro-slide"
+                            style="background-image: url(banner/c.png); background-size: cover; background-position: center; min-height: 400px;">
+                            <div class="intro-content d-flex align-items-center justify-content-center h-100">
+                                <div class="text-center text-white">
+                                    <h1 class="intro-title mb-3">Welcome to GoodGuy</h1>
+                                    <h3 class="intro-subtitle text-primary mb-3">Your One-Stop Shop</h3>
+                                    <h4 class="intro-text mb-4">Discover amazing products at unbeatable prices</h4>
+                                    <a href="shop.php" class="btn btn-primary btn-lg">Shop Now</a>
+                                </div>
+                            </div>
+                        </div><!-- End .swiper-slide -->
 
-                        <div class="swiper-slide">
-                            <img src="banner/slide-3.png" alt="New Slide 2"
-                                style="width:100%; height:auto; object-fit: cover; max-height: 400px;">
-                            <div class="swiper-slide-caption">Caption for Slide 2</div>
-                        </div>
+                        <div class="swiper-slide intro-slide"
+                            style="background-image: url(banner/d.png); background-size: cover; background-position: center; min-height: 400px;">
+                            <div class="intro-content d-flex align-items-center justify-content-center h-100">
+                                <div class="text-center text-white">
+                                    <h1 class="intro-title mb-3">Quality Products</h1>
+                                    <h3 class="intro-subtitle text-primary mb-3">Best Deals</h3>
+                                    <p class="intro-text mb-4">Shop electronics, clothing, books and more</p>
+                                    <a href="shop.php" class="btn btn-primary btn-lg">Explore Now</a>
+                                </div>
+                            </div>
+                        </div><!-- End .swiper-slide -->
+                    </div><!-- End .swiper-wrapper -->
 
-                        <div class="swiper-slide">
-                            <img src="banner/notting.jpg" alt="New Slide 1"
-                                style="width:100%; height:auto; object-fit: cover; max-height: 400px;">
-                            <div class="swiper-slide-caption">Caption for Slide 1</div>
-                        </div>
-
-                    </div>
-                    <!-- If we need pagination -->
                     <div class="swiper-pagination"></div>
-
-                    <!-- If we need navigation buttons -->
                     <div class="swiper-button-prev"></div>
                     <div class="swiper-button-next"></div>
-
-                    <!-- If we need scrollbar -->
-                    <div class="swiper-scrollbar"></div>
                 </div>
             </div>
-            <!-- End New Swiper Slider Section -->
 
 
             <!-- ========================= POPULAR CATEGORIES ========================= -->
-            <div class="container categories pt-3 pb-3">
-                <h2 class="title-lg text-center mb-4">Shop by Category</h2>
-                <div class="row justify-content-center">
-                    <?php
-                    try {
-                        // Query to fetch top categories from the database
-                        // Adjust table and column names as per your schema
-                        // Assumes 'icon_class' stores the CSS class for the icon
-                        // Assumes 'is_homepage_category' = 1 marks categories for the homepage
-                        // Assumes 'sort_order' column for ordering, or use any other criteria
-                        $sql_top_categories = "SELECT category_id, name, icon_class FROM categories WHERE `parent_id` is null LIMIT 8;"; // Adjust limit as needed
-                        $stmt_top_categories = $pdo->query($sql_top_categories);
 
-                        while ($top_cat_row = $stmt_top_categories->fetch(PDO::FETCH_ASSOC)):
-                            if (empty($top_cat_row['icon_class'])) { // Default icon if none specified
-                                // $top_cat_row['icon_class'] = 'icon-tag'; // A generic default icon
+            <div class="container mb-5">
+                <h2 class="title-lg text-center mb-4">Popular Categories </h2>
+
+                <div class="swiper categoryGroupSwiper ">
+                    <div class="swiper-wrapper">
+                        <?php
+                        try {
+                            // Fetch top-level categories to create a slide for each
+                            $top_level_cats_stmt = $pdo->query("SELECT category_id, name FROM categories WHERE parent_id IS NULL ORDER BY name ASC");
+                            $top_level_categories = $top_level_cats_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                            foreach ($top_level_categories as $top_cat) {
+                                // For each top-level category, fetch up to 4 child categories with product images
+                                $sub_cat_sql = "
+                                    SELECT c.category_id, c.name, (
+                                        SELECT iii.image_path
+                                        FROM inventoryitem ii
+                                        JOIN product_categories pc ON ii.productItemID = pc.product_id
+                                        JOIN inventory_item_image iii ON ii.InventoryItemID = iii.inventory_item_id AND iii.is_primary = 1
+                                        WHERE pc.category_id = c.category_id AND ii.status = 'active' AND iii.image_path IS NOT NULL AND iii.image_path != ''
+                                        ORDER BY ii.date_added DESC
+                                        LIMIT 1
+                                    ) as image_path
+                                    FROM categories c
+                                    WHERE c.parent_id = :parent_id
+                                    HAVING image_path IS NOT NULL
+                                    ORDER BY c.name ASC
+                                    LIMIT 4
+                                ";
+                                $sub_cat_stmt = $pdo->prepare($sub_cat_sql);
+                                $sub_cat_stmt->execute([':parent_id' => $top_cat['category_id']]);
+                                $sub_categories = $sub_cat_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                                // Only create a slide if there are sub-categories with images
+                                if (!empty($sub_categories)) {
+                                    ?>
+                                    <div class="swiper-slide">
+                                        <div class="cat-group-card">
+                                            <h3 class="group-title"><?= htmlspecialchars($top_cat['name']) ?></h3>
+                                            <div class="cat-mini-grid">
+                                                <?php foreach ($sub_categories as $sub_cat): ?>
+                                                    <a href="shop.php?category=<?= $sub_cat['category_id'] ?>" class="cat-mini">
+                                                        <div class="thumb">
+                                                            <img src="<?= htmlspecialchars($sub_cat['image_path']) ?>"
+                                                                alt="<?= htmlspecialchars($sub_cat['name']) ?>">
+                                                        </div>
+                                                        <span class="label"><?= htmlspecialchars($sub_cat['name']) ?></span>
+                                                    </a>
+                                                <?php endforeach; ?>
+                                            </div>
+                                            <a href="shop.php?category=<?= $top_cat['category_id'] ?>" class="see-more-link">Shop
+                                                all in <?= htmlspecialchars($top_cat['name']) ?></a>
+                                        </div>
+                                    </div>
+                                    <?php
+                                }
                             }
-                            ?>
-                            <div class="col-6 col-sm-4 col-md-3 col-lg-2">
-                                <a href="shop.php?category=<?= urlencode($top_cat_row['category_id']) ?>" class="cat-block">
-                                    <figure>
-
-                                        <img src="<?= $top_cat_row['icon_class'] ?>" />
-                                    </figure>
-                                    <h3 class="cat-block-title"><?= htmlspecialchars($top_cat_row['name']) ?></h3>
-                                </a>
-                            </div>
-                            <?php
-                        endwhile;
-                    } catch (PDOException $e) {
-                        error_log("Error fetching top categories: " . $e->getMessage());
-                        echo '<div class="col-12"><p class="text-danger text-center">Could not load categories at this time.</p></div>';
-                    }
-                    ?>
+                        } catch (PDOException $e) {
+                            error_log("Error fetching category groups for slider: " . $e->getMessage());
+                        }
+                        ?>
+                    </div>
+                    <div class="swiper-button-prev cat-group-prev"></div>
+                    <div class="swiper-button-next cat-group-next"></div>
+                    <div class="swiper-pagination cat-group-pagination d-md-none"></div>
                 </div>
             </div>
             <!-- ========================= POPULAR CATEGORIES END ========================= -->
@@ -626,6 +886,264 @@ try {
 
 
 
+            <!-- ========================= CATEGORY GROUP SLIDER ========================= -->
+            <?php
+            // Fetch top-level categories with an image/icon (adjust column if different)
+            $catLimit = 12; // Number of individual category slides
+            $catRows = [];
+            try {
+                $stmt = $pdo->query("
+                    SELECT category_id, name, icon_class 
+                    FROM categories 
+                    WHERE parent_id IS NULL 
+                    ORDER BY name ASC 
+                    LIMIT {$catLimit}");
+                $catRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (PDOException $e) {
+                error_log('Category individual slider: ' . $e->getMessage());
+            }
+            ?>
+
+
+
+            <style>
+                .cat-individual-card {
+                    background: #fff;
+                    border: 1px solid #e5e5e5;
+                    border-radius: 8px;
+                    padding: 20px 15px;
+                    height: 100%;
+                    text-align: center;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                }
+
+                .cat-individual-card:hover {
+                    transform: translateY(-5px);
+                    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+                }
+
+                .cat-individual-link {
+                    text-decoration: none;
+                    color: inherit;
+                    display: block;
+                    height: 100%;
+                }
+
+                .cat-individual-thumb {
+                    width: 80px;
+                    height: 80px;
+                    margin: 0 auto 15px;
+                    border-radius: 50%;
+                    background: #f8f9fa;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    overflow: hidden;
+                    border: 2px solid #e9ecef;
+                    transition: all 0.3s ease;
+                }
+
+                .cat-individual-card:hover .cat-individual-thumb {
+                    border-color: #c96;
+                    background: #fff5f5;
+                }
+
+                .cat-individual-thumb img {
+                    max-width: 60px;
+                    max-height: 60px;
+                    object-fit: contain;
+                }
+
+                .thumb-fallback {
+                    font-size: 2rem;
+                    font-weight: 600;
+                    color: #666;
+                }
+
+                .cat-individual-title {
+                    font-size: 1.1rem;
+                    font-weight: 600;
+                    margin: 0 0 10px;
+                    color: #333;
+                    line-height: 1.3;
+                }
+
+                .shop-now-text {
+                    font-size: 0.9rem;
+                    color: #c96;
+                    font-weight: 500;
+                    opacity: 0;
+                    transition: opacity 0.3s ease;
+                }
+
+                .cat-individual-card:hover .shop-now-text {
+                    opacity: 1;
+                }
+
+                .cat-individual-card:hover .cat-individual-title {
+                    color: #c96;
+                }
+
+                .categoryIndividualSwiper .swiper-slide {
+                    height: auto;
+                }
+
+                .categoryIndividualSwiper .swiper-button-prev,
+                .categoryIndividualSwiper .swiper-button-next {
+                    color: #c96;
+                    background: #fff;
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 50%;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+                    margin-top: -20px;
+                }
+
+                .categoryIndividualSwiper .swiper-button-prev:after,
+                .categoryIndividualSwiper .swiper-button-next:after {
+                    font-size: 16px;
+                }
+
+                .categoryIndividualSwiper .swiper-pagination-bullet {
+                    background: #c96;
+                    opacity: 0.3;
+                }
+
+                .categoryIndividualSwiper .swiper-pagination-bullet-active {
+                    opacity: 1;
+                }
+
+                @media (max-width: 768px) {
+                    .cat-individual-card {
+                        padding: 15px 10px;
+                    }
+
+                    .cat-individual-thumb {
+                        width: 60px;
+                        height: 60px;
+                    }
+
+                    .cat-individual-thumb img {
+                        max-width: 45px;
+                        max-height: 45px;
+                    }
+
+                    .cat-individual-title {
+                        font-size: 1rem;
+                    }
+                }
+            </style>
+
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    new Swiper('.categoryIndividualSwiper', {
+                        slidesPerView: 2,
+                        spaceBetween: 16,
+                        loop: false,
+                        autoplay: {
+                            delay: 3000,
+                            disableOnInteraction: false,
+                            pauseOnMouseEnter: true
+                        },
+                        navigation: {
+                            nextEl: '.cat-individual-next',
+                            prevEl: '.cat-individual-prev'
+                        },
+                        pagination: {
+                            el: '.cat-individual-pagination',
+                            clickable: true
+                        },
+                        breakpoints: {
+                            480: {
+                                slidesPerView: 3,
+                                spaceBetween: 16
+                            },
+                            768: {
+                                slidesPerView: 4,
+                                spaceBetween: 20
+                            },
+                            992: {
+                                slidesPerView: 5,
+                                spaceBetween: 24
+                            },
+                            1200: {
+                                slidesPerView: 6,
+                                spaceBetween: 24
+                            }
+                        }
+                    });
+                });
+            </script>
+            <!-- ========================= CATEGORY INDIVIDUAL SLIDER END ========================= -->
+            <div class="container mb-5">
+                <div class="swiper categoryGroupSwiper ">
+                    <div class="swiper-wrapper">
+                        <?php
+                        try {
+                            // Fetch top-level categories to create a slide for each
+                            $top_level_cats_stmt = $pdo->query("SELECT category_id, name FROM categories WHERE parent_id IS NULL ORDER BY name ASC");
+                            $top_level_categories = $top_level_cats_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                            foreach ($top_level_categories as $top_cat) {
+                                // For each top-level category, fetch up to 4 child categories with product images
+                                $sub_cat_sql = "
+                                    SELECT c.category_id, c.name, (
+                                        SELECT iii.image_path
+                                        FROM inventoryitem ii
+                                        JOIN product_categories pc ON ii.productItemID = pc.product_id
+                                        JOIN inventory_item_image iii ON ii.InventoryItemID = iii.inventory_item_id AND iii.is_primary = 1
+                                        WHERE pc.category_id = c.category_id AND ii.status = 'active' AND iii.image_path IS NOT NULL AND iii.image_path != ''
+                                        ORDER BY ii.date_added DESC
+                                        LIMIT 1
+                                    ) as image_path
+                                    FROM categories c
+                                    WHERE c.parent_id = :parent_id
+                                    HAVING image_path IS NOT NULL
+                                    ORDER BY c.name ASC
+                                    LIMIT 4
+                                ";
+                                $sub_cat_stmt = $pdo->prepare($sub_cat_sql);
+                                $sub_cat_stmt->execute([':parent_id' => $top_cat['category_id']]);
+                                $sub_categories = $sub_cat_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                                // Only create a slide if there are sub-categories with images
+                                if (!empty($sub_categories)) {
+                                    ?>
+                                    <div class="swiper-slide">
+                                        <div class="cat-group-card">
+                                            <h3 class="group-title"><?= htmlspecialchars($top_cat['name']) ?></h3>
+                                            <div class="cat-mini-grid">
+                                                <?php foreach ($sub_categories as $sub_cat): ?>
+                                                    <a href="shop.php?category=<?= $sub_cat['category_id'] ?>" class="cat-mini">
+                                                        <div class="thumb">
+                                                            <img src="<?= htmlspecialchars($sub_cat['image_path']) ?>"
+                                                                alt="<?= htmlspecialchars($sub_cat['name']) ?>">
+                                                        </div>
+                                                        <span class="label"><?= htmlspecialchars($sub_cat['name']) ?></span>
+                                                    </a>
+                                                <?php endforeach; ?>
+                                            </div>
+                                            <a href="shop.php?category=<?= $top_cat['category_id'] ?>" class="see-more-link">Shop
+                                                all in <?= htmlspecialchars($top_cat['name']) ?></a>
+                                        </div>
+                                    </div>
+                                    <?php
+                                }
+                            }
+                        } catch (PDOException $e) {
+                            error_log("Error fetching category groups for slider: " . $e->getMessage());
+                        }
+                        ?>
+                    </div>
+                    <div class="swiper-button-prev cat-group-prev"></div>
+                    <div class="swiper-button-next cat-group-next"></div>
+                    <div class="swiper-pagination cat-group-pagination d-md-none"></div>
+                </div>
+            </div>
+
+
+
         </main><!-- End .main -->
 
         <footer class="footer footer-2">
@@ -653,15 +1171,6 @@ try {
                         </div>
                         <div class="col-sm-6 col-lg-3">
                             <div class="icon-box icon-box-side"> <span class="icon-box-icon"><i
-                                        class="icon-life-ring"></i></span>
-                                <div class="icon-box-content">
-                                    <h3 class="icon-box-title">We Support</h3>
-                                    <p>24/7 services</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-sm-6 col-lg-3">
-                            <div class="icon-box icon-box-side"> <span class="icon-box-icon"><i
                                         class="icon-secure-payment"></i></span>
                                 <div class="icon-box-content">
                                     <h3 class="icon-box-title">Secure Payment</h3>
@@ -683,80 +1192,92 @@ try {
 
 
     <?php include "jsfile.php"; ?>
+    <script src="node_modules/swiper/swiper-bundle.min.js"></script>
     <script src="js/add-to-cart.js"></script>
-    <script src="node_modules/swiper/swiper-bundle.min.css"></script>
 
-
-    <!-- Add to Cart / Wishlist AJAX Script -->
     <script>
-        $(document).ready(function () {
-            // Wishlist Button Handler
-            $('.page-wrapper').on('click', '.btn-wishlist', function (e) {
-                e.preventDefault();
-                var $button = $(this);
-                var productId = $button.data('product-id');
-                if (!productId || $button.prop('disabled') || $button.hasClass('added-to-wishlist')) return;
-
-                $button.prop('disabled', true).addClass('load-more-loading').find('span').text('Adding...');
-                $.ajax({
-                    type: 'POST', url: 'add_to_wishlist.php',
-                    data: { product_id: productId }, // Ensure backend expects 'product_id'
-                    dataType: 'json',
-                    success: function (response) {
-                        if (response && response.success) {
-                            if (typeof response.wishlistCount !== 'undefined') {
-                                $('.wishlist-count').text(response.wishlistCount);
-                            }
-                            $button.removeClass('load-more-loading').addClass('added-to-wishlist')
-                                .prop('disabled', false).attr('title', 'In Wishlist').find('span').text('In Wishlist');
-                        } else {
-                            alert(response.message || 'Could not add item.');
-                            $button.removeClass('load-more-loading').prop('disabled', false).find('span').text('add to wishlist');
-                        }
-                    },
-                    error: function (xhr, status, error) {
-                        console.error("Wishlist AJAX Error:", status, error);
-                        alert('Error adding to wishlist.');
-                        $button.removeClass('load-more-loading').prop('disabled', false).find('span').text('add to wishlist');
-                    }
-                });
-            });
-        });
-
         document.addEventListener('DOMContentLoaded', function () {
-            console.log("Attempting to initialize Swiper for .myNewSwiper");
-            var myNewSwiper = new Swiper('.myNewSwiper', {
+            // Initialize the main banner slider
+            var bannerSwiper = new Swiper('.intro-slider', {
+                slidesPerView: 1,
+                spaceBetween: 0,
                 loop: true,
-                slidesPerView: 1, // Explicitly set
-                // autoplay: { delay: 3000 }, // Temporarily disable autoplay to test manual navigation
-                navigation: {
-                    nextEl: '.swiper-button-next',
-                    prevEl: '.swiper-button-prev',
+                autoplay: {
+                    delay: 6000,
+                    disableOnInteraction: false
                 },
                 pagination: {
-                    el: '.swiper-pagination',
+                    el: '.intro-slider .swiper-pagination',
+                    clickable: true
                 },
-                on: {
-                    init: function () {
-                        console.log('Swiper initialized for .myNewSwiper');
+                navigation: {
+                    nextEl: '.intro-slider .swiper-button-next',
+                    prevEl: '.intro-slider .swiper-button-prev'
+                }
+            });
+
+            // Initialize the category group slider
+            var categoryGroupSwiper = new Swiper('.categoryGroupSwiper', {
+                slidesPerView: 1,
+                spaceBetween: 24,
+                loop: false,
+                autoplay: {
+                    delay: 4000,
+                    disableOnInteraction: false,
+                    pauseOnMouseEnter: true
+                },
+                navigation: {
+                    nextEl: '.cat-group-next',
+                    prevEl: '.cat-group-prev'
+                },
+                pagination: {
+                    el: '.cat-group-pagination',
+                    clickable: true
+                },
+                breakpoints: {
+                    768: { slidesPerView: 2 },
+                    1200: { slidesPerView: 3 }
+                }
+            });
+
+            // Initialize individual category slider (if you add it)
+            var categoryIndividualSwiper = new Swiper('.categoryIndividualSwiper', {
+                slidesPerView: 2,
+                spaceBetween: 16,
+                loop: false,
+                autoplay: {
+                    delay: 3000,
+                    disableOnInteraction: false,
+                    pauseOnMouseEnter: true
+                },
+                navigation: {
+                    nextEl: '.cat-individual-next',
+                    prevEl: '.cat-individual-prev'
+                },
+                pagination: {
+                    el: '.cat-individual-pagination',
+                    clickable: true
+                },
+                breakpoints: {
+                    480: {
+                        slidesPerView: 3,
+                        spaceBetween: 16
                     },
-                    slideChange: function () {
-                        console.log('Swiper slide changed to index: ' + this.activeIndex);
+                    768: {
+                        slidesPerView: 4,
+                        spaceBetween: 20
                     },
-                    reachEnd: function () {
-                        console.log('Swiper reached end');
+                    992: {
+                        slidesPerView: 5,
+                        spaceBetween: 24
+                    },
+                    1200: {
+                        slidesPerView: 6,
+                        spaceBetween: 24
                     }
                 }
             });
-            // Check if the swiper instance was created
-            if (myNewSwiper && myNewSwiper.slides && myNewSwiper.slides.length > 0) {
-                console.log('Swiper instance created with ' + myNewSwiper.slides.length + ' slides.');
-            } else {
-                console.error('Swiper instance NOT created or has no slides for .myNewSwiper');
-            }
         });
-
-
     </script>
 
 </body>
